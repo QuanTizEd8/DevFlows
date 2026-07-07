@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    validate:
+      glob: "*.{py,yaml,yml,json,toml,md,rst}"
+      run: devflows validate
+    sync-check:
+      glob: "workflows/**/*.{yaml,yml}"
+      run: devflows sync --check
+    docs-check:
+      glob: "workflows/**/*.{yaml,yml}"
+      run: devflows docs --check

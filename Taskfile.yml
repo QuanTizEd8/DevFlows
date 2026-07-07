@@ -1,0 +1,37 @@
+version: "3"
+
+tasks:
+  fmt:
+    desc: Format source, docs, and config files.
+    cmds:
+      - pixi run fmt
+
+  lint:
+    desc: Run static validation and drift checks.
+    cmds:
+      - pixi run lint
+
+  test:
+    desc: Run unit tests.
+    cmds:
+      - pixi run test
+
+  test:local:
+    desc: Run local GitHub Actions smoke tests with act.
+    cmds:
+      - pixi run test-local
+
+  docs:
+    desc: Generate and build Sphinx documentation.
+    cmds:
+      - pixi run docs
+
+  docs:serve:
+    desc: Serve Sphinx documentation locally.
+    cmds:
+      - pixi run docs-serve
+
+  release:dry-run:
+    desc: Preview release-please changes without publishing.
+    cmds:
+      - pixi run release-dry-run

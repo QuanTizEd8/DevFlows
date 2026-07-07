@@ -1,0 +1,17 @@
+extends: default
+
+ignore: |
+  .codex/
+  .pixi/
+  docs/_build/
+  workflows/_drafts/
+
+rules:
+  comments:
+    min-spaces-from-content: 1
+  document-start: disable
+  line-length:
+    max: 120
+    level: warning
+  truthy:
+    allowed-values: ["true", "false", "on", "off"]

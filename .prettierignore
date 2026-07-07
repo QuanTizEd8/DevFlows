@@ -1,0 +1,6 @@
+.codex/
+.pixi/
+.devcontainer/
+docs/_build/
+docs/reference/
+workflows/_drafts/

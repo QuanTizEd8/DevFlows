@@ -1,0 +1,9 @@
+title = "DevFlows gitleaks configuration"
+
+[allowlist]
+description = "Repository examples may contain non-secret placeholder tokens."
+regexes = [
+  '''example[_-]?token''',
+  '''ghp_example'''
+]
+
