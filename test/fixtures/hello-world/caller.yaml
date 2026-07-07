@@ -1,0 +1,10 @@
+name: Hello World caller
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    uses: owner/devflows/.github/workflows/hello-world.yaml@hello-world/v1
+    with:
+      message: Hello from a caller repository
