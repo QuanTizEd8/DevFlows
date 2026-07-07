@@ -1,0 +1,12 @@
+{
+  "separate-pull-requests": true,
+  "tag-separator": "/",
+  "packages": {
+    "workflows/hello-world": {
+      "component": "hello-world",
+      "release-type": "simple",
+      "package-name": "hello-world",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}

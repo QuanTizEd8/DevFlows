@@ -1,0 +1,15 @@
+name: DevFlows Local Smoke
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-reusable:
+    name: Reusable workflow smoke
+    uses: ./.github/workflows/hello-world.yaml
+    with:
+      message: Hello from local act smoke

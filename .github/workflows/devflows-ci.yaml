@@ -1,0 +1,35 @@
+name: DevFlows CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run in devcontainer
+        uses: devcontainers/ci@b63b30de439b47a52267f241112c5b453b673db5
+        with:
+          configFile: .devcontainer/devcontainer.json
+          runCmd: |
+            pixi install
+            pixi run lint
+            pixi run test
+
+  smoke-reusable:
+    name: Reusable workflow smoke
+    uses: ./.github/workflows/hello-world.yaml
+    with:
+      message: Hello from DevFlows CI
