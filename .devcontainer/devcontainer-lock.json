@@ -1,0 +1,119 @@
+{
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "2.17.0",
+      "resolved": "ghcr.io/devcontainers/features/docker-in-docker@sha256:25b9f05705ffba7dbe503230ac76081419306f8c8bc88e0ce78c4ecd99a0c78c",
+      "integrity": "sha256:25b9f05705ffba7dbe503230ac76081419306f8c8bc88e0ce78c4ecd99a0c78c"
+    },
+    "ghcr.io/quantized8/devfeats/install-act": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-act@sha256:5c741e359f3e196b3bd5bba5941cf0c5d0c95782620caeb233ce4bec788da47f",
+      "integrity": "sha256:5c741e359f3e196b3bd5bba5941cf0c5d0c95782620caeb233ce4bec788da47f"
+    },
+    "ghcr.io/quantized8/devfeats/install-bash": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-bash@sha256:181c04b8d6ca946cb699eea3031d7d8af882ca2e44b0c7e6c41a5cd5f99584ac",
+      "integrity": "sha256:181c04b8d6ca946cb699eea3031d7d8af882ca2e44b0c7e6c41a5cd5f99584ac"
+    },
+    "ghcr.io/quantized8/devfeats/install-claude": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-claude@sha256:50bf74f202e80630a167ec37f8f8e00020f765c48946f6c83cb078e5be8ab77b",
+      "integrity": "sha256:50bf74f202e80630a167ec37f8f8e00020f765c48946f6c83cb078e5be8ab77b"
+    },
+    "ghcr.io/quantized8/devfeats/install-codex": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-codex@sha256:056ae3862fae732851af1de7d193a59a2ffbc411bdc12692a118be1595fa76dc",
+      "integrity": "sha256:056ae3862fae732851af1de7d193a59a2ffbc411bdc12692a118be1595fa76dc"
+    },
+    "ghcr.io/quantized8/devfeats/install-gh": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-gh@sha256:f935577a5257f6da0b65a230e1f13842fe684f660e1e759dbbfe7beeaf8002a1",
+      "integrity": "sha256:f935577a5257f6da0b65a230e1f13842fe684f660e1e759dbbfe7beeaf8002a1"
+    },
+    "ghcr.io/quantized8/devfeats/install-git": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-git@sha256:00b2231f619ecee6f0b8204b2038f89fde88a3d8be8dbabdf25abed3b3e7a69f",
+      "integrity": "sha256:00b2231f619ecee6f0b8204b2038f89fde88a3d8be8dbabdf25abed3b3e7a69f"
+    },
+    "ghcr.io/quantized8/devfeats/install-jq": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-jq@sha256:4e85abcd8b9267827bd1b90d2ef25960c9409f3863b3d3ac5fc46a667d727d5e",
+      "integrity": "sha256:4e85abcd8b9267827bd1b90d2ef25960c9409f3863b3d3ac5fc46a667d727d5e"
+    },
+    "ghcr.io/quantized8/devfeats/install-jsonschema": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-jsonschema@sha256:033df54165a62deeafa5c9cae0e761235439b5f6168e86724accfa7142845e60",
+      "integrity": "sha256:033df54165a62deeafa5c9cae0e761235439b5f6168e86724accfa7142845e60"
+    },
+    "ghcr.io/quantized8/devfeats/install-lefthook": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-lefthook@sha256:71692710738cfff9a9262383ad98995be0142fd836b0ef7aa9f9cd25c3e5367b",
+      "integrity": "sha256:71692710738cfff9a9262383ad98995be0142fd836b0ef7aa9f9cd25c3e5367b"
+    },
+    "ghcr.io/quantized8/devfeats/install-nvm": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-nvm@sha256:a924f44e2ff2b741bb186ed61428177531c80abaf329bfd9f1b3865a23739960",
+      "integrity": "sha256:a924f44e2ff2b741bb186ed61428177531c80abaf329bfd9f1b3865a23739960"
+    },
+    "ghcr.io/quantized8/devfeats/install-os-pkg-bundle": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-os-pkg-bundle@sha256:ffe9d945dffb084d5d8e16afd93eddf8ee0cebe6c0066c13244bc69cfa0e6e29",
+      "integrity": "sha256:ffe9d945dffb084d5d8e16afd93eddf8ee0cebe6c0066c13244bc69cfa0e6e29"
+    },
+    "ghcr.io/quantized8/devfeats/install-pixi": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-pixi@sha256:825cec4988bab35057b38c8d83a4547ea86ab01769416926384a99bd890e6bc9",
+      "integrity": "sha256:825cec4988bab35057b38c8d83a4547ea86ab01769416926384a99bd890e6bc9"
+    },
+    "ghcr.io/quantized8/devfeats/install-ripgrep": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-ripgrep@sha256:cf073ac7077a0ca2d3193b7704d26920a37281014d186fd89852dcf000a6594f",
+      "integrity": "sha256:cf073ac7077a0ca2d3193b7704d26920a37281014d186fd89852dcf000a6594f"
+    },
+    "ghcr.io/quantized8/devfeats/install-ripgrep-all": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-ripgrep-all@sha256:8e4ad521b0be400108cc8cdaa1949bf723fb8c18466aa7829c1ea14b78402e5f",
+      "integrity": "sha256:8e4ad521b0be400108cc8cdaa1949bf723fb8c18466aa7829c1ea14b78402e5f"
+    },
+    "ghcr.io/quantized8/devfeats/install-ruff": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-ruff@sha256:149ec92f2b06c2b8c8bfbf966ecf9a00b621604759d12d335a43785cb10ec39e",
+      "integrity": "sha256:149ec92f2b06c2b8c8bfbf966ecf9a00b621604759d12d335a43785cb10ec39e"
+    },
+    "ghcr.io/quantized8/devfeats/install-shellcheck": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-shellcheck@sha256:db4e5fda2c19954e3b6aa003324add347a0650a302617651a4b9d96a04861a83",
+      "integrity": "sha256:db4e5fda2c19954e3b6aa003324add347a0650a302617651a4b9d96a04861a83"
+    },
+    "ghcr.io/quantized8/devfeats/install-shfmt": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-shfmt@sha256:6aeeea1de17472f52b0ef995d251fef02881282ed26dc19afd8ecbb533154666",
+      "integrity": "sha256:6aeeea1de17472f52b0ef995d251fef02881282ed26dc19afd8ecbb533154666"
+    },
+    "ghcr.io/quantized8/devfeats/install-taskfile": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-taskfile@sha256:bb6fc7deae40691b7c1343bb893220c26f8bd9eff804aef820dd816edb6cacf3",
+      "integrity": "sha256:bb6fc7deae40691b7c1343bb893220c26f8bd9eff804aef820dd816edb6cacf3"
+    },
+    "ghcr.io/quantized8/devfeats/install-yq": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-yq@sha256:e42e7c41be04a1bc2428f5d4784587962b1c963a3b2f3c89974d9c88a242298c",
+      "integrity": "sha256:e42e7c41be04a1bc2428f5d4784587962b1c963a3b2f3c89974d9c88a242298c"
+    },
+    "ghcr.io/quantized8/devfeats/install-zsh": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/install-zsh@sha256:355a9220a65a4b5936d4f38a48391b68f695a2bb91820935310c6a570ba6402a",
+      "integrity": "sha256:355a9220a65a4b5936d4f38a48391b68f695a2bb91820935310c6a570ba6402a"
+    },
+    "ghcr.io/quantized8/devfeats/setup-shell": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/setup-shell@sha256:f091cfa5b5fb20179aef0efef2c6db497611159ea21a67a4b0ecc9cd61a2f1e7",
+      "integrity": "sha256:f091cfa5b5fb20179aef0efef2c6db497611159ea21a67a4b0ecc9cd61a2f1e7"
+    },
+    "ghcr.io/quantized8/devfeats/setup-user": {
+      "version": "0.1.0",
+      "resolved": "ghcr.io/quantized8/devfeats/setup-user@sha256:419803e96b9e8bb4721651c05054c10de1b703fd2e9eac6785805983783ed411",
+      "integrity": "sha256:419803e96b9e8bb4721651c05054c10de1b703fd2e9eac6785805983783ed411"
+    }
+  }
+}

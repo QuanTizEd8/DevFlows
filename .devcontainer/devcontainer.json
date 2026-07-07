@@ -1,0 +1,138 @@
+{
+  "name": "DevFlows Development Environment",
+  "remoteUser": "devflows-dev",
+  "build": {
+    // Currently, there is no way to define cache sources when using "image",
+    // so we have to use "dockerfile" even though we don't need a custom one.
+    "dockerfile": "Dockerfile",
+    "options": [
+      "--progress=plain"
+    ],
+    "cacheFrom": [
+      "ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64",
+      "ghcr.io/quantized8/devflows-devcontainer:cache-linux-arm64"
+    ]
+  },
+  "features": {
+    "ghcr.io/quantized8/devfeats/install-act": {},
+    "ghcr.io/quantized8/devfeats/install-bash": {},
+    "ghcr.io/quantized8/devfeats/install-claude": {},
+    "ghcr.io/quantized8/devfeats/install-codex": {},
+    "ghcr.io/quantized8/devfeats/install-gh": {},
+    "ghcr.io/quantized8/devfeats/install-git": {},
+    "ghcr.io/quantized8/devfeats/install-jq": {},
+    "ghcr.io/quantized8/devfeats/install-jsonschema": {},
+    "ghcr.io/quantized8/devfeats/install-lefthook": {},
+    "ghcr.io/quantized8/devfeats/install-nvm": {},
+    "ghcr.io/quantized8/devfeats/install-os-pkg-bundle": {
+      "archive_tools": true,
+      "build_tools": true,
+      "data_tools": true,
+      "dev_tools": true,
+      "network_tools": true,
+      "sys_monitor": true,
+      "text_processing": true,
+      "log_level": "debug"
+    },
+    "ghcr.io/quantized8/devfeats/install-pixi": {},
+    "ghcr.io/quantized8/devfeats/install-ripgrep": {},
+    "ghcr.io/quantized8/devfeats/install-ripgrep-all": {},
+    "ghcr.io/quantized8/devfeats/install-ruff": {},
+    "ghcr.io/quantized8/devfeats/install-shellcheck": {
+      "version": "0.11.0"
+    },
+    "ghcr.io/quantized8/devfeats/install-shfmt": {
+      "version": "3.13.1"
+    },
+    "ghcr.io/quantized8/devfeats/install-taskfile": {},
+    "ghcr.io/quantized8/devfeats/install-yq": {},
+    "ghcr.io/quantized8/devfeats/install-zsh": {},
+    "ghcr.io/quantized8/devfeats/setup-shell": {},
+    "ghcr.io/quantized8/devfeats/setup-user": {
+      "username": "devflows-dev"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    }
+  },
+  "overrideFeatureInstallOrder": [
+    "ghcr.io/quantized8/devfeats/install-os-pkg-bundle",
+    "ghcr.io/quantized8/devfeats/setup-user",
+    "ghcr.io/quantized8/devfeats/install-bash",
+    "ghcr.io/quantized8/devfeats/install-zsh",
+    "ghcr.io/quantized8/devfeats/setup-shell",
+    "ghcr.io/quantized8/devfeats/install-git",
+    "ghcr.io/quantized8/devfeats/install-jq",
+    "ghcr.io/quantized8/devfeats/install-yq",
+    "ghcr.io/quantized8/devfeats/install-gh",
+    "ghcr.io/quantized8/devfeats/install-jsonschema",
+    "ghcr.io/quantized8/devfeats/install-shfmt",
+    "ghcr.io/quantized8/devfeats/install-shellcheck",
+    "ghcr.io/quantized8/devfeats/install-miniforge",
+    "ghcr.io/quantized8/devfeats/install-pixi",
+    "ghcr.io/quantized8/devfeats/install-nvm",
+    "ghcr.io/quantized8/devfeats/install-devcontainer-cli",
+    "ghcr.io/quantized8/devfeats/install-oras",
+    "ghcr.io/quantized8/devfeats/install-lefthook",
+    "ghcr.io/quantized8/devfeats/install-codex",
+    "ghcr.io/quantized8/devfeats/install-claude",
+    "ghcr.io/devcontainers/features/docker-in-docker:2"
+  ],
+
+  // Stop the container when VS Code window closes (prevents orphaned containers on clean disconnect)
+  "shutdownAction": "stopContainer",
+
+  // Limit CPU to avoid host starvation if a process spirals (uncomment and tune as needed)
+  // "runArgs": ["--cpus=3"],
+
+  // "postCreateCommand": "lefthook install",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+
+        // ── File Watcher / Search Excludes ──────────────────────────────────────
+        // Prevents virtiofs cross-VM inotify storms on large/generated directories
+        "files.watcherExclude": {
+          "**/.git/**": true,
+          "**/__pycache__/**": true,
+          "**/.pixi/**": true,
+          "**/miniforge3/**": true,
+          "**/*.egg-info/**": true
+        },
+        "search.exclude": {
+          "**/.git": true,
+          "**/__pycache__": true,
+          "**/.pixi": true,
+          "**/miniforge3": true
+        },
+        // Prevents Pylance from indexing conda/pixi envs (has its own watcher, ignores files.watcherExclude)
+        "python.analysis.exclude": [
+          "**/.pixi/**",
+          "**/miniforge3/**"
+        ],
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.pixi/envs/default/bin/python",
+        // ── Bash IDE (shellcheck) ────────────────────────────────────────────────
+        // Default is 500 files analysed in parallel — causes 8+ concurrent shellcheck
+        // processes each at 30%+ CPU on this workspace due to --external-sources chains.
+        // Limit to 1 background file at a time; active file is still linted on save.
+        "bashIde.backgroundAnalysisMaxFiles": 1,
+        // Stop bash-ide following --source-path chains across the whole workspace,
+        // which is what makes each shellcheck process so expensive here.
+        "bashIde.enableSourceErrorDiagnostics": false,
+        // ── YAML Schema ─────────────────────────────────────────────────────────
+        "yaml.schemas": {
+        },
+        "yaml.schemaStore.enable": true,
+        "yaml.trace.server": "verbose"
+      },
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "yzhang.markdown-all-in-one",
+        "tomoki1207.pdf"
+      ]
+    }
+  }
+}
