@@ -1,0 +1,141 @@
+# Install package from a given source and run unit-tests.
+# Install the package and run tests on a matrix of supported Python versions and operating systems.
+
+name: '[Reusable]: Package - Test'
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        required: true
+        description: Configuration as a JSON string.
+
+jobs:
+  test:
+    name: ${{ matrix.task.name }}
+    permissions:
+      id-token: write  # For token-less upload of coverage reports to Codecov.
+    strategy:
+      fail-fast: false
+      matrix:
+        task: ${{ fromJSON(inputs.config).tasks }}
+    runs-on: ${{ matrix.task.runner }}
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Python Setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+#      - name: Miniconda Setup
+#        uses: conda-incubator/setup-miniconda@v3
+#        with:
+#          miniforge-version: latest
+#          auto-update-conda: true
+#          activate-environment: ${{ matrix.task.conda_env.name }}
+      - name: Tool Setup
+        run: |
+          echo "::group::Install tree"
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+              brew install tree
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+              choco install tree -y
+          else
+              echo "Already installed."
+          fi
+          echo "::endgroup::"
+      - name: Platform Info
+        run: uname -a
+      - name: Repository Checkout
+        # https://github.com/actions/checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.task.repository }}
+          ref: ${{ matrix.task.ref }}
+          fetch-tags: true
+          path: repo/
+      - name: Repo Overview
+        run: tree -a repo/
+      - name: Environment Installation
+        run: |
+          cd repo
+          ${{ matrix.task.script.install_env }}
+      - name: Conda Env File
+        run: cat repo/${{ matrix.task.conda_env.path }}
+      - name: Micromamba Setup
+        uses: mamba-org/setup-micromamba@v2  # https://github.com/mamba-org/setup-micromamba
+        with:
+          environment-name: ${{ matrix.task.conda_env.name }}
+          environment-file: repo/${{ matrix.task.conda_env.path }}
+          cache-environment: true
+          cache-environment-key: test-env
+          init-shell: bash
+          micromamba-version: latest
+          log-level: debug
+      - name: Conda Overview
+        run: micromamba info
+#      - name: Conda Env Cache
+#        id: conda-cache
+#        uses: actions/cache@v4
+#        with:
+#          path: ${{ env.CONDA }}/envs
+#          key: >-
+#            conda-${{ runner.os }}--${{ runner.arch }}--${{ hashFiles(format('repo/{0}', matrix.task.conda_env.path)) }}
+#      - name: Conda Env Update
+#        if: steps.conda-cache.outputs.cache-hit != 'true'
+#        run: |
+#          conda env update -n ${{ matrix.task.conda_env.name }} -f repo/${{ matrix.task.conda_env.path }} -vv
+      - name: Artifact Download
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: 'false'
+      - name: Artifact Overview
+        run: tree -a dist/
+      - name: Package Installation
+        run: |
+          cd dist
+          ${{ matrix.task.script.install_pkg }}
+      - name: Conda Env Overview
+        run: micromamba list
+      - name: Conda Env Details
+        run: micromamba env export
+      - name: Test
+        run: ${{ matrix.task.script.test }}
+      - name: Report Upload
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.task.artifact.report.name }}
+          path: ${{ matrix.task.artifact.report.path }}
+      - name: CodeCov Upload
+        if: ${{ !cancelled() && matrix.task.codecov }}
+        # https://github.com/marketplace/actions/codecov
+        # https://github.com/codecov/codecov-action
+        env: ${{ matrix.task.codecov.env }}
+        uses: codecov/codecov-action@v4
+        with:
+          # TODO: Check that env_vars are correctly set. (https://github.com/codecov/codecov-action/pull/64)
+          codecov_yml_path: repo/${{ fromJSON(inputs.config).codecov.codecov_yml_path }}
+          directory: ${{ matrix.task.artifact.report.path }}
+          env_vars: ${{ matrix.task.codecov.env_vars }}
+          fail_ci_if_error: false
+          use_oidc: true  # https://github.com/codecov/codecov-action/issues/1489#issuecomment-2197308411
+          verbose: true
+  report:
+    name: Report
+    if: ${{ !cancelled() && fromJSON(inputs.config).artifact.report.merge }}
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Artifact Merge
+        uses: actions/upload-artifact/merge@v4
+        with:
+          name: ${{ fromJSON(inputs.config).artifact.report.merge.name }}
+          pattern: ${{ fromJSON(inputs.config).artifact.report.merge.pattern }}
+          include-hidden-files: ${{ fromJSON(inputs.config).artifact.report.include_hidden }}
+          retention-days: ${{ fromJSON(inputs.config).artifact.report.retention_days }}
+          separate-directories: 'true'
+          delete-merged: 'true'

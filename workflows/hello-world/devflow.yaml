@@ -1,0 +1,22 @@
+id: hello-world
+name: Hello World
+summary: Minimal reusable workflow used to validate DevFlows tooling and CI.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 1
+docs:
+  category: Examples
+  keywords:
+    - smoke-test
+    - example
+examples:
+  - name: Basic call
+    path: test/fixtures/hello-world/caller.yaml
+tests:
+  smoke:
+    - name: Local reusable workflow call
+      event: push
+      workflow: .github/workflows/devflows-ci.yaml

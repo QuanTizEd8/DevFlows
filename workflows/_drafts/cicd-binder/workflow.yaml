@@ -1,0 +1,123 @@
+name: '[Reusable]: GitHub Container Build and Release'
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        type: string
+        required: true
+        description: Configuration as a JSON string.
+    secrets:
+      container-registry-token:
+        description: Token for the docker container registry.
+        required: false
+jobs:
+  repo2docker:
+    name: ${{ fromJSON(inputs.config).name }}
+    runs-on: ubuntu-latest
+    environment: ${{ fromJSON(inputs.config).env }}
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ fromJSON(inputs.config).ref }}
+          fetch-depth: 0
+          path: repo
+      - name: SHA Check
+        id: sha
+        run: |
+          cd repo
+          SHA=$(git rev-parse HEAD)
+          echo "Full Commit SHA: $SHA"
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+      - name: Environment Setup
+        if: ${{ fromJSON(inputs.config).path-dockerfile }}
+        env:
+          CONFIG_PATH: ${{ fromJSON(inputs.config).path-config }}
+          DOCKERFILE_PATH: ${{ fromJSON(inputs.config).path-dockerfile }}
+        run: |
+          if [ -d "repo/$DOCKERFILE_PATH" ]; then
+            rm -rf "repo/$DOCKERFILE_PATH"
+          fi
+          mv "repo/$CONFIG_PATH" "repo/$DOCKERFILE_PATH"
+      - name: File Overview
+        run: tree -a repo
+      # https://docs.github.com/en/packages/managing-github-packages-using-github-actions-workflows/publishing-and-installing-a-package-with-github-actions#upgrading-a-workflow-that-accesses-ghcrio
+      - name: Build and Deploy
+        id: docker
+        uses: RepoDynamics/BinderDocker@v0.1
+        with:
+          docker_registry: ${{ fromJSON(inputs.config).registry }}
+          docker_username: ${{ fromJSON(inputs.config).username }}
+          docker_password: ${{ secrets.container-registry-token || github.token }}
+          image_name: ${{ fromJSON(inputs.config).image-name }}
+          image_tags: ${{ fromJSON(inputs.config).image-tags }} ${{ (fromJSON(inputs.config).tag-sha && steps.sha.outputs.sha) || '' }}
+          git_path: repo
+          git_ref: ${{ fromJSON(inputs.config).ref }}
+          cache_image_names: ${{ fromJSON(inputs.config).cache-image-names }}
+          cache_image_tags: ${{ fromJSON(inputs.config).cache-image-tags }}
+          repo2docker_args: ${{ fromJSON(inputs.config).repo2docker-args }}
+          dockerfile_append: ${{ fromJSON(inputs.config).dockerfile-append }}
+          test_script: ${{ fromJSON(inputs.config).test-script }}
+          push: ${{ fromJSON(inputs.config).push }}
+          verify_public: 'error'
+      # https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds
+      - name: Registry Login
+        uses: docker/login-action@v3  # https://github.com/docker/login-action
+        with:
+          registry: ${{ fromJSON(inputs.config).registry }}
+          username: ${{ fromJSON(inputs.config).username }}
+          password: ${{ secrets.container-registry-token || github.token }}
+          logout: 'false'
+      # https://docs.github.com/en/actions/use-cases-and-examples/publishing-packages/publishing-docker-images#publishing-images-to-github-packages
+      - name: Attestation
+        if: fromJSON(inputs.config).attest
+        id: attest
+        uses: actions/attest-build-provenance@v2  # https://github.com/actions/attest-build-provenance
+        with:
+          subject-name: ${{ fromJSON(inputs.config).image-name }}
+          subject-digest: ${{ steps.docker.outputs.image_digest }}
+          push-to-registry: 'true'
+          show-summary: 'true'
+      - name: Dockerfile Generation
+        if: fromJSON(inputs.config).tag-sha && fromJSON(inputs.config).push
+        run: |
+          cat <<EOF > Dockerfile
+          FROM ${{ steps.docker.outputs.image-base-name }}:${{ steps.sha.outputs.sha }}
+          EOF
+      - name: Dockerfile Upload
+        if: fromJSON(inputs.config).tag-sha && fromJSON(inputs.config).push
+        uses: actions/upload-artifact@v4
+        with:
+          path: Dockerfile
+          name: ${{ fromJSON(inputs.config).artifact.dockerfile.name }}
+          include-hidden-files: ${{ fromJSON(inputs.config).artifact.dockerfile.include_hidden }}
+          retention-days: ${{ fromJSON(inputs.config).artifact.dockerfile.retention_days }}
+  mybinder:
+    name: mybinder.org
+    needs: repo2docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Trigger
+        run: |
+          URL="https://mybinder.org/build/gh/${{ github.repository }}/${{ fromJSON(inputs.config).ref }}"
+          echo "URL: $URL"
+
+          echo "::group::API Request"
+          curl -L --connect-timeout 20 --max-time 900 "${URL}"
+          curl_return=$?
+          echo "::endgroup::"
+
+          if [ "${curl_return}" -eq 0 ]; then
+              echo "Image has been successfully built on mybinder.org."
+          elif [ "${curl_return}" -eq 28 ]; then
+              echo "Triggered new image build."
+          else
+              echo "::error title=mybinder.org::Could not trigger new build; curl exit code $curl_return"
+              exit 1
+          fi
