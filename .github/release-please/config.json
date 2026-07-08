@@ -2,10 +2,16 @@
   "separate-pull-requests": true,
   "tag-separator": "/",
   "packages": {
-    "workflows/hello-world": {
-      "component": "hello-world",
+    "workflows/pandoc": {
+      "component": "pandoc",
       "release-type": "simple",
-      "package-name": "hello-world",
+      "package-name": "pandoc",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "workflows/writeback": {
+      "component": "writeback",
+      "release-type": "simple",
+      "package-name": "writeback",
       "changelog-path": "CHANGELOG.md"
     }
   }

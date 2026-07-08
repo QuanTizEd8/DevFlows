@@ -6,8 +6,11 @@ from devflows.catalog import load_catalog, validate_workflow
 def test_catalog_loads_active_workflows() -> None:
     workflows = load_catalog()
 
-    assert [item.id for item in workflows] == ["hello-world"]
-    assert workflows[0].workflow_call["inputs"]["message"]["type"] == "string"
+    assert (
+        workflows[0].workflow_call["inputs"]["pandoc-image"]["default"] == "pandoc/latex:3-ubuntu"
+    )
+    assert [item.id for item in workflows] == ["pandoc", "writeback"]
+    assert workflows[1].workflow_call["inputs"]["writeback-artifact-name"]["type"] == "string"
 
 
 def test_active_workflows_are_valid() -> None:
@@ -25,4 +28,4 @@ def test_drafts_are_not_loaded_by_default() -> None:
 def test_published_path_uses_required_github_location() -> None:
     workflow = load_catalog()[0]
 
-    assert workflow.published_path == Path(".github/workflows/hello-world.yaml")
+    assert workflow.published_path == Path(".github/workflows/pandoc.yaml")
