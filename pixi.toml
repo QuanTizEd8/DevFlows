@@ -27,9 +27,9 @@ sphinx-autobuild = ">=2024.10"
 
 [tasks]
 fmt = "ruff format . && bash scripts/fmt-shell.sh && prettier --write '**/*.{json,md,yml,yaml}' && taplo format pixi.toml pyproject.toml"
-lint = "devflows validate && devflows sync --check && devflows docs --check && actionlint .github/workflows/*.yaml && ruff check . && ruff format --check . && yamllint . && taplo format --check pixi.toml pyproject.toml && bash scripts/lint-shell.sh && zizmor ."
+lint = "devflows validate && devflows sync --check && devflows docs --check && devflows test-generate --check && actionlint .github/workflows/*.yaml && ruff check . && ruff format --check . && yamllint . && taplo format --check pixi.toml pyproject.toml && bash scripts/lint-shell.sh && zizmor ."
 test = "pytest"
-test-local = "act --workflows .github/workflows/devflows-local-smoke.yaml --eventpath .act/push.json -P ubuntu-latest=catthehacker/ubuntu:act-latest"
+test-local = "devflows test-local"
 docs = "devflows docs && sphinx-build -b html docs docs/_build/html"
 docs-serve = "sphinx-autobuild docs docs/_build/html"
 release-dry-run = "devflows release-check"

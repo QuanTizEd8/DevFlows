@@ -17,7 +17,7 @@ tasks:
       - pixi run test
 
   test:local:
-    desc: Run local GitHub Actions smoke tests with act.
+    desc: Run local GitHub Actions scenario tests with act.
     cmds:
       - pixi run test-local
 

@@ -24,6 +24,14 @@ class Workflow:
         return PUBLISHED_DIR / f"{self.id}.yaml"
 
     @property
+    def support_path(self) -> Path:
+        return self.path / "scripts"
+
+    @property
+    def published_support_path(self) -> Path:
+        return PUBLISHED_DIR / self.id
+
+    @property
     def name(self) -> str:
         return str(self.metadata.get("name") or self.workflow.get("name") or self.id)
 

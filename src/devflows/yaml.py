@@ -46,6 +46,27 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def dump_yaml(data: Any) -> str:
+    if yaml is None:
+        raise RuntimeError("PyYAML is required to write generated YAML files.")
+    return yaml.dump(data, Dumper=GitHubActionsDumper, sort_keys=False, width=1000)
+
+
+if yaml is not None:
+
+    class GitHubActionsDumper(yaml.SafeDumper):
+        """YAML dumper with indentation and block strings suited to workflow files."""
+
+        def increase_indent(self, flow: bool = False, indentless: bool = False) -> Any:
+            return super().increase_indent(flow=flow, indentless=False)
+
+    def _represent_string(dumper: GitHubActionsDumper, value: str) -> Any:
+        style = "|" if "\n" in value else None
+        return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+    GitHubActionsDumper.add_representer(str, _represent_string)
+
+
 def _load_with_yq(path: Path) -> Any:
     result = subprocess.run(
         ["yq", "-o=json", ".", str(path)],
