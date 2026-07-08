@@ -16,6 +16,13 @@ docs:
     - documents
     - conversion
     - artifacts
+io:
+  job: pandoc
+  runtime: true
+  checkout: true
+  artifact-download: true
+  artifact-upload: true
+  writeback: true
 notes:
   - Use pinned Pandoc image tags instead of latest for reproducible conversions.
   - Use pandoc/core for common conversions, pandoc/latex for PDF or LaTeX

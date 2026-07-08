@@ -1,6 +1,5 @@
-name: "[Reusable]: Pandoc"
-
-on:
+name: '[Reusable]: Pandoc'
+'on':
   workflow_call:
     inputs:
       pandoc-arguments:
@@ -14,13 +13,12 @@ on:
         required: false
         default: pandoc/latex:3-ubuntu
       pandoc-working-directory:
-        description:
-          Directory under the checked out workspace where pandoc runs.
+        description: Directory under the checked out workspace where pandoc runs.
         type: string
         required: false
-        default: "."
+        default: .
       checkout-enabled:
-        description: Whether to run actions/checkout before invoking pandoc.
+        description: Whether to run actions/checkout before workflow execution.
         type: boolean
         required: false
         default: true
@@ -35,11 +33,10 @@ on:
         required: false
         default: ${{ github.ref }}
       checkout-ssh-known-hosts:
-        description:
-          Known hosts in addition to the user and global host key database.
+        description: Known hosts in addition to the user and global host key database.
         type: string
         required: false
-        default: ""
+        default: ''
       checkout-ssh-strict:
         description: Whether to perform strict host key checking.
         type: boolean
@@ -51,17 +48,15 @@ on:
         required: false
         default: git
       checkout-persist-credentials:
-        description:
-          Whether to configure the token or SSH key with local git config.
+        description: Whether to configure the token or SSH key with local git config.
         type: boolean
         required: false
         default: true
       checkout-path:
-        description:
-          Relative path under GITHUB_WORKSPACE to place the repository.
+        description: Relative path under GITHUB_WORKSPACE to place the repository.
         type: string
         required: false
-        default: ""
+        default: ''
       checkout-clean:
         description: Whether to clean and reset before fetching.
         type: boolean
@@ -71,12 +66,12 @@ on:
         description: Partial clone filter. Overrides sparse checkout when set.
         type: string
         required: false
-        default: ""
+        default: ''
       checkout-sparse-checkout:
         description: Sparse checkout patterns separated by new lines.
         type: string
         required: false
-        default: ""
+        default: ''
       checkout-sparse-checkout-cone-mode:
         description: Whether to use cone mode for sparse checkout.
         type: boolean
@@ -103,11 +98,10 @@ on:
         required: false
         default: false
       checkout-submodules:
-        description:
-          Whether to checkout submodules; use recursive for nested submodules.
+        description: Whether to checkout submodules; use recursive for nested submodules.
         type: string
         required: false
-        default: "false"
+        default: 'false'
       checkout-set-safe-directory:
         description: Whether to add the repository path as a safe Git directory.
         type: boolean
@@ -117,47 +111,39 @@ on:
         description: GitHub server URL to fetch from.
         type: string
         required: false
-        default: ""
+        default: ''
       checkout-allow-unsafe-pr-checkout:
-        description:
-          Allow checkout of fork pull request code in trusted contexts; only
-          enable after reviewing the security risk.
+        description: Allow checkout of fork pull request code in trusted contexts.
         type: boolean
         required: false
         default: false
       artifact-download-enabled:
-        description: Whether to download artifacts before invoking pandoc.
+        description: Whether to download artifacts before workflow execution.
         type: boolean
         required: false
         default: false
       artifact-download-name:
-        description:
-          Name of the artifact to download. Leave empty to download all
-          artifacts.
+        description: Name of the artifact to download. Leave empty to download all artifacts.
         type: string
         required: false
-        default: ""
+        default: ''
       artifact-download-ids:
-        description:
-          Comma-separated artifact IDs to download. Mutually exclusive with
-          artifact-download-name.
+        description: Comma-separated artifact IDs to download. Mutually exclusive with artifact-download-name.
         type: string
         required: false
-        default: ""
+        default: ''
       artifact-download-path:
         description: Destination path for downloaded artifacts.
         type: string
         required: false
-        default: "."
+        default: .
       artifact-download-pattern:
-        description:
-          Glob pattern matching artifacts to download when name is unset.
+        description: Glob pattern matching artifacts to download when name is unset.
         type: string
         required: false
-        default: ""
+        default: ''
       artifact-download-merge-multiple:
-        description:
-          Whether multiple matched artifacts are extracted into one directory.
+        description: Whether multiple matched artifacts are extracted into one directory.
         type: boolean
         required: false
         default: false
@@ -167,14 +153,12 @@ on:
         required: false
         default: ${{ github.repository }}
       artifact-download-run-id:
-        description:
-          Workflow run ID to download artifacts from when a token is set.
+        description: Workflow run ID to download artifacts from when a token is set.
         type: string
         required: false
         default: ${{ github.run_id }}
       artifact-download-skip-decompress:
-        description:
-          Whether to download the artifact archive without extracting it.
+        description: Whether to download the artifact archive without extracting it.
         type: boolean
         required: false
         default: false
@@ -184,16 +168,15 @@ on:
         required: false
         default: error
       artifact-upload-enabled:
-        description: Whether to upload artifacts after conversion.
+        description: Whether to upload artifacts after workflow execution.
         type: boolean
         required: false
         default: false
       artifact-upload-path:
-        description:
-          File, directory, or wildcard pattern to upload after conversion.
+        description: File, directory, or wildcard pattern to upload after workflow execution.
         type: string
         required: false
-        default: ""
+        default: ''
       artifact-upload-name:
         description: Artifact name.
         type: string
@@ -215,14 +198,12 @@ on:
         required: false
         default: 6
       artifact-upload-overwrite:
-        description:
-          Whether to overwrite an existing artifact with the same name.
+        description: Whether to overwrite an existing artifact with the same name.
         type: boolean
         required: false
         default: false
       artifact-upload-include-hidden-files:
-        description:
-          Whether hidden files under artifact-upload-path are included.
+        description: Whether hidden files under artifact-upload-path are included.
         type: boolean
         required: false
         default: false
@@ -232,30 +213,25 @@ on:
         required: false
         default: true
       commit-enabled:
-        description:
-          Whether to commit selected generated files back to a repository.
+        description: Whether to commit selected generated files back to a repository.
         type: boolean
         required: false
         default: false
       commit-paths:
-        description:
-          Newline-separated files or directories to include in the writeback
-          commit.
+        description: Newline-separated files or directories to include in the writeback commit.
         type: string
         required: false
-        default: ""
+        default: ''
       commit-delete-paths:
-        description:
-          Newline-separated files or directories to delete in the writeback
-          commit.
+        description: Newline-separated files or directories to delete in the writeback commit.
         type: string
         required: false
-        default: ""
+        default: ''
       commit-message:
         description: Commit message for generated file writeback.
         type: string
         required: false
-        default: "chore: update generated files"
+        default: 'chore: update generated files'
       commit-repository:
         description: Repository name with owner to commit to.
         type: string
@@ -282,16 +258,12 @@ on:
         required: false
         default: true
       commit-expected-base-sha:
-        description:
-          Optional SHA that the writeback target branch must point to before
-          committing.
+        description: Optional SHA that the writeback target branch must point to before committing.
         type: string
         required: false
-        default: ""
+        default: ''
       commit-internal-artifact-name:
-        description:
-          Internal artifact name used to transfer the writeback payload.
-          Override when calling this workflow multiple times in one run.
+        description: Internal artifact name used to transfer the writeback payload.
         type: string
         required: false
         default: devflows-pandoc-writeback
@@ -303,29 +275,24 @@ on:
         description: SSH key used by actions/checkout.
         required: false
       artifact-download-token:
-        description:
-          Token used to download artifacts from another repository or run.
+        description: Token used to download artifacts from another repository or run.
         required: false
       commit-token:
-        description:
-          Token used by the writeback job. Must be able to write contents when
-          commit-enabled is true.
+        description: Token used by the writeback job. Must be able to write contents when commit-enabled is true.
         required: false
-
 permissions:
   contents: read
-
 jobs:
   pandoc:
     name: Convert with Pandoc
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: read
+      actions: read
     steps:
       - name: Checkout repository
         if: inputs.checkout-enabled
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           repository: ${{ inputs.checkout-repository }}
           ref: ${{ inputs.checkout-ref }}
@@ -339,8 +306,7 @@ jobs:
           clean: ${{ inputs.checkout-clean }}
           filter: ${{ inputs.checkout-filter }}
           sparse-checkout: ${{ inputs.checkout-sparse-checkout }}
-          sparse-checkout-cone-mode:
-            ${{ inputs.checkout-sparse-checkout-cone-mode }}
+          sparse-checkout-cone-mode: ${{ inputs.checkout-sparse-checkout-cone-mode }}
           fetch-depth: ${{ inputs.checkout-fetch-depth }}
           fetch-tags: ${{ inputs.checkout-fetch-tags }}
           show-progress: ${{ inputs.checkout-show-progress }}
@@ -348,12 +314,10 @@ jobs:
           submodules: ${{ inputs.checkout-submodules }}
           set-safe-directory: ${{ inputs.checkout-set-safe-directory }}
           github-server-url: ${{ inputs.checkout-github-server-url }}
-          allow-unsafe-pr-checkout:
-            ${{ inputs.checkout-allow-unsafe-pr-checkout }}
-
+          allow-unsafe-pr-checkout: ${{ inputs.checkout-allow-unsafe-pr-checkout }}
       - name: Download artifacts
         if: inputs.artifact-download-enabled
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ${{ inputs.artifact-download-name }}
           artifact-ids: ${{ inputs.artifact-download-ids }}
@@ -365,43 +329,39 @@ jobs:
           run-id: ${{ inputs.artifact-download-run-id }}
           skip-decompress: ${{ inputs.artifact-download-skip-decompress }}
           digest-mismatch: ${{ inputs.artifact-download-digest-mismatch }}
-
       - name: Resolve DevFlows runtime
         id: devflows-runtime
         shell: bash
         env:
           DEVFLOWS_WORKFLOW_REF: ${{ github.workflow_ref }}
-        run:
-          if [ -z "${DEVFLOWS_WORKFLOW_REF}" ]; then echo
-          "script-root=.github/workflows"; else echo
-          "repository=${DEVFLOWS_WORKFLOW_REF%%/.github/workflows/*}"; echo
-          "ref=${DEVFLOWS_WORKFLOW_REF##*@}"; echo
-          "script-root=.devflows-runtime/.github/workflows"; fi >>
-          "$GITHUB_OUTPUT"
-
+        run: |-
+          if [ -z "${DEVFLOWS_WORKFLOW_REF}" ]; then
+            echo "script-root=.github/workflows"
+          else
+            echo "repository=${DEVFLOWS_WORKFLOW_REF%%/.github/workflows/*}"
+            echo "ref=${DEVFLOWS_WORKFLOW_REF##*@}"
+            echo "script-root=.devflows-runtime/.github/workflows"
+          fi >> "$GITHUB_OUTPUT"
       - name: Checkout DevFlows runtime
         if: steps.devflows-runtime.outputs.repository != ''
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           repository: ${{ steps.devflows-runtime.outputs.repository }}
           ref: ${{ steps.devflows-runtime.outputs.ref }}
           token: ${{ github.token }}
           path: .devflows-runtime
           persist-credentials: false
-
       - name: Run Pandoc
         env:
-          DEVFLOWS_SCRIPT_ROOT:
-            ${{ steps.devflows-runtime.outputs.script-root }}
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           PANDOC_ARGUMENTS: ${{ inputs.pandoc-arguments }}
           PANDOC_IMAGE: ${{ inputs.pandoc-image }}
           PANDOC_WORKING_DIRECTORY: ${{ inputs.pandoc-working-directory }}
         shell: bash
         run: python "${DEVFLOWS_SCRIPT_ROOT}/pandoc/run-pandoc.py"
-
       - name: Upload artifact
         if: inputs.artifact-upload-enabled && inputs.artifact-upload-path != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ inputs.artifact-upload-name }}
           path: ${{ inputs.artifact-upload-path }}
@@ -409,15 +369,12 @@ jobs:
           retention-days: ${{ inputs.artifact-upload-retention-days }}
           compression-level: ${{ inputs.artifact-upload-compression-level }}
           overwrite: ${{ inputs.artifact-upload-overwrite }}
-          include-hidden-files:
-            ${{ inputs.artifact-upload-include-hidden-files }}
+          include-hidden-files: ${{ inputs.artifact-upload-include-hidden-files }}
           archive: ${{ inputs.artifact-upload-archive }}
-
       - name: Create writeback payload
         if: inputs.commit-enabled
         env:
-          DEVFLOWS_SCRIPT_ROOT:
-            ${{ steps.devflows-runtime.outputs.script-root }}
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           WRITEBACK_DELETE_PATHS: ${{ inputs.commit-delete-paths }}
           WRITEBACK_PATHS: ${{ inputs.commit-paths }}
           WRITEBACK_PAYLOAD_DIR: .devflows-writeback/payload
@@ -426,10 +383,9 @@ jobs:
           WRITEBACK_SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: python "${DEVFLOWS_SCRIPT_ROOT}/writeback/create-payload.py"
-
       - name: Upload writeback payload
         if: inputs.commit-enabled
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ inputs.commit-internal-artifact-name }}
           path: .devflows-writeback/payload
@@ -438,7 +394,6 @@ jobs:
           compression-level: 0
           overwrite: true
           include-hidden-files: true
-
   commit:
     name: Commit generated files
     needs: pandoc

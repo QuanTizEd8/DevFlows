@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from devflows.catalog import Workflow
+from devflows.publish import build_published_workflow
 
 GENERATED_DIR = Path("docs/reference")
 
@@ -24,11 +25,12 @@ def render_catalog(workflows: list[Workflow]) -> str:
 
 
 def render_workflow(item: Workflow) -> str:
-    workflow_call = item.workflow_call
+    published_workflow = build_published_workflow(item)
+    workflow_call = _workflow_call(published_workflow)
     inputs = _mapping(workflow_call.get("inputs"))
     secrets = _mapping(workflow_call.get("secrets"))
     outputs = _mapping(workflow_call.get("outputs"))
-    permissions = item.workflow.get("permissions") or {}
+    permissions = published_workflow.get("permissions") or {}
     examples = item.metadata.get("examples") or []
     release = item.metadata.get("release") or {}
     notes = item.metadata.get("notes") or []
@@ -98,6 +100,14 @@ def render_workflow(item: Workflow) -> str:
             )
         lines.append("")
     return "\n".join(lines)
+
+
+def _workflow_call(workflow: dict[str, Any]) -> dict[str, Any]:
+    on_block = workflow.get("on") or {}
+    if not isinstance(on_block, dict):
+        return {}
+    workflow_call = on_block.get("workflow_call") or {}
+    return workflow_call if isinstance(workflow_call, dict) else {}
 
 
 def write_generated_docs(

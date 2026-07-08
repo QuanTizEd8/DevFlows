@@ -49,6 +49,29 @@ notes:
   - Use pinned Pandoc image tags instead of latest for reproducible conversions.
 ```
 
+## Shared IO Channels
+
+Domain workflows should not hand-author the common checkout, artifact, or
+writeback interface. Declare the channels the workflow supports in
+`devflow.yaml`, and `devflows sync` will add the corresponding public inputs,
+secrets, steps, permissions, and commit job to `.github/workflows/<id>.yaml`.
+
+```yaml
+io:
+  job: pandoc
+  runtime: true
+  checkout: true
+  artifact-download: true
+  artifact-upload: true
+  writeback: true
+```
+
+`job` names the runner job that should receive the generated steps. `runtime`
+adds the DevFlows runtime checkout needed by workflows that execute support
+scripts published under `.github/workflows/<workflow-id>/`. `writeback` requires
+`runtime` because generated workflows create the writeback payload with the
+shared writeback script.
+
 ## Examples
 
 Examples are checked-in caller workflows:

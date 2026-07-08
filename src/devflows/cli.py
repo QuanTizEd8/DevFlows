@@ -10,6 +10,7 @@ from pathlib import Path
 
 from devflows.catalog import PUBLISHED_DIR, load_catalog, validate_workflow
 from devflows.docs import write_generated_docs
+from devflows.publish import render_published_workflow, validate_publish_config
 from devflows.scenarios import (
     run_local_scenarios,
     validate_scenarios,
@@ -68,6 +69,7 @@ def _validate(*, include_drafts: bool = False) -> int:
     workflows = load_catalog(include_drafts=include_drafts)
     for item in workflows:
         errors.extend(validate_workflow(item))
+        errors.extend(validate_publish_config(item))
     errors.extend(validate_scenarios(workflows))
     if errors:
         for error in errors:
@@ -82,12 +84,16 @@ def _sync(*, check: bool = False) -> int:
     changed: list[Path] = []
     expected = {item.published_path for item in workflows}
     for item in workflows:
-        if not item.published_path.exists() or not filecmp.cmp(
-            item.workflow_path, item.published_path, shallow=False
-        ):
+        published = render_published_workflow(item).rstrip() + "\n"
+        existing = (
+            item.published_path.read_text(encoding="utf-8")
+            if item.published_path.exists()
+            else None
+        )
+        if existing != published:
             changed.append(item.published_path)
             if not check:
-                shutil.copyfile(item.workflow_path, item.published_path)
+                item.published_path.write_text(published, encoding="utf-8")
         if _support_tree_changed(item.support_path, item.published_support_path):
             changed.append(item.published_support_path)
             if not check:

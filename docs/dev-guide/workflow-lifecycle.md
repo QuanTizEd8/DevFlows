@@ -24,14 +24,16 @@ Before promoting a workflow:
 1. Choose a stable workflow ID.
 2. Move or create `workflows/<workflow-id>/workflow.yaml`.
 3. Add `workflows/<workflow-id>/devflow.yaml`.
-4. Define a clean v1 input, secret, output, and permission interface.
+4. Define a clean v1 domain input, secret, output, and permission interface.
 5. Pin upstream actions to exact commit SHAs where practical, with version
    comments.
-6. Add checked-in examples under `test/fixtures/<workflow-id>/`.
-7. Add scenario tests under `tests.scenarios` in `devflow.yaml`.
-8. Add fixture inputs under `test/scenarios/<workflow-id>/` when needed.
-9. Regenerate synced workflows, docs, and scenario workflows.
-10. Run lint, unit tests, local scenarios, docs, and release checks.
+6. Opt into shared IO channels in `devflow.yaml` when the workflow should
+   support checkout, artifact download, artifact upload, or writeback.
+7. Add checked-in examples under `test/fixtures/<workflow-id>/`.
+8. Add scenario tests under `tests.scenarios` in `devflow.yaml`.
+9. Add fixture inputs under `test/scenarios/<workflow-id>/` when needed.
+10. Regenerate synced workflows, docs, and scenario workflows.
+11. Run lint, unit tests, local scenarios, docs, and release checks.
 
 ## Interface Design
 
@@ -39,13 +41,18 @@ Prefer explicit, consistent input names. Use a stable prefix when passing
 through options to another tool or action, such as `checkout-`,
 `artifact-download-`, `artifact-upload-`, or `commit-`.
 
-Promoted workflows should support the common IO channels unless a channel is
-irrelevant to the workflow:
+Promoted domain workflows should support the common IO channels unless a
+channel is irrelevant to the workflow:
 
 - checkout input through `checkout-*` inputs and `checkout-*` secrets
 - artifact input through `artifact-download-*` inputs
 - artifact output through `artifact-upload-*` inputs
 - opt-in repository writeback through `commit-*` inputs
+
+Declare those channels in `devflow.yaml` instead of copying their inputs and
+steps into `workflow.yaml`. The source workflow should describe only the
+workflow-specific interface; `devflows sync` expands the public workflow in
+`.github/workflows/`.
 
 Keep commit writeback disabled by default, require explicit paths, and isolate
 write credentials from the main tool execution when possible. A separate commit
