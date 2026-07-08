@@ -1,0 +1,68 @@
+id: writeback
+name: Writeback
+summary: Commit a validated writeback payload artifact to a repository branch.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 1
+docs:
+  category: Utilities
+  keywords:
+    - writeback
+    - commit
+    - artifacts
+    - generated-files
+notes:
+  - Writeback consumes a manifest-based payload artifact rather than a raw tar
+    archive.
+  - Payload files are checked against recorded SHA-256 digests before they are
+    copied into the target checkout.
+  - Directory writebacks are treated as replacements, so removed generated files
+    are staged as deletions.
+  - >-
+    The workflow is intended to run with contents: write and actions: read.
+examples: []
+tests:
+  scenarios:
+    - id: ephemeral-branch-writeback
+      name: Writeback to ephemeral branch
+      runs:
+        - hosted
+      mutation:
+        type: ephemeral-branch
+        branch-prefix: devflows/e2e/writeback
+        fixture-path: .devflows-e2e/writeback
+        initial-files:
+          - path: generated/stale.html
+            content: |
+              stale generated content
+          - path: remove.html
+            content: |
+              remove this file
+      writeback-payload:
+        artifact-name: writeback-e2e-payload
+        paths:
+          - generated
+        delete-paths:
+          - remove.html
+        files:
+          - path: generated/index.html
+            content: |
+              <h1>Updated by writeback</h1>
+      inputs:
+        commit-author-name: DevFlows E2E
+        commit-author-email: devflows-e2e@example.test
+        commit-message: "test: writeback e2e"
+        commit-push: true
+      assertions:
+        - type: branch-file-contains
+          path: generated/index.html
+          text: "Updated by writeback"
+        - type: branch-file-missing
+          path: generated/stale.html
+        - type: branch-file-missing
+          path: remove.html
+        - type: latest-commit-message-equals
+          value: "test: writeback e2e"
