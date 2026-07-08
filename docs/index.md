@@ -8,8 +8,6 @@ versioned building blocks for other repositories.
 :caption: Contents
 
 reference/catalog
-guides/user-guide
-guides/developer-guide
-guides/testing
-guides/release-policy
+user-guide/index
+dev-guide/index
 ```

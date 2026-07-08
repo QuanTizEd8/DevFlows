@@ -31,6 +31,8 @@ def render_workflow(item: Workflow) -> str:
     permissions = item.workflow.get("permissions") or {}
     examples = item.metadata.get("examples") or []
     release = item.metadata.get("release") or {}
+    notes = item.metadata.get("notes") or []
+    scenarios = item.metadata.get("tests", {}).get("scenarios", []) or []
 
     lines = [
         f"# {item.name}",
@@ -75,19 +77,38 @@ def render_workflow(item: Workflow) -> str:
             title = example.get("name", "Example")
             path = example.get("path", "")
             lines.extend([f"### {title}", "", f"Source: `{path}`", ""])
+            if path:
+                lines.extend(["```yaml", _read_example(path), "```", ""])
     else:
         lines.append("No examples registered yet.")
+        lines.append("")
+    if notes:
+        lines.extend(["## Notes", ""])
+        lines.extend(f"- {note}" for note in notes)
+        lines.append("")
+    if scenarios:
+        lines.extend(["## Test Scenarios", ""])
+        for scenario in scenarios:
+            scenario_id = scenario.get("id", "")
+            scenario_name = scenario.get("name") or scenario_id
+            runs = ", ".join(scenario.get("runs", []) or [])
+            assertions = scenario.get("assertions", []) or []
+            lines.append(
+                f"- `{scenario_id}`: {scenario_name} ({runs}); {len(assertions)} assertion(s)."
+            )
         lines.append("")
     return "\n".join(lines)
 
 
-def write_generated_docs(workflows: list[Workflow], *, check: bool = False) -> list[Path]:
+def write_generated_docs(
+    workflows: list[Workflow],
+    *,
+    check: bool = False,
+    output_dir: Path = GENERATED_DIR,
+) -> list[Path]:
     outputs = {
-        GENERATED_DIR / "catalog.md": render_catalog(workflows),
-        **{
-            GENERATED_DIR / "workflows" / f"{item.id}.md": render_workflow(item)
-            for item in workflows
-        },
+        output_dir / "catalog.md": render_catalog(workflows),
+        **{output_dir / "workflows" / f"{item.id}.md": render_workflow(item) for item in workflows},
     }
     changed: list[Path] = []
     for path, content in outputs.items():
@@ -131,6 +152,13 @@ def _render_permissions(permissions: Any) -> str:
     if isinstance(permissions, dict):
         return "\n".join(f"- `{name}`: `{value}`" for name, value in sorted(permissions.items()))
     return str(permissions)
+
+
+def _read_example(path: str) -> str:
+    example_path = Path(path)
+    if not example_path.exists():
+        return f"# Missing example fixture: {path}"
+    return example_path.read_text(encoding="utf-8").rstrip()
 
 
 def _cell(value: Any) -> str:

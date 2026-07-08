@@ -1,9 +1,15 @@
 /.claude/
 /.codex/
 /.pixi/
+/.act/artifacts/
+/.devflows-test/
+/.devflows-test-artifacts/
 
 .DS_Store
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 docs/_build/
+docs/reference/
+devflows-pandoc-smoke.html
+test/scenarios/pandoc/working-directory/output.html
