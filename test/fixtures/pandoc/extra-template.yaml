@@ -1,0 +1,16 @@
+name: Pandoc Extra image caller
+
+on:
+  workflow_dispatch:
+
+jobs:
+  convert:
+    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    with:
+      pandoc-image: pandoc/extra:3.8
+      pandoc-arguments: >-
+        README.md --output=output/README.pdf --standalone
+        --template=/.pandoc/templates/eisvogel.latex --listings
+      artifact-upload-enabled: true
+      artifact-upload-name: pandoc-extra-pdf
+      artifact-upload-path: output/README.pdf

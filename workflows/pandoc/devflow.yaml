@@ -1,0 +1,157 @@
+id: pandoc
+name: Pandoc
+summary:
+  Convert documents with official Pandoc Docker images, with uniform checkout,
+  artifact, and optional writeback channels.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 1
+docs:
+  category: Documents
+  keywords:
+    - pandoc
+    - documents
+    - conversion
+    - artifacts
+notes:
+  - Use pinned Pandoc image tags instead of latest for reproducible conversions.
+  - Use pandoc/core for common conversions, pandoc/latex for PDF or LaTeX
+    outputs, and pandoc/extra for templates, filters, fonts, and extras.
+  - The pandoc/extra image may need explicit template paths such as
+    `/.pandoc/templates/eisvogel.latex` because GitHub Actions rewrites HOME.
+  - Pandoc arguments are passed as one string; YAML block scalars are preferred
+    for long commands.
+  - Shell wildcard expansion does not happen inside pandoc-arguments. Generate
+    file lists before calling this workflow, or pass explicit filenames.
+  - Artifact download runs before Pandoc and artifact upload runs after Pandoc.
+  - >-
+    Commit writeback is opt-in, requires explicit commit paths, and runs in a
+    separate job with contents: write so Pandoc execution remains read-only.
+examples:
+  - name: Markdown to HTML
+    path: test/fixtures/pandoc/markdown-to-html.yaml
+  - name: Extra image template path
+    path: test/fixtures/pandoc/extra-template.yaml
+tests:
+  scenarios:
+    - id: markdown-html-local
+      name: Markdown to HTML without artifact upload
+      runs:
+        - local
+      cleanup:
+        - .devflows-test/pandoc/markdown-html-local
+      inputs:
+        checkout-enabled: false
+        pandoc-image: pandoc/core:3.8
+        pandoc-arguments: >-
+          --standalone
+          --output=.devflows-test/pandoc/markdown-html-local/example.html
+          README.md
+      assertions:
+        - type: file-exists
+          path: .devflows-test/pandoc/markdown-html-local/example.html
+        - type: file-contains
+          path: .devflows-test/pandoc/markdown-html-local/example.html
+          text: "<h1"
+    - id: markdown-html-artifact
+      name: Markdown to HTML with artifact upload
+      runs:
+        - hosted
+      artifact:
+        name: pandoc-markdown-html
+        path: .devflows-test-artifacts/pandoc/markdown-html-artifact
+      inputs:
+        pandoc-image: pandoc/core:3.8
+        pandoc-arguments: >-
+          --standalone
+          --output=.devflows-test/pandoc/markdown-html-artifact/example.html
+          README.md
+        artifact-upload-enabled: true
+        artifact-upload-name: pandoc-markdown-html
+        artifact-upload-path: .devflows-test/pandoc/markdown-html-artifact/example.html
+        artifact-upload-if-no-files-found: error
+      assertions:
+        - type: file-exists
+          path: example.html
+        - type: file-contains
+          path: example.html
+          text: "<h1"
+    - id: working-directory-local
+      name: Working directory conversion without artifact upload
+      runs:
+        - local
+      cleanup:
+        - test/scenarios/pandoc/working-directory/output.html
+      inputs:
+        checkout-enabled: false
+        pandoc-image: pandoc/core:3.8
+        pandoc-working-directory: test/scenarios/pandoc/working-directory
+        pandoc-arguments: >-
+          --standalone --output=output.html input.md
+      assertions:
+        - type: file-exists
+          path: test/scenarios/pandoc/working-directory/output.html
+        - type: file-contains
+          path: test/scenarios/pandoc/working-directory/output.html
+          text: "Pandoc Working Directory"
+    - id: working-directory-artifact
+      name: Working directory conversion with artifact upload
+      runs:
+        - hosted
+      artifact:
+        name: pandoc-working-directory
+        path: .devflows-test-artifacts/pandoc/working-directory-artifact
+      inputs:
+        pandoc-image: pandoc/core:3.8
+        pandoc-working-directory: test/scenarios/pandoc/working-directory
+        pandoc-arguments: >-
+          --standalone --output=output.html input.md
+        artifact-upload-enabled: true
+        artifact-upload-name: pandoc-working-directory
+        artifact-upload-path: test/scenarios/pandoc/working-directory/output.html
+        artifact-upload-if-no-files-found: error
+      assertions:
+        - type: file-exists
+          path: output.html
+        - type: file-contains
+          path: output.html
+          text: "Pandoc Working Directory"
+    - id: artifact-download-html
+      name: Markdown to HTML from downloaded artifact
+      runs:
+        - hosted
+      setup-artifact:
+        name: pandoc-input-markdown
+        path: .devflows-test/pandoc/artifact-download/source.md
+        files:
+          - path: .devflows-test/pandoc/artifact-download/source.md
+            content: |
+              # Pandoc Artifact Input
+
+              This file was provided through an artifact download.
+      artifact:
+        name: pandoc-artifact-download-html
+        path: .devflows-test-artifacts/pandoc/artifact-download-html
+      inputs:
+        checkout-enabled: false
+        pandoc-image: pandoc/core:3.8
+        artifact-download-enabled: true
+        artifact-download-name: pandoc-input-markdown
+        artifact-download-path: input
+        pandoc-arguments: >-
+          --standalone
+          --output=.devflows-test/pandoc/artifact-download/example.html
+          input/source.md
+        artifact-upload-enabled: true
+        artifact-upload-name: pandoc-artifact-download-html
+        artifact-upload-path: .devflows-test/pandoc/artifact-download/example.html
+        artifact-upload-if-no-files-found: error
+      assertions:
+        - type: file-exists
+          path: example.html
+        - type: file-contains
+          path: example.html
+          text: "Pandoc Artifact Input"
