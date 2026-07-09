@@ -1,0 +1,647 @@
+name: '[Reusable]: Build Devcontainer'
+'on':
+  workflow_call:
+    inputs:
+      image-name:
+        description: Full image reference without tag, including registry when needed.
+        type: string
+        required: true
+      image-tag:
+        description: Base image tag. Platform tags are published as image-tag-platform_tag.
+        type: string
+        required: false
+        default: latest
+      image-sha-tag-enabled:
+        description: Whether to publish an additional multi-arch sha tag.
+        type: boolean
+        required: false
+        default: false
+      image-sha-tag-prefix:
+        description: Prefix for the optional commit SHA tag.
+        type: string
+        required: false
+        default: sha-
+      build-matrix:
+        description: JSON array of platform builds with runner, platform, and platform_tag fields.
+        type: string
+        required: false
+        default: |
+          [
+            {
+              "runner": "ubuntu-latest",
+              "platform": "linux/amd64",
+              "platform_tag": "linux-amd64"
+            }
+          ]
+      prepare-command:
+        description: Optional trusted command to run after checkout and artifact download.
+        type: string
+        required: false
+        default: ''
+      prepare-working-directory:
+        description: Working directory for prepare-command.
+        type: string
+        required: false
+        default: .
+      docker-login-enabled:
+        description: Whether to log in to a Docker registry before building and merging.
+        type: boolean
+        required: false
+        default: true
+      docker-registry:
+        description: Docker registry hostname. Leave empty for Docker Hub.
+        type: string
+        required: false
+        default: ghcr.io
+      docker-username:
+        description: Docker registry username.
+        type: string
+        required: false
+        default: ${{ github.repository_owner }}
+      docker-ecr:
+        description: Whether the registry is ECR; use auto, true, or false.
+        type: string
+        required: false
+        default: auto
+      docker-scope:
+        description: Scope for the Docker authentication token.
+        type: string
+        required: false
+        default: ''
+      docker-logout:
+        description: Whether docker/login-action logs out at the end of each job.
+        type: boolean
+        required: false
+        default: true
+      buildx-enabled:
+        description: Whether to set up Docker Buildx before building and merging.
+        type: boolean
+        required: false
+        default: true
+      buildx-version:
+        description: Buildx version to install.
+        type: string
+        required: false
+        default: ''
+      buildx-driver:
+        description: Buildx builder driver.
+        type: string
+        required: false
+        default: docker-container
+      buildx-driver-opts:
+        description: Additional Buildx driver-specific options.
+        type: string
+        required: false
+        default: ''
+      buildx-buildkitd-flags:
+        description: BuildKit daemon flags.
+        type: string
+        required: false
+        default: ''
+      buildx-buildkitd-config:
+        description: Path to a BuildKit daemon config file.
+        type: string
+        required: false
+        default: ''
+      buildx-buildkitd-config-inline:
+        description: Inline BuildKit daemon config.
+        type: string
+        required: false
+        default: ''
+      buildx-use:
+        description: Whether to switch to the created builder instance.
+        type: boolean
+        required: false
+        default: true
+      buildx-name:
+        description: Buildx builder name.
+        type: string
+        required: false
+        default: ''
+      buildx-endpoint:
+        description: Docker socket or context endpoint for Buildx.
+        type: string
+        required: false
+        default: ''
+      buildx-platforms:
+        description: Fixed platforms for the current Buildx node.
+        type: string
+        required: false
+        default: ''
+      buildx-append:
+        description: Additional Buildx builder nodes.
+        type: string
+        required: false
+        default: ''
+      buildx-keep-state:
+        description: Whether to keep BuildKit state on cleanup.
+        type: boolean
+        required: false
+        default: false
+      buildx-cache-binary:
+        description: Whether to cache the Buildx binary.
+        type: boolean
+        required: false
+        default: true
+      buildx-cleanup:
+        description: Whether to remove the builder at the end of each job.
+        type: boolean
+        required: false
+        default: true
+      cache-enabled:
+        description: Whether to cache the devcontainer user data folder.
+        type: boolean
+        required: false
+        default: true
+      cache-path:
+        description: Cache path. Defaults to devcontainer-user-data-folder when empty.
+        type: string
+        required: false
+        default: ''
+      cache-key:
+        description: Explicit cache key. Leave empty to derive one from cache-key-prefix.
+        type: string
+        required: false
+        default: ''
+      cache-key-prefix:
+        description: Prefix used for generated per-platform cache keys.
+        type: string
+        required: false
+        default: devcontainer
+      cache-dependency-path:
+        description: Glob used to hash devcontainer files for generated cache keys.
+        type: string
+        required: false
+        default: .devcontainer/**
+      cache-restore-keys:
+        description: Ordered restore keys. Leave empty to derive a per-platform prefix.
+        type: string
+        required: false
+        default: ''
+      cache-upload-chunk-size:
+        description: Cache upload chunk size in bytes.
+        type: string
+        required: false
+        default: ''
+      cache-enable-cross-os-archive:
+        description: Whether cache archives can be restored across operating systems.
+        type: boolean
+        required: false
+        default: false
+      cache-fail-on-cache-miss:
+        description: Whether to fail when the cache entry is not found.
+        type: boolean
+        required: false
+        default: false
+      cache-lookup-only:
+        description: Whether to check for a cache entry without downloading it.
+        type: boolean
+        required: false
+        default: false
+      devcontainer-config-file:
+        description: Path to the devcontainer.json file.
+        type: string
+        required: false
+        default: .devcontainer/devcontainer.json
+      devcontainer-checkout-path:
+        description: Path to the checked out repository for devcontainers/ci.
+        type: string
+        required: false
+        default: .
+      devcontainer-user-data-folder:
+        description: Folder for generated devcontainer build user data.
+        type: string
+        required: false
+        default: /tmp/devcontainer-userdata
+      devcontainer-cache-from:
+        description: Additional images to use for build caching.
+        type: string
+        required: false
+        default: ''
+      devcontainer-cache-to:
+        description: Build cache destination.
+        type: string
+        required: false
+        default: ''
+      devcontainer-no-cache:
+        description: Whether to build the image with --no-cache.
+        type: boolean
+        required: false
+        default: false
+      devcontainer-push:
+        description: 'When devcontainers/ci should push images: never, filter, or always.'
+        type: string
+        required: false
+        default: always
+      devcontainer-ref-filter-for-push:
+        description: Source refs allowed to push images when devcontainer-push is filter.
+        type: string
+        required: false
+        default: ''
+      devcontainer-event-filter-for-push:
+        description: Event names allowed to push images when devcontainer-push is filter.
+        type: string
+        required: false
+        default: push
+      merge-enabled:
+        description: Whether to create a multi-arch manifest from platform images.
+        type: boolean
+        required: false
+        default: true
+      merge-runner:
+        description: Runner used for the multi-arch manifest merge job.
+        type: string
+        required: false
+        default: ubuntu-latest
+      checkout-enabled:
+        description: Whether to run actions/checkout before workflow execution.
+        type: boolean
+        required: false
+        default: true
+      checkout-repository:
+        description: Repository name with owner to checkout.
+        type: string
+        required: false
+        default: ${{ github.repository }}
+      checkout-ref:
+        description: Branch, tag, or SHA to checkout.
+        type: string
+        required: false
+        default: ${{ github.ref }}
+      checkout-ssh-known-hosts:
+        description: Known hosts in addition to the user and global host key database.
+        type: string
+        required: false
+        default: ''
+      checkout-ssh-strict:
+        description: Whether to perform strict host key checking.
+        type: boolean
+        required: false
+        default: true
+      checkout-ssh-user:
+        description: SSH user to use when connecting to the remote SSH host.
+        type: string
+        required: false
+        default: git
+      checkout-persist-credentials:
+        description: Whether to configure the token or SSH key with local git config.
+        type: boolean
+        required: false
+        default: true
+      checkout-path:
+        description: Relative path under GITHUB_WORKSPACE to place the repository.
+        type: string
+        required: false
+        default: ''
+      checkout-clean:
+        description: Whether to clean and reset before fetching.
+        type: boolean
+        required: false
+        default: true
+      checkout-filter:
+        description: Partial clone filter. Overrides sparse checkout when set.
+        type: string
+        required: false
+        default: ''
+      checkout-sparse-checkout:
+        description: Sparse checkout patterns separated by new lines.
+        type: string
+        required: false
+        default: ''
+      checkout-sparse-checkout-cone-mode:
+        description: Whether to use cone mode for sparse checkout.
+        type: boolean
+        required: false
+        default: true
+      checkout-fetch-depth:
+        description: Number of commits to fetch. Use 0 for all history.
+        type: number
+        required: false
+        default: 1
+      checkout-fetch-tags:
+        description: Whether to fetch tags when fetch-depth is greater than 0.
+        type: boolean
+        required: false
+        default: false
+      checkout-show-progress:
+        description: Whether to show fetch progress output.
+        type: boolean
+        required: false
+        default: true
+      checkout-lfs:
+        description: Whether to download Git LFS files.
+        type: boolean
+        required: false
+        default: false
+      checkout-submodules:
+        description: Whether to checkout submodules; use recursive for nested submodules.
+        type: string
+        required: false
+        default: 'false'
+      checkout-set-safe-directory:
+        description: Whether to add the repository path as a safe Git directory.
+        type: boolean
+        required: false
+        default: true
+      checkout-github-server-url:
+        description: GitHub server URL to fetch from.
+        type: string
+        required: false
+        default: ''
+      checkout-allow-unsafe-pr-checkout:
+        description: Allow checkout of fork pull request code in trusted contexts.
+        type: boolean
+        required: false
+        default: false
+      artifact-download-enabled:
+        description: Whether to download artifacts before workflow execution.
+        type: boolean
+        required: false
+        default: false
+      artifact-download-name:
+        description: Name of the artifact to download. Leave empty to download all artifacts.
+        type: string
+        required: false
+        default: ''
+      artifact-download-ids:
+        description: Comma-separated artifact IDs to download. Mutually exclusive with artifact-download-name.
+        type: string
+        required: false
+        default: ''
+      artifact-download-path:
+        description: Destination path for downloaded artifacts.
+        type: string
+        required: false
+        default: .
+      artifact-download-pattern:
+        description: Glob pattern matching artifacts to download when name is unset.
+        type: string
+        required: false
+        default: ''
+      artifact-download-merge-multiple:
+        description: Whether multiple matched artifacts are extracted into one directory.
+        type: boolean
+        required: false
+        default: false
+      artifact-download-repository:
+        description: Repository to download artifacts from when a token is set.
+        type: string
+        required: false
+        default: ${{ github.repository }}
+      artifact-download-run-id:
+        description: Workflow run ID to download artifacts from when a token is set.
+        type: string
+        required: false
+        default: ${{ github.run_id }}
+      artifact-download-skip-decompress:
+        description: Whether to download the artifact archive without extracting it.
+        type: boolean
+        required: false
+        default: false
+      artifact-download-digest-mismatch:
+        description: Behavior when a downloaded artifact digest does not match.
+        type: string
+        required: false
+        default: error
+    secrets:
+      docker-password:
+        description: Docker registry password or token. Defaults to github.token when unset.
+        required: false
+      checkout-token:
+        description: Token used by actions/checkout. Defaults to github.token.
+        required: false
+      checkout-ssh-key:
+        description: SSH key used by actions/checkout.
+        required: false
+      artifact-download-token:
+        description: Token used to download artifacts from another repository or run.
+        required: false
+    outputs:
+      image-ref:
+        description: Multi-arch image reference published by the merge job.
+        value: ${{ jobs.merge-devcontainer.outputs.image-ref }}
+      sha-image-ref:
+        description: Optional SHA image reference published by the merge job.
+        value: ${{ jobs.merge-devcontainer.outputs.sha-image-ref }}
+permissions:
+  actions: read
+  contents: read
+  packages: write
+jobs:
+  build-devcontainer:
+    name: Build (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.build-matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout repository
+        if: inputs.checkout-enabled
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: ${{ inputs.checkout-repository }}
+          ref: ${{ inputs.checkout-ref }}
+          token: ${{ secrets.checkout-token || github.token }}
+          ssh-key: ${{ secrets.checkout-ssh-key }}
+          ssh-known-hosts: ${{ inputs.checkout-ssh-known-hosts }}
+          ssh-strict: ${{ inputs.checkout-ssh-strict }}
+          ssh-user: ${{ inputs.checkout-ssh-user }}
+          persist-credentials: ${{ inputs.checkout-persist-credentials }}
+          path: ${{ inputs.checkout-path }}
+          clean: ${{ inputs.checkout-clean }}
+          filter: ${{ inputs.checkout-filter }}
+          sparse-checkout: ${{ inputs.checkout-sparse-checkout }}
+          sparse-checkout-cone-mode: ${{ inputs.checkout-sparse-checkout-cone-mode }}
+          fetch-depth: ${{ inputs.checkout-fetch-depth }}
+          fetch-tags: ${{ inputs.checkout-fetch-tags }}
+          show-progress: ${{ inputs.checkout-show-progress }}
+          lfs: ${{ inputs.checkout-lfs }}
+          submodules: ${{ inputs.checkout-submodules }}
+          set-safe-directory: ${{ inputs.checkout-set-safe-directory }}
+          github-server-url: ${{ inputs.checkout-github-server-url }}
+          allow-unsafe-pr-checkout: ${{ inputs.checkout-allow-unsafe-pr-checkout }}
+      - name: Download artifacts
+        if: inputs.artifact-download-enabled
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: ${{ inputs.artifact-download-name }}
+          artifact-ids: ${{ inputs.artifact-download-ids }}
+          path: ${{ inputs.artifact-download-path }}
+          pattern: ${{ inputs.artifact-download-pattern }}
+          merge-multiple: ${{ inputs.artifact-download-merge-multiple }}
+          github-token: ${{ secrets.artifact-download-token }}
+          repository: ${{ inputs.artifact-download-repository }}
+          run-id: ${{ inputs.artifact-download-run-id }}
+          skip-decompress: ${{ inputs.artifact-download-skip-decompress }}
+          digest-mismatch: ${{ inputs.artifact-download-digest-mismatch }}
+      - name: Resolve DevFlows runtime
+        id: devflows-runtime
+        shell: bash
+        env:
+          DEVFLOWS_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |-
+          if [ -z "${DEVFLOWS_WORKFLOW_REF}" ]; then
+            echo "script-root=.github/workflows"
+          else
+            echo "repository=${DEVFLOWS_WORKFLOW_REF%%/.github/workflows/*}"
+            echo "ref=${DEVFLOWS_WORKFLOW_REF##*@}"
+            echo "script-root=.devflows-runtime/.github/workflows"
+          fi >> "$GITHUB_OUTPUT"
+      - name: Checkout DevFlows runtime
+        if: steps.devflows-runtime.outputs.repository != ''
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: ${{ steps.devflows-runtime.outputs.repository }}
+          ref: ${{ steps.devflows-runtime.outputs.ref }}
+          token: ${{ github.token }}
+          path: .devflows-runtime
+          persist-credentials: false
+      - name: Prepare workspace
+        if: inputs.prepare-command != ''
+        working-directory: ${{ inputs.prepare-working-directory }}
+        shell: bash
+        env:
+          PREPARE_COMMAND: ${{ inputs.prepare-command }}
+        run: bash -euo pipefail -c "$PREPARE_COMMAND"
+      - name: Resolve build settings
+        id: build-settings
+        shell: bash
+        env:
+          CACHE_DEPENDENCY_HASH: ${{ hashFiles(inputs.cache-dependency-path) }}
+          CACHE_KEY: ${{ inputs.cache-key }}
+          CACHE_KEY_PREFIX: ${{ inputs.cache-key-prefix }}
+          CACHE_PATH: ${{ inputs.cache-path }}
+          CACHE_RESTORE_KEYS: ${{ inputs.cache-restore-keys }}
+          DEVCONTAINER_CACHE_FROM: ${{ inputs.devcontainer-cache-from }}
+          DEVCONTAINER_CACHE_TO: ${{ inputs.devcontainer-cache-to }}
+          DEVCONTAINER_USER_DATA_FOLDER: ${{ inputs.devcontainer-user-data-folder }}
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/resolve-build-settings.py"
+      - name: Docker login
+        if: inputs.docker-login-enabled
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
+        with:
+          registry: ${{ inputs.docker-registry }}
+          username: ${{ inputs.docker-username }}
+          password: ${{ secrets.docker-password || github.token }}
+          ecr: ${{ inputs.docker-ecr }}
+          scope: ${{ inputs.docker-scope }}
+          logout: ${{ inputs.docker-logout }}
+      - name: Set up Docker Buildx
+        if: inputs.buildx-enabled
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+        with:
+          version: ${{ inputs.buildx-version }}
+          driver: ${{ inputs.buildx-driver }}
+          driver-opts: ${{ inputs.buildx-driver-opts }}
+          buildkitd-flags: ${{ inputs.buildx-buildkitd-flags }}
+          buildkitd-config: ${{ inputs.buildx-buildkitd-config }}
+          buildkitd-config-inline: ${{ inputs.buildx-buildkitd-config-inline }}
+          use: ${{ inputs.buildx-use }}
+          name: ${{ inputs.buildx-name }}
+          endpoint: ${{ inputs.buildx-endpoint }}
+          platforms: ${{ inputs.buildx-platforms }}
+          append: ${{ inputs.buildx-append }}
+          keep-state: ${{ inputs.buildx-keep-state }}
+          cache-binary: ${{ inputs.buildx-cache-binary }}
+          cleanup: ${{ inputs.buildx-cleanup }}
+      - name: Cache devcontainer user data
+        if: inputs.cache-enabled
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ${{ steps.build-settings.outputs.cache-path }}
+          key: ${{ steps.build-settings.outputs.cache-key }}
+          restore-keys: ${{ steps.build-settings.outputs.cache-restore-keys }}
+          upload-chunk-size: ${{ inputs.cache-upload-chunk-size }}
+          enableCrossOsArchive: ${{ inputs.cache-enable-cross-os-archive }}
+          fail-on-cache-miss: ${{ inputs.cache-fail-on-cache-miss }}
+          lookup-only: ${{ inputs.cache-lookup-only }}
+      - name: Build and push devcontainer
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca
+        with:
+          imageName: ${{ inputs.image-name }}
+          imageTag: ${{ inputs.image-tag }}-${{ matrix.platform_tag }}
+          platform: ${{ matrix.platform }}
+          configFile: ${{ inputs.devcontainer-config-file }}
+          checkoutPath: ${{ inputs.devcontainer-checkout-path }}
+          push: ${{ inputs.devcontainer-push }}
+          refFilterForPush: ${{ inputs.devcontainer-ref-filter-for-push }}
+          eventFilterForPush: ${{ inputs.devcontainer-event-filter-for-push }}
+          userDataFolder: ${{ inputs.devcontainer-user-data-folder }}
+          cacheFrom: ${{ steps.build-settings.outputs.cache-from }}
+          cacheTo: ${{ steps.build-settings.outputs.cache-to }}
+          noCache: ${{ inputs.devcontainer-no-cache }}
+  merge-devcontainer:
+    name: Merge multi-arch manifest
+    needs: build-devcontainer
+    if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
+    runs-on: ${{ inputs.merge-runner }}
+    outputs:
+      image-ref: ${{ steps.merge.outputs.image-ref }}
+      sha-image-ref: ${{ steps.merge.outputs.sha-image-ref }}
+    steps:
+      - name: Resolve DevFlows runtime
+        id: devflows-runtime
+        shell: bash
+        env:
+          DEVFLOWS_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |-
+          if [ -z "${DEVFLOWS_WORKFLOW_REF}" ]; then
+            echo "script-root=.github/workflows"
+          else
+            echo "repository=${DEVFLOWS_WORKFLOW_REF%%/.github/workflows/*}"
+            echo "ref=${DEVFLOWS_WORKFLOW_REF##*@}"
+            echo "script-root=.devflows-runtime/.github/workflows"
+          fi >> "$GITHUB_OUTPUT"
+      - name: Checkout DevFlows runtime
+        if: steps.devflows-runtime.outputs.repository != ''
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: ${{ steps.devflows-runtime.outputs.repository }}
+          ref: ${{ steps.devflows-runtime.outputs.ref }}
+          token: ${{ github.token }}
+          path: .devflows-runtime
+          persist-credentials: false
+      - name: Docker login
+        if: inputs.docker-login-enabled
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
+        with:
+          registry: ${{ inputs.docker-registry }}
+          username: ${{ inputs.docker-username }}
+          password: ${{ secrets.docker-password || github.token }}
+          ecr: ${{ inputs.docker-ecr }}
+          scope: ${{ inputs.docker-scope }}
+          logout: ${{ inputs.docker-logout }}
+      - name: Set up Docker Buildx
+        if: inputs.buildx-enabled
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+        with:
+          version: ${{ inputs.buildx-version }}
+          driver: ${{ inputs.buildx-driver }}
+          driver-opts: ${{ inputs.buildx-driver-opts }}
+          buildkitd-flags: ${{ inputs.buildx-buildkitd-flags }}
+          buildkitd-config: ${{ inputs.buildx-buildkitd-config }}
+          buildkitd-config-inline: ${{ inputs.buildx-buildkitd-config-inline }}
+          use: ${{ inputs.buildx-use }}
+          name: ${{ inputs.buildx-name }}
+          endpoint: ${{ inputs.buildx-endpoint }}
+          platforms: ${{ inputs.buildx-platforms }}
+          append: ${{ inputs.buildx-append }}
+          keep-state: ${{ inputs.buildx-keep-state }}
+          cache-binary: ${{ inputs.buildx-cache-binary }}
+          cleanup: ${{ inputs.buildx-cleanup }}
+      - name: Merge manifest
+        id: merge
+        shell: bash
+        env:
+          BUILD_MATRIX: ${{ inputs.build-matrix }}
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          IMAGE_SHA_TAG_ENABLED: ${{ inputs.image-sha-tag-enabled }}
+          IMAGE_SHA_TAG_PREFIX: ${{ inputs.image-sha-tag-prefix }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/merge-manifest.py"

@@ -1,0 +1,46 @@
+id: build-devcontainer
+name: Build Devcontainer
+summary:
+  Build platform-specific devcontainer images and optionally merge them into a
+  multi-arch image tag.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 1
+docs:
+  category: Containers
+  keywords:
+    - devcontainer
+    - docker
+    - buildx
+    - containers
+io:
+  job: build-devcontainer
+  runtime: true
+  runtime-jobs:
+    - merge-devcontainer
+  checkout: true
+  artifact-download: true
+notes:
+  - The only structured JSON input is build-matrix, because GitHub reusable
+    workflow inputs do not support arrays or objects for matrix expansion.
+  - The workflow intentionally does not expose devcontainers/ci runCmd, env,
+    inheritEnv, or skipContainerUserIdUpdate because this workflow builds and
+    publishes images rather than running commands inside the built container.
+  - The workflow intentionally does not expose docker/login-action registry-auth
+    because this workflow authenticates to one target registry per call.
+  - The workflow intentionally does not expose actions/cache save-always because
+    upstream marks it as deprecated.
+  - Set devcontainer-push to never and merge-enabled to false for build-only
+    validation jobs.
+  - If merge-enabled is true, platform-specific image tags must be pushed before
+    the merge job runs.
+  - prepare-command is a trusted caller-controlled command and runs on the host
+    runner after checkout and artifact download.
+examples:
+  - name: Build and publish GHCR image
+    path: test/fixtures/build-devcontainer/ghcr-publish.yaml
+tests:
+  scenarios: []

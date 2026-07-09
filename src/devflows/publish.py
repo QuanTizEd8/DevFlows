@@ -64,8 +64,18 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
         jobs["commit"] = _commit_job(job_id)
 
     job["steps"] = prefix_steps + list(job.get("steps", [])) + suffix_steps
+    for runtime_job_id in _runtime_job_ids(io_config):
+        runtime_job = jobs.get(runtime_job_id)
+        if not isinstance(runtime_job, dict) or "steps" not in runtime_job:
+            raise ValueError(
+                f"{item.metadata_path}: io.runtime-jobs item {runtime_job_id!r} "
+                "must be a runner job."
+            )
+        runtime_job["steps"] = _runtime_steps() + list(runtime_job.get("steps", []))
+    workflow_permissions = workflow.get("permissions")
     _ensure_job_permissions(
         job,
+        workflow_permissions if isinstance(workflow_permissions, dict) else {},
         contents="read",
         actions="read"
         if any(
@@ -89,6 +99,7 @@ def validate_publish_config(item: Workflow) -> list[str]:
         "job",
         "runtime",
         "writeback",
+        "runtime-jobs",
     }
     for key in config:
         if key not in supported:
@@ -103,6 +114,17 @@ def validate_publish_config(item: Workflow) -> list[str]:
             errors.append(f"{item.metadata_path}: io.job {job_id!r} must be a runner job.")
     elif not any(isinstance(job, dict) and "steps" in job for job in jobs.values()):
         errors.append(f"{item.metadata_path}: io requires at least one runner job.")
+    runtime_jobs = config.get("runtime-jobs", []) or []
+    if not isinstance(runtime_jobs, list):
+        errors.append(f"{item.metadata_path}: io.runtime-jobs must be a list.")
+    else:
+        for runtime_job_id in runtime_jobs:
+            job = jobs.get(str(runtime_job_id))
+            if not isinstance(job, dict) or "steps" not in job:
+                errors.append(
+                    f"{item.metadata_path}: io.runtime-jobs item {runtime_job_id!r} "
+                    "must be a runner job."
+                )
     return errors
 
 
@@ -138,6 +160,10 @@ def _enabled(config: dict[str, Any], name: str) -> bool:
     return bool(config.get(name))
 
 
+def _runtime_job_ids(config: dict[str, Any]) -> list[str]:
+    return [str(item) for item in config.get("runtime-jobs", []) or []]
+
+
 def _first_runner_job_id(workflow: dict[str, Any]) -> str:
     jobs = workflow.get("jobs") or {}
     for job_id, job in jobs.items():
@@ -146,7 +172,11 @@ def _first_runner_job_id(workflow: dict[str, Any]) -> str:
     raise ValueError("workflow must contain at least one runner job for IO injection.")
 
 
-def _ensure_job_permissions(job: dict[str, Any], **permissions: str | None) -> None:
+def _ensure_job_permissions(
+    job: dict[str, Any],
+    workflow_permissions: dict[str, Any],
+    **permissions: str | None,
+) -> None:
     current = job.setdefault("permissions", {})
     if current is None:
         current = {}
@@ -154,8 +184,14 @@ def _ensure_job_permissions(job: dict[str, Any], **permissions: str | None) -> N
     if not isinstance(current, dict):
         return
     for name, level in permissions.items():
-        if level is not None and name not in current:
+        if level is None:
+            continue
+        if str(workflow_permissions.get(name) or "") == level:
+            continue
+        if name not in current:
             current[name] = level
+    if not current:
+        job.pop("permissions", None)
 
 
 def _checkout_step() -> dict[str, Any]:

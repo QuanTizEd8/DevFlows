@@ -2,6 +2,12 @@
   "separate-pull-requests": true,
   "tag-separator": "/",
   "packages": {
+    "workflows/build-devcontainer": {
+      "component": "build-devcontainer",
+      "release-type": "simple",
+      "package-name": "build-devcontainer",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/pandoc": {
       "component": "pandoc",
       "release-type": "simple",
