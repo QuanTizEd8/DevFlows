@@ -1,0 +1,6 @@
+{
+  "name": "devflows-e2e-minimal",
+  "build": {
+    "dockerfile": "Dockerfile"
+  }
+}

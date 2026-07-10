@@ -218,7 +218,7 @@ name: '[Reusable]: Pandoc'
         required: false
         default: true
       commit-enabled:
-        description: Whether to commit selected generated files back to a repository.
+        description: "Whether to commit selected generated files back to a repository. The writeback commit runs in a nested job that statically requires contents: write (and actions: read), so any job calling this workflow must grant permissions: contents: write, actions: read even when this is false \u2014 GitHub validates the nested permissions before the run starts."
         type: boolean
         required: false
         default: false

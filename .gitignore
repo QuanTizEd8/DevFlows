@@ -13,7 +13,7 @@ __pycache__/
 docs/_build/
 docs/reference/
 devflows-pandoc-smoke.html
-test/scenarios/pandoc/working-directory/output.html
+tests/scenarios/pandoc/working-directory/output.html
 
 # Coverage output
 .coverage

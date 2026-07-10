@@ -79,7 +79,7 @@ Examples are checked-in caller workflows:
 ```yaml
 examples:
   - name: Markdown to HTML
-    path: test/fixtures/pandoc/markdown-to-html.yaml
+    path: tests/fixtures/pandoc/markdown-to-html.yaml
 ```
 
 Generated workflow reference pages render these example files inline. Keep
