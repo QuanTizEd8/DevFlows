@@ -22,6 +22,16 @@ on:
         type: string
         required: false
         default: sha-
+      build-digest-artifact-name:
+        description:
+          When set and devcontainer-push is never, each build job records the locally-built
+          image digest (docker image inspect) and uploads it as
+          build-digest-artifact-name-platform_tag. This gives a build-only validation run
+          proof that an image was actually produced (the inspect fails, and so does the job,
+          when the build silently did nothing). Empty (default) disables it and needs no push.
+        type: string
+        required: false
+        default: ""
       build-matrix:
         description:
           JSON array of platform builds with runner, platform, and platform_tag fields.
@@ -414,6 +424,33 @@ jobs:
         with:
           name: devflows-devcontainer-digest-${{ inputs.image-tag }}-${{ matrix.platform_tag }}
           path: ${{ runner.temp }}/devflows-digests/${{ matrix.platform_tag }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
+
+      # Build-only proof: for a push-never run, capture the digest of the image
+      # devcontainers/ci loaded into the local daemon and upload it. `docker image
+      # inspect` fails if nothing was built, so a scenario asserting on this digest
+      # cannot pass on a vacuous (no-op) build. Credential-free and hosted-safe.
+      - name: Capture build-only image digest
+        if: inputs.build-digest-artifact-name != '' && inputs.devcontainer-push == 'never'
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DIGEST_DIR: ${{ runner.temp }}/devflows-build-only-digest
+          DIGEST_SOURCE: local
+          IMAGE_NAME: ${{ inputs.image-name }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
+
+      - name: Upload build-only image digest
+        if: inputs.build-digest-artifact-name != '' && inputs.devcontainer-push == 'never'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.build-digest-artifact-name }}-${{ matrix.platform_tag }}
+          path: ${{ runner.temp }}/devflows-build-only-digest/${{ matrix.platform_tag }}
           if-no-files-found: error
           retention-days: 1
           compression-level: 0

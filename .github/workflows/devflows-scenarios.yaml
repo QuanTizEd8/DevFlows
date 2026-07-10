@@ -27,6 +27,7 @@ jobs:
       devcontainer-cache-registry-enabled: false
       merge-enabled: false
       cache-enabled: false
+      build-digest-artifact-name: build-only-digest
     permissions:
       actions: read
       contents: read
@@ -47,6 +48,11 @@ jobs:
         env:
           ACTUAL_RESULT: ${{ needs.build_devcontainer_build_only_minimal_call.result }}
         run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: build-only-digest-linux-amd64
+          path: .devflows-test-artifacts/build-devcontainer/build-only
       - name: Assert output image-ref
         shell: bash
         env:
@@ -54,6 +60,12 @@ jobs:
           EXPECTED: ''
           ACTUAL: ${{ needs.build_devcontainer_build_only_minimal_call.outputs.image-ref }}
         run: python harness/scenarios/assert-equals.py
+      - name: 'Assert file contains: linux-amd64'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/build-devcontainer/build-only/linux-amd64
+          ASSERT_TEXT: 'sha256:'
+        run: python harness/scenarios/assert-file-contains.py
   pandoc_markdown_html_artifact_call:
     name: 'Pandoc: Markdown to HTML with artifact upload'
     uses: ./.github/workflows/pandoc.yaml

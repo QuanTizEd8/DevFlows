@@ -152,6 +152,19 @@ def test_build_devcontainer_published_workflow_filters_conflicting_action_inputs
     assert "devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca" in rendered
 
 
+def test_build_devcontainer_exposes_build_only_digest_proof() -> None:
+    # item 13: a build-only run can prove an image was produced by capturing the
+    # local digest and uploading it under build-digest-artifact-name.
+    build = _workflow("build-devcontainer")
+    inputs = build.workflow_call["inputs"]
+    assert "build-digest-artifact-name" in inputs
+
+    workflow = build_published_workflow(build)
+    step_names = [step.get("name") for step in workflow["jobs"]["build-devcontainer"]["steps"]]
+    assert "Capture build-only image digest" in step_names
+    assert "Upload build-only image digest" in step_names
+
+
 # --------------------------------------------------------------- item 9: permissions
 
 

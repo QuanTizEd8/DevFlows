@@ -226,6 +226,46 @@ def test_capture_digest_rejects_non_sha256(monkeypatch, tmp_path) -> None:
     assert "unexpected manifest digest" in str(excinfo.value)
 
 
+def test_capture_digest_local_mode_uses_docker_image_inspect(monkeypatch, tmp_path) -> None:
+    module = _load_script("capture-digest.py")
+    digest = "sha256:" + "b" * 64
+
+    def fake_run(command, *, check, capture_output, text):
+        assert command[:3] == ["docker", "image", "inspect"]
+        assert "devflows-e2e-devcontainer:e2e-linux-amd64" in command
+        assert command[-1] == "{{.Id}}"
+        return subprocess.CompletedProcess(command, 0, stdout=digest + "\n")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setenv("IMAGE_NAME", "devflows-e2e-devcontainer")
+    monkeypatch.setenv("IMAGE_TAG", "e2e")
+    monkeypatch.setenv("MATRIX_PLATFORM_TAG", "linux-amd64")
+    monkeypatch.setenv("DIGEST_DIR", str(tmp_path / "digests"))
+    monkeypatch.setenv("DIGEST_SOURCE", "local")
+
+    assert module.main() == 0
+    assert (tmp_path / "digests/linux-amd64").read_text(encoding="utf-8").strip() == digest
+
+
+def test_capture_digest_local_mode_rejects_non_sha256(monkeypatch, tmp_path) -> None:
+    module = _load_script("capture-digest.py")
+
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="not-a-digest\n"),
+    )
+    monkeypatch.setenv("IMAGE_NAME", "devflows-e2e-devcontainer")
+    monkeypatch.setenv("IMAGE_TAG", "e2e")
+    monkeypatch.setenv("MATRIX_PLATFORM_TAG", "linux-amd64")
+    monkeypatch.setenv("DIGEST_DIR", str(tmp_path / "digests"))
+    monkeypatch.setenv("DIGEST_SOURCE", "local")
+
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert "unexpected local image id" in str(excinfo.value)
+
+
 # --------------------------------------------------------------------------- #
 # merge-manifest.py                                                            #
 # --------------------------------------------------------------------------- #

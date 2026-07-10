@@ -22,6 +22,11 @@ name: '[Reusable]: Build Devcontainer'
         type: string
         required: false
         default: sha-
+      build-digest-artifact-name:
+        description: When set and devcontainer-push is never, each build job records the locally-built image digest (docker image inspect) and uploads it as build-digest-artifact-name-platform_tag. This gives a build-only validation run proof that an image was actually produced (the inspect fails, and so does the job, when the build silently did nothing). Empty (default) disables it and needs no push.
+        type: string
+        required: false
+        default: ''
       build-matrix:
         description: JSON array of platform builds with runner, platform, and platform_tag fields.
         type: string
@@ -576,158 +581,13 @@ jobs:
       - name: Materialize DevFlows runtime scripts
         id: devflows-runtime
         shell: bash
-        run: |-
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/devflows/build-devcontainer"
-          cat > "$RUNNER_TEMP/devflows/build-devcontainer/resolve-build-settings.py" <<'DEVFLOWS_SCRIPT_EOF'
-          from __future__ import annotations
-
-          import os
-
-
-          def main() -> int:
-              image_name = _required("IMAGE_NAME")
-              platform_tag = _required("MATRIX_PLATFORM_TAG")
-              cache_key_prefix = _required("CACHE_KEY_PREFIX")
-              dependency_hash = os.environ.get("CACHE_DEPENDENCY_HASH", "")
-
-              cache_path = _optional("CACHE_PATH") or _required("DEVCONTAINER_USER_DATA_FOLDER")
-              cache_key = _optional("CACHE_KEY") or f"{cache_key_prefix}-{platform_tag}-{dependency_hash}"
-              cache_restore_keys = _optional("CACHE_RESTORE_KEYS") or f"{cache_key_prefix}-{platform_tag}-"
-
-              registry_cache_enabled = _bool("DEVCONTAINER_CACHE_REGISTRY_ENABLED", default=True)
-              push = _optional("DEVCONTAINER_PUSH").lower()
-              default_cache_ref = f"{image_name}:{cache_key_prefix}-{platform_tag}"
-              cache_from = _resolve_cache_from(registry_cache_enabled, default_cache_ref)
-              cache_to = _resolve_cache_to(registry_cache_enabled, push, default_cache_ref)
-
-              github_output = os.environ.get("GITHUB_OUTPUT")
-              if github_output:
-                  with open(github_output, "a", encoding="utf-8") as output:
-                      _emit(output, "cache-path", cache_path)
-                      _emit(output, "cache-key", cache_key)
-                      _emit(output, "cache-restore-keys", cache_restore_keys)
-                      _emit(output, "cache-from", cache_from)
-                      _emit(output, "cache-to", cache_to)
-              return 0
-
-
-          def _resolve_cache_from(registry_cache_enabled: bool, default_ref: str) -> str:
-              raw = _optional("DEVCONTAINER_CACHE_FROM")
-              if raw.lower() == "none":
-                  return ""
-              if raw:
-                  return raw
-              if not registry_cache_enabled:
-                  return ""
-              return default_ref
-
-
-          def _resolve_cache_to(registry_cache_enabled: bool, push: str, default_ref: str) -> str:
-              raw = _optional("DEVCONTAINER_CACHE_TO")
-              if raw.lower() == "none":
-                  return ""
-              # Never push a registry build cache when caching is disabled or the build
-              # does not push images (build-only validation mode): a cache-to would fail
-              # without push rights and is a cache-poisoning surface.
-              if not registry_cache_enabled or push == "never":
-                  return ""
-              if raw:
-                  return raw
-              return f"type=registry,ref={default_ref},mode=max"
-
-
-          def _emit(output, name: str, value: str) -> None:
-              # Caller-controlled inputs feed these values; a newline could forge or
-              # inject additional step outputs. Single-line values are the only valid
-              # form for cache paths, keys, and refs, so reject embedded newlines.
-              if "\n" in value or "\r" in value:
-                  raise SystemExit(f"{name} value must not contain newline characters: {value!r}")
-              output.write(f"{name}={value}\n")
-
-
-          def _required(name: str) -> str:
-              value = _optional(name)
-              if not value:
-                  raise SystemExit(f"{name} is required.")
-              return value
-
-
-          def _optional(name: str) -> str:
-              return os.environ.get(name, "").strip()
-
-
-          def _bool(name: str, *, default: bool) -> bool:
-              value = os.environ.get(name, "").strip().lower()
-              if not value:
-                  return default
-              return value in {"1", "true", "yes", "on"}
-
-
-          if __name__ == "__main__":
-              raise SystemExit(main())
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/build-devcontainer"
-          cat > "$RUNNER_TEMP/devflows/build-devcontainer/capture-digest.py" <<'DEVFLOWS_SCRIPT_EOF'
-          from __future__ import annotations
-
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-
-          def main() -> int:
-              image = _required("IMAGE_NAME")
-              tag = _required("IMAGE_TAG")
-              platform_tag = _required("MATRIX_PLATFORM_TAG")
-              digest_dir = Path(_required("DIGEST_DIR"))
-
-              ref = f"{image}:{tag}-{platform_tag}"
-              digest = _inspect_digest(ref)
-
-              digest_dir.mkdir(parents=True, exist_ok=True)
-              # File name is the platform_tag so the merge job can pair each digest with
-              # its expected matrix entry; the content is the immutable manifest digest.
-              (digest_dir / platform_tag).write_text(digest + "\n", encoding="utf-8")
-              print(f"{ref} -> {image}@{digest}")
-              return 0
-
-
-          def _inspect_digest(ref: str) -> str:
-              """Return the manifest digest of the just-pushed per-platform image.
-
-              Merging the multi-arch manifest from immutable digests (rather than the
-              mutable per-platform tag re-read at merge time) prevents concurrent runs
-              from publishing mixed-commit or stale manifests.
-              """
-              result = subprocess.run(
-                  ["docker", "buildx", "imagetools", "inspect", ref, "--format", "{{json .Manifest}}"],
-                  check=True,
-                  capture_output=True,
-                  text=True,
-              )
-              try:
-                  manifest = json.loads(result.stdout)
-              except json.JSONDecodeError as error:
-                  raise SystemExit(f"could not parse imagetools output for {ref}: {error}") from error
-              digest = str(manifest.get("digest", "")).strip()
-              if not digest.startswith("sha256:"):
-                  raise SystemExit(f"unexpected manifest digest for {ref}: {digest!r}")
-              return digest
-
-
-          def _required(name: str) -> str:
-              value = os.environ.get(name, "").strip()
-              if not value:
-                  raise SystemExit(f"{name} is required.")
-              return value
-
-
-          if __name__ == "__main__":
-              raise SystemExit(main())
-          DEVFLOWS_SCRIPT_EOF
-          echo "script-root=$RUNNER_TEMP/devflows" >> "$GITHUB_OUTPUT"
+        run: "set -euo pipefail\nmkdir -p \"$RUNNER_TEMP/devflows/build-devcontainer\"\ncat > \"$RUNNER_TEMP/devflows/build-devcontainer/resolve-build-settings.py\" <<'DEVFLOWS_SCRIPT_EOF'\nfrom __future__ import annotations\n\nimport os\n\n\ndef main() -> int:\n    image_name = _required(\"IMAGE_NAME\")\n    platform_tag = _required(\"MATRIX_PLATFORM_TAG\")\n    cache_key_prefix = _required(\"CACHE_KEY_PREFIX\")\n    dependency_hash = os.environ.get(\"CACHE_DEPENDENCY_HASH\", \"\")\n\n    cache_path = _optional(\"CACHE_PATH\") or _required(\"DEVCONTAINER_USER_DATA_FOLDER\")\n    cache_key = _optional(\"CACHE_KEY\") or f\"{cache_key_prefix}-{platform_tag}-{dependency_hash}\"\n    cache_restore_keys = _optional(\"CACHE_RESTORE_KEYS\") or f\"{cache_key_prefix}-{platform_tag}-\"\n\n    registry_cache_enabled = _bool(\"DEVCONTAINER_CACHE_REGISTRY_ENABLED\", default=True)\n    push = _optional(\"DEVCONTAINER_PUSH\").lower()\n    default_cache_ref = f\"{image_name}:{cache_key_prefix}-{platform_tag}\"\
+          \n    cache_from = _resolve_cache_from(registry_cache_enabled, default_cache_ref)\n    cache_to = _resolve_cache_to(registry_cache_enabled, push, default_cache_ref)\n\n    github_output = os.environ.get(\"GITHUB_OUTPUT\")\n    if github_output:\n        with open(github_output, \"a\", encoding=\"utf-8\") as output:\n            _emit(output, \"cache-path\", cache_path)\n            _emit(output, \"cache-key\", cache_key)\n            _emit(output, \"cache-restore-keys\", cache_restore_keys)\n            _emit(output, \"cache-from\", cache_from)\n            _emit(output, \"cache-to\", cache_to)\n    return 0\n\n\ndef _resolve_cache_from(registry_cache_enabled: bool, default_ref: str) -> str:\n    raw = _optional(\"DEVCONTAINER_CACHE_FROM\")\n    if raw.lower() == \"none\":\n        return \"\"\n    if raw:\n        return raw\n    if not registry_cache_enabled:\n        return \"\"\n    return default_ref\n\n\ndef _resolve_cache_to(registry_cache_enabled: bool, push: str, default_ref:\
+          \ str) -> str:\n    raw = _optional(\"DEVCONTAINER_CACHE_TO\")\n    if raw.lower() == \"none\":\n        return \"\"\n    # Never push a registry build cache when caching is disabled or the build\n    # does not push images (build-only validation mode): a cache-to would fail\n    # without push rights and is a cache-poisoning surface.\n    if not registry_cache_enabled or push == \"never\":\n        return \"\"\n    if raw:\n        return raw\n    return f\"type=registry,ref={default_ref},mode=max\"\n\n\ndef _emit(output, name: str, value: str) -> None:\n    # Caller-controlled inputs feed these values; a newline could forge or\n    # inject additional step outputs. Single-line values are the only valid\n    # form for cache paths, keys, and refs, so reject embedded newlines.\n    if \"\\n\" in value or \"\\r\" in value:\n        raise SystemExit(f\"{name} value must not contain newline characters: {value!r}\")\n    output.write(f\"{name}={value}\\n\")\n\n\ndef _required(name:\
+          \ str) -> str:\n    value = _optional(name)\n    if not value:\n        raise SystemExit(f\"{name} is required.\")\n    return value\n\n\ndef _optional(name: str) -> str:\n    return os.environ.get(name, \"\").strip()\n\n\ndef _bool(name: str, *, default: bool) -> bool:\n    value = os.environ.get(name, \"\").strip().lower()\n    if not value:\n        return default\n    return value in {\"1\", \"true\", \"yes\", \"on\"}\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\nDEVFLOWS_SCRIPT_EOF\nmkdir -p \"$RUNNER_TEMP/devflows/build-devcontainer\"\ncat > \"$RUNNER_TEMP/devflows/build-devcontainer/capture-digest.py\" <<'DEVFLOWS_SCRIPT_EOF'\nfrom __future__ import annotations\n\nimport json\nimport os\nimport subprocess\nfrom pathlib import Path\n\n\ndef main() -> int:\n    image = _required(\"IMAGE_NAME\")\n    tag = _required(\"IMAGE_TAG\")\n    platform_tag = _required(\"MATRIX_PLATFORM_TAG\")\n    digest_dir = Path(_required(\"DIGEST_DIR\"))\n    source = os.environ.get(\"\
+          DIGEST_SOURCE\", \"registry\").strip().lower()\n\n    ref = f\"{image}:{tag}-{platform_tag}\"\n    digest = _inspect_local_digest(ref) if source == \"local\" else _inspect_digest(ref)\n\n    digest_dir.mkdir(parents=True, exist_ok=True)\n    # File name is the platform_tag so the merge job can pair each digest with\n    # its expected matrix entry; the content is the immutable manifest digest.\n    (digest_dir / platform_tag).write_text(digest + \"\\n\", encoding=\"utf-8\")\n    print(f\"{ref} -> {image}@{digest}\")\n    return 0\n\n\ndef _inspect_local_digest(ref: str) -> str:\n    \"\"\"Return the config digest of a locally-built (unpushed) image.\n\n    Build-only validation never pushes, so there is no registry manifest to read.\n    ``docker image inspect`` reads the image the build loaded into the local\n    daemon and fails outright if it does not exist \u2014 which is exactly the signal\n    a build-only scenario needs: a silently no-op build (e.g. devcontainers/ci\n  \
+          \  warning that skopeo is missing) leaves nothing to inspect, so this fails\n    rather than letting a vacuous scenario pass.\n    \"\"\"\n    result = subprocess.run(\n        [\"docker\", \"image\", \"inspect\", ref, \"--format\", \"{{.Id}}\"],\n        check=True,\n        capture_output=True,\n        text=True,\n    )\n    digest = result.stdout.strip()\n    if not digest.startswith(\"sha256:\"):\n        raise SystemExit(f\"unexpected local image id for {ref}: {digest!r}\")\n    return digest\n\n\ndef _inspect_digest(ref: str) -> str:\n    \"\"\"Return the manifest digest of the just-pushed per-platform image.\n\n    Merging the multi-arch manifest from immutable digests (rather than the\n    mutable per-platform tag re-read at merge time) prevents concurrent runs\n    from publishing mixed-commit or stale manifests.\n    \"\"\"\n    result = subprocess.run(\n        [\"docker\", \"buildx\", \"imagetools\", \"inspect\", ref, \"--format\", \"{{json .Manifest}}\"],\n      \
+          \  check=True,\n        capture_output=True,\n        text=True,\n    )\n    try:\n        manifest = json.loads(result.stdout)\n    except json.JSONDecodeError as error:\n        raise SystemExit(f\"could not parse imagetools output for {ref}: {error}\") from error\n    digest = str(manifest.get(\"digest\", \"\")).strip()\n    if not digest.startswith(\"sha256:\"):\n        raise SystemExit(f\"unexpected manifest digest for {ref}: {digest!r}\")\n    return digest\n\n\ndef _required(name: str) -> str:\n    value = os.environ.get(name, \"\").strip()\n    if not value:\n        raise SystemExit(f\"{name} is required.\")\n    return value\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\nDEVFLOWS_SCRIPT_EOF\necho \"script-root=$RUNNER_TEMP/devflows\" >> \"$GITHUB_OUTPUT\""
       - name: Prepare workspace
         if: inputs.prepare-command != ''
         working-directory: ${{ inputs.prepare-working-directory }}
@@ -823,6 +683,27 @@ jobs:
         with:
           name: devflows-devcontainer-digest-${{ inputs.image-tag }}-${{ matrix.platform_tag }}
           path: ${{ runner.temp }}/devflows-digests/${{ matrix.platform_tag }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
+      - name: Capture build-only image digest
+        if: inputs.build-digest-artifact-name != '' && inputs.devcontainer-push == 'never'
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DIGEST_DIR: ${{ runner.temp }}/devflows-build-only-digest
+          DIGEST_SOURCE: local
+          IMAGE_NAME: ${{ inputs.image-name }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
+      - name: Upload build-only image digest
+        if: inputs.build-digest-artifact-name != '' && inputs.devcontainer-push == 'never'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ inputs.build-digest-artifact-name }}-${{ matrix.platform_tag }}
+          path: ${{ runner.temp }}/devflows-build-only-digest/${{ matrix.platform_tag }}
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
