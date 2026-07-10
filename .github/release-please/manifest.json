@@ -1,5 +1,6 @@
 {
   "workflows/build-devcontainer": "0.1.0",
+  "workflows/docs-build": "0.0.0",
   "workflows/pandoc": "0.1.0",
   "workflows/python-build": "0.1.0",
   "workflows/python-lint": "0.1.0",

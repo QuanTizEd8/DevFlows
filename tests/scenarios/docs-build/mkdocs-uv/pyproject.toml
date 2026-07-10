@@ -1,0 +1,14 @@
+[project]
+name = "docs-build-mkdocs-uv-fixture"
+version = "0.0.0"
+requires-python = ">=3.9"
+
+# Plain mkdocs (not mkdocs-material) keeps the resolved dependency set small for
+# the docs-build uv scenario.
+[dependency-groups]
+docs = ["mkdocs"]
+
+# Virtual project: uv installs the docs group into a venv without building this
+# fixture as a package, so no build backend is required.
+[tool.uv]
+package = false

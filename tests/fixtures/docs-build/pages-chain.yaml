@@ -1,0 +1,39 @@
+name: Build docs and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+# docs-build itself stays read-only. The Pages DEPLOY (pages: write, id-token:
+# write) lives entirely in the separate deploy-pages workflow, which consumes the
+# pages-artifact-name output below.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-docs:
+    # Replace docs-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/v0.1.0
+    with:
+      docs-tool: sphinx
+      docs-environment: pip
+      pip-install-targets: |
+        sphinx
+        furo
+      sphinx-source-directory: docs
+      docs-output-directory: _site
+      # Upload the built site as a GitHub Pages artifact for the deploy-pages chain.
+      pages-artifact-enabled: true
+
+  # deploy-pages consumes the Pages artifact by name. It — not docs-build — holds
+  # pages: write and id-token: write, keeping every docs build on a PR read-only.
+  deploy-docs:
+    needs: build-docs
+    permissions:
+      pages: write
+      id-token: write
+    # Replace deploy-pages/v0.1.0 with the latest released tag once it is released.
+    uses: QuanTizEd8/DevFlows/.github/workflows/deploy-pages.yaml@deploy-pages/v0.1.0
+    with:
+      pages-artifact-name: ${{ needs.build-docs.outputs.pages-artifact-name }}

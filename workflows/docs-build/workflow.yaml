@@ -1,0 +1,462 @@
+name: "[Reusable]: Build Documentation"
+
+on:
+  workflow_call:
+    inputs:
+      docs-tool:
+        description:
+          Documentation generator to drive; 'sphinx' or 'mkdocs'. Validated; any other value fails the
+          run. Ignored for the build invocation when docs-build-command is set.
+        type: string
+        required: false
+        default: sphinx
+      docs-environment:
+        description:
+          Environment strategy for the build; one of 'pixi', 'uv', 'pip', 'container', or 'micromamba'.
+          Required — the environment is the core decision and there is no safe silent default. Inputs of
+          the non-selected environment groups are ignored.
+        type: string
+        required: true
+      docs-build-command:
+        description:
+          Optional TRUSTED command that replaces the generated sphinx/mkdocs invocation. Runs via
+          'bash -euo pipefail -c' inside the selected environment. Must write the site into
+          docs-output-directory (the post-build non-empty check still applies). Mutually exclusive with
+          sphinx-arguments and mkdocs-arguments.
+        type: string
+        required: false
+        default: ""
+      docs-working-directory:
+        description:
+          Directory under the checked-out workspace where the build (and uv sync / pixi manifest
+          resolution) runs. Must stay inside GITHUB_WORKSPACE and exist. Other path inputs remain
+          workspace-relative.
+        type: string
+        required: false
+        default: "."
+      docs-output-directory:
+        description:
+          Workspace-relative directory the built site is written to (sphinx OUTPUTDIR / mkdocs
+          --site-dir; contract for docs-build-command). Must resolve inside GITHUB_WORKSPACE. The build
+          fails if it is missing or empty afterwards.
+        type: string
+        required: false
+        default: _site
+      docs-warnings-as-errors:
+        description:
+          Treat generator warnings as failures; adds '-W --keep-going' to sphinx-build and '--strict' to
+          mkdocs build. No effect on docs-build-command runs (the command owns its own strictness).
+        type: boolean
+        required: false
+        default: false
+      docs-linkcheck-enabled:
+        description:
+          Run 'sphinx-build -b linkcheck' after a successful build, in the same environment; broken links
+          fail the job and the report is written to '<docs-output-directory>-linkcheck'. Sphinx-only;
+          enabling it with docs-tool mkdocs fails validation.
+        type: boolean
+        required: false
+        default: false
+      docs-timeout-minutes:
+        description: Maximum minutes the docs-build job may run before cancellation.
+        type: number
+        required: false
+        default: 30
+      sphinx-source-directory:
+        description:
+          Sphinx SOURCEDIR (directory containing conf.py), relative to the workspace. Extensions needing
+          full history (e.g. sphinx-last-updated-by-git) require checkout-fetch-depth 0.
+        type: string
+        required: false
+        default: docs
+      sphinx-builder:
+        description:
+          Sphinx builder passed to -b (html, dirhtml, ...). Must be non-empty when docs-tool is sphinx
+          and docs-build-command is unset.
+        type: string
+        required: false
+        default: html
+      sphinx-arguments:
+        description:
+          Extra sphinx-build arguments as one string, shlex-split by the runner script (no shell
+          expansion). Must be empty when docs-build-command is set or docs-tool is mkdocs.
+        type: string
+        required: false
+        default: ""
+      mkdocs-config-file:
+        description: MkDocs configuration file passed to --config-file, relative to the workspace.
+        type: string
+        required: false
+        default: mkdocs.yml
+      mkdocs-arguments:
+        description:
+          Extra 'mkdocs build' arguments as one string, shlex-split by the runner script. Must be empty
+          when docs-build-command is set or docs-tool is sphinx.
+        type: string
+        required: false
+        default: ""
+      pixi-version:
+        description:
+          pixi version for prefix-dev/setup-pixi. Empty uses the action's default resolution; pin an
+          exact version for reproducible builds.
+        type: string
+        required: false
+        default: ""
+      pixi-environment:
+        description:
+          Pixi environment installed (setup-pixi 'environments') and used to execute the build
+          ('pixi run --environment <env>').
+        type: string
+        required: false
+        default: default
+      pixi-manifest-path:
+        description:
+          Path to pixi.toml/pyproject.toml for setup-pixi. Empty uses the action default resolved against
+          docs-working-directory.
+        type: string
+        required: false
+        default: ""
+      pixi-locked:
+        description:
+          Install with 'pixi install --locked' so an out-of-date lockfile fails loudly. Mutually
+          exclusive with pixi-frozen.
+        type: boolean
+        required: false
+        default: true
+      pixi-frozen:
+        description:
+          Install with 'pixi install --frozen'. Mutually exclusive with pixi-locked.
+        type: boolean
+        required: false
+        default: false
+      pixi-cache-enabled:
+        description: Whether setup-pixi caches the pixi environment (maps to 'cache').
+        type: boolean
+        required: false
+        default: true
+      pixi-cache-key:
+        description: Cache key prefix for the pixi environment cache (setup-pixi 'cache-key').
+        type: string
+        required: false
+        default: pixi-
+      uv-version:
+        description:
+          uv version for astral-sh/setup-uv. Empty uses the action's default resolution; pin for
+          reproducibility.
+        type: string
+        required: false
+        default: ""
+      uv-python-version:
+        description:
+          Python version for setup-uv (sets UV_PYTHON). Empty defers to the project's .python-version /
+          requires-python.
+        type: string
+        required: false
+        default: ""
+      uv-sync-groups:
+        description:
+          Newline-separated dependency groups passed to 'uv sync' as repeated --group flags (e.g. docs).
+          Built as argv by the script — never shell-interpolated.
+        type: string
+        required: false
+        default: ""
+      uv-sync-extras:
+        description: Newline-separated extras passed to 'uv sync' as repeated --extra flags.
+        type: string
+        required: false
+        default: ""
+      uv-sync-locked:
+        description: Pass --locked to 'uv sync' so a stale uv.lock fails loudly.
+        type: boolean
+        required: false
+        default: true
+      uv-sync-arguments:
+        description:
+          Extra 'uv sync' arguments as one string, shlex-split by the script (e.g. '--no-dev
+          --all-extras').
+        type: string
+        required: false
+        default: ""
+      uv-cache-mode:
+        description:
+          setup-uv 'enable-cache' value; one of auto, true, or false (string enum per upstream).
+          Validated in uv mode.
+        type: string
+        required: false
+        default: auto
+      pip-python-version:
+        description: Python version range for actions/setup-python in pip mode.
+        type: string
+        required: false
+        default: 3.x
+      pip-requirements-file:
+        description:
+          Workspace-relative requirements file installed with 'pip install -r' in pip mode; also used as
+          setup-python cache-dependency-path when pip caching is enabled.
+        type: string
+        required: false
+        default: ""
+      pip-install-targets:
+        description:
+          Newline-separated requirement specifiers installed with pip in pip mode (e.g. '.[docs]' or
+          'sphinx==8.*'); split into argv by the script, no shell. pip mode requires
+          pip-requirements-file and/or pip-install-targets.
+        type: string
+        required: false
+        default: ""
+      pip-cache-enabled:
+        description:
+          Whether setup-python caches pip downloads (maps to the setup-python pip cache). Only takes
+          effect when pip-requirements-file is set, which supplies the cache-dependency-path.
+        type: boolean
+        required: false
+        default: true
+      container-image:
+        description:
+          Image reference ([registry/]name[:tag][@digest]) that provides the docs toolchain in container
+          mode; syntactically validated and required when docs-environment is 'container'. Runs via
+          'docker run --rm' with the workspace mounted and --user uid:gid. Pin tags or digests for
+          reproducibility.
+        type: string
+        required: false
+        default: ""
+      container-login-enabled:
+        description:
+          Whether to docker-login to container-registry before pulling. When true the container-password
+          secret is required (validated — no silent github.token fallback, since this workflow holds no
+          packages permission).
+        type: boolean
+        required: false
+        default: false
+      container-registry:
+        description: Registry hostname for the optional docker login. Leave default for GHCR; empty means Docker Hub.
+        type: string
+        required: false
+        default: ghcr.io
+      container-username:
+        description: Username for the optional docker login.
+        type: string
+        required: false
+        default: ${{ github.repository_owner }}
+      micromamba-environment-file:
+        description:
+          Conda/mamba environment file (e.g. environment.yml) installed by setup-micromamba in
+          micromamba mode; required when docs-environment is 'micromamba'. The build runs via
+          'micromamba run' in the created environment, which must provide the docs toolchain.
+        type: string
+        required: false
+        default: ""
+      micromamba-version:
+        description:
+          micromamba version for setup-micromamba; empty uses the action default. Prefer an exact
+          version for reproducible runs.
+        type: string
+        required: false
+        default: ""
+      micromamba-cache-enabled:
+        description: Whether setup-micromamba caches the created environment (maps to cache-environment).
+        type: boolean
+        required: false
+        default: true
+      pages-artifact-enabled:
+        description:
+          Whether to additionally upload docs-output-directory as a GitHub Pages artifact
+          (actions/upload-pages-artifact) for chaining into the deploy-pages workflow. Requires no extra
+          permissions; deployment (pages write and id-token write) belongs to deploy-pages.
+        type: boolean
+        required: false
+        default: false
+      pages-artifact-name:
+        description:
+          Pages artifact name; the default matches actions/deploy-pages' expected default so the chain
+          works with zero extra wiring.
+        type: string
+        required: false
+        default: github-pages
+      pages-artifact-retention-days:
+        description: Retention days for the Pages artifact (it only needs to survive until deployment).
+        type: number
+        required: false
+        default: 1
+    secrets:
+      container-password:
+        description:
+          Registry password/token for the optional docker login in container mode. Required when
+          container-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
+        required: false
+    outputs:
+      pages-artifact-name:
+        description:
+          Name of the uploaded GitHub Pages artifact, for wiring into the deploy-pages workflow's
+          artifact-name input. Empty string when pages-artifact-enabled is false.
+        value: ${{ jobs.docs-build.outputs.pages-artifact-name }}
+      pages-artifact-id:
+        description:
+          ID of the uploaded Pages artifact (upload-pages-artifact 'artifact_id'). Empty when Pages
+          upload is disabled.
+        value: ${{ jobs.docs-build.outputs.pages-artifact-id }}
+      docs-output-directory:
+        description:
+          Resolved workspace-relative directory containing the built site, for downstream jobs and
+          callers composing artifact-upload-path.
+        value: ${{ jobs.docs-build.outputs.docs-output-directory }}
+      docs-linkcheck-report-directory:
+        description:
+          Workspace-relative directory containing the Sphinx linkcheck report,
+          '<docs-output-directory>-linkcheck'. Empty when linkcheck is disabled.
+        value: ${{ jobs.docs-build.outputs.docs-linkcheck-report-directory }}
+
+permissions:
+  contents: read
+
+jobs:
+  docs-build:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.docs-timeout-minutes }}
+    permissions:
+      contents: read
+    outputs:
+      pages-artifact-name: ${{ steps.validate.outputs.pages-artifact-name }}
+      pages-artifact-id: ${{ steps.upload-pages.outputs.artifact_id }}
+      docs-output-directory: ${{ steps.validate.outputs.docs-output-directory }}
+      docs-linkcheck-report-directory: ${{ steps.validate.outputs.docs-linkcheck-report-directory }}
+    steps:
+      - name: Validate inputs
+        id: validate
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DOCS_TOOL: ${{ inputs.docs-tool }}
+          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_BUILD_COMMAND: ${{ inputs.docs-build-command }}
+          DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
+          DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
+          DOCS_WARNINGS_AS_ERRORS: ${{ inputs.docs-warnings-as-errors }}
+          DOCS_LINKCHECK_ENABLED: ${{ inputs.docs-linkcheck-enabled }}
+          SPHINX_BUILDER: ${{ inputs.sphinx-builder }}
+          SPHINX_ARGUMENTS: ${{ inputs.sphinx-arguments }}
+          MKDOCS_ARGUMENTS: ${{ inputs.mkdocs-arguments }}
+          UV_CACHE_MODE: ${{ inputs.uv-cache-mode }}
+          PIP_REQUIREMENTS_FILE: ${{ inputs.pip-requirements-file }}
+          PIP_INSTALL_TARGETS: ${{ inputs.pip-install-targets }}
+          PIXI_LOCKED: ${{ inputs.pixi-locked }}
+          PIXI_FROZEN: ${{ inputs.pixi-frozen }}
+          MICROMAMBA_ENVIRONMENT_FILE: ${{ inputs.micromamba-environment-file }}
+          CONTAINER_IMAGE: ${{ inputs.container-image }}
+          CONTAINER_LOGIN_ENABLED: ${{ inputs.container-login-enabled }}
+          CONTAINER_PASSWORD_SET: ${{ secrets.container-password != '' }}
+          PAGES_ARTIFACT_ENABLED: ${{ inputs.pages-artifact-enabled }}
+          PAGES_ARTIFACT_NAME: ${{ inputs.pages-artifact-name }}
+        shell: bash
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/docs-build/validate-inputs.py"
+
+      - name: Set up pixi
+        if: inputs.docs-environment == 'pixi'
+        uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
+        with:
+          pixi-version: ${{ inputs.pixi-version }}
+          working-directory: ${{ inputs.docs-working-directory }}
+          manifest-path: ${{ inputs.pixi-manifest-path }}
+          environments: ${{ inputs.pixi-environment }}
+          locked: ${{ inputs.pixi-locked }}
+          frozen: ${{ inputs.pixi-frozen }}
+          cache: ${{ inputs.pixi-cache-enabled }}
+          cache-key: ${{ inputs.pixi-cache-key }}
+
+      - name: Set up uv
+        if: inputs.docs-environment == 'uv'
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: ${{ inputs.uv-version }}
+          python-version: ${{ inputs.uv-python-version }}
+          enable-cache: ${{ inputs.uv-cache-mode }}
+          working-directory: ${{ inputs.docs-working-directory }}
+
+      - name: Set up Python
+        if: inputs.docs-environment == 'pip'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ inputs.pip-python-version }}
+          cache: ${{ (inputs.pip-cache-enabled && inputs.pip-requirements-file != '') && 'pip' || '' }}
+          cache-dependency-path: ${{ inputs.pip-requirements-file }}
+
+      - name: Set up micromamba
+        if: inputs.docs-environment == 'micromamba'
+        uses: mamba-org/setup-micromamba@d7c9bd84e824b79d2af72a2d4196c7f4300d3476 # v3.0.0
+        with:
+          environment-file: ${{ inputs.micromamba-environment-file }}
+          environment-name: docs-build
+          cache-environment: ${{ inputs.micromamba-cache-enabled }}
+          init-shell: bash
+          micromamba-version: ${{ inputs.micromamba-version }}
+
+      - name: Log in to container registry
+        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ inputs.container-registry }}
+          username: ${{ inputs.container-username }}
+          password: ${{ secrets.container-password }}
+
+      - name: Install documentation dependencies
+        if: inputs.docs-environment == 'uv' || inputs.docs-environment == 'pip'
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
+          UV_SYNC_LOCKED: ${{ inputs.uv-sync-locked }}
+          UV_SYNC_GROUPS: ${{ inputs.uv-sync-groups }}
+          UV_SYNC_EXTRAS: ${{ inputs.uv-sync-extras }}
+          UV_SYNC_ARGUMENTS: ${{ inputs.uv-sync-arguments }}
+          PIP_REQUIREMENTS_FILE: ${{ inputs.pip-requirements-file }}
+          PIP_INSTALL_TARGETS: ${{ inputs.pip-install-targets }}
+        shell: bash
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/docs-build/install-environment.py"
+
+      - name: Build docs
+        id: build
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DOCS_BUILD_MODE: build
+          DOCS_TOOL: ${{ inputs.docs-tool }}
+          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_BUILD_COMMAND: ${{ inputs.docs-build-command }}
+          DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
+          DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
+          DOCS_WARNINGS_AS_ERRORS: ${{ inputs.docs-warnings-as-errors }}
+          SPHINX_SOURCE_DIRECTORY: ${{ inputs.sphinx-source-directory }}
+          SPHINX_BUILDER: ${{ inputs.sphinx-builder }}
+          SPHINX_ARGUMENTS: ${{ inputs.sphinx-arguments }}
+          MKDOCS_CONFIG_FILE: ${{ inputs.mkdocs-config-file }}
+          MKDOCS_ARGUMENTS: ${{ inputs.mkdocs-arguments }}
+          PIXI_ENVIRONMENT: ${{ inputs.pixi-environment }}
+          PIXI_MANIFEST_PATH: ${{ inputs.pixi-manifest-path }}
+          CONTAINER_IMAGE: ${{ inputs.container-image }}
+        shell: bash
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/docs-build/run-docs-build.py"
+
+      - name: Link check
+        if: inputs.docs-linkcheck-enabled
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DOCS_BUILD_MODE: linkcheck
+          DOCS_TOOL: ${{ inputs.docs-tool }}
+          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
+          DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
+          SPHINX_SOURCE_DIRECTORY: ${{ inputs.sphinx-source-directory }}
+          SPHINX_ARGUMENTS: ${{ inputs.sphinx-arguments }}
+          PIXI_ENVIRONMENT: ${{ inputs.pixi-environment }}
+          PIXI_MANIFEST_PATH: ${{ inputs.pixi-manifest-path }}
+          CONTAINER_IMAGE: ${{ inputs.container-image }}
+        shell: bash
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/docs-build/run-docs-build.py"
+
+      - name: Upload Pages artifact
+        id: upload-pages
+        if: inputs.pages-artifact-enabled
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          name: ${{ inputs.pages-artifact-name }}
+          path: ${{ inputs.docs-output-directory }}
+          retention-days: ${{ inputs.pages-artifact-retention-days }}

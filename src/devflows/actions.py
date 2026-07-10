@@ -61,11 +61,6 @@ ACTION_PINS: dict[str, ActionPin] = {
         "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c",
         "v4.2.0",
     ),
-    "setup-uv": ActionPin(
-        "astral-sh/setup-uv",
-        "11f9893b081a58869d3b5fccaea48c9e9e46f990",
-        "v8.3.2",
-    ),
     "cache": ActionPin(
         "actions/cache",
         "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
@@ -77,10 +72,11 @@ ACTION_PINS: dict[str, ActionPin] = {
         "v0.3.1900000450",
     ),
     # Python toolchain (python-* and docs-build workflows). setup-uv, setup-python,
-    # and setup-micromamba are generic across the Python workflow family; cibuildwheel
-    # and rattler-build-action are python-build-specific but registered here so the
-    # generator annotates their version comments in the dumped output and the adapter
-    # contract test (test_contract.py) verifies their emitted with: keys on pin bumps.
+    # setup-micromamba, and setup-pixi are generic across the Python workflow family;
+    # cibuildwheel and rattler-build-action are python-build-specific but registered
+    # here so the generator annotates their version comments in the dumped output and
+    # the adapter contract test (test_contract.py) verifies their emitted with: keys
+    # on pin bumps.
     "cibuildwheel": ActionPin(
         "pypa/cibuildwheel",
         "294735312765b09d24a2fbec22660ce817587d55",
@@ -96,6 +92,11 @@ ACTION_PINS: dict[str, ActionPin] = {
         "d7c9bd84e824b79d2af72a2d4196c7f4300d3476",
         "v3.0.0",
     ),
+    "setup-pixi": ActionPin(
+        "prefix-dev/setup-pixi",
+        "a09b6247153796b190642a2b53fac4241043cf6f",
+        "v0.10.0",
+    ),
     "setup-python": ActionPin(
         "actions/setup-python",
         "ece7cb06caefa5fff74198d8649806c4678c61a1",
@@ -105,6 +106,11 @@ ACTION_PINS: dict[str, ActionPin] = {
         "astral-sh/setup-uv",
         "11f9893b081a58869d3b5fccaea48c9e9e46f990",
         "v8.3.2",
+    ),
+    "upload-pages-artifact": ActionPin(
+        "actions/upload-pages-artifact",
+        "7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
+        "v4.0.0",
     ),
 }
 
