@@ -113,6 +113,14 @@ tasks:
     cmds:
       - pixi run -- pytest
 
+  test-contract:
+    desc: >-
+      Run the adapter contract test (network): fetch each pinned action's
+      action.yml and assert the generator's emitted inputs still exist. CI runs
+      this on pull requests that change an action pin or a consuming workflow.
+    cmds:
+      - pixi run -- pytest -m network tests/test_contract.py
+
   scenarios-local:
     desc: Run local GitHub Actions scenarios with act (requires docker + act).
     aliases:
