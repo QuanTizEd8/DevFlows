@@ -147,7 +147,7 @@ def _reindex_conda_channel(channel: Path) -> None:
     Per-leg repodata only covers that leg's packages, so the merged channel needs
     a fresh index. The generation is done by reindex-conda-channel.py (no conda
     dependency), run through an ephemeral uv environment that supplies only a
-    pinned zstandard for ``.conda`` decompression — nothing lands on the runner's
+    pinned zstandard for ``.conda`` decompression -- nothing lands on the runner's
     interpreter.
     """
     subprocess.run(

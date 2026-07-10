@@ -8,10 +8,12 @@ def test_catalog_loads_active_workflows() -> None:
     workflows_by_id = {item.id: item for item in workflows}
 
     assert [item.id for item in workflows] == [
+        "anaconda-publish",
         "build-devcontainer",
         "deploy-pages",
         "docs-build",
         "pandoc",
+        "pypi-publish",
         "python-build",
         "python-lint",
         "python-test",

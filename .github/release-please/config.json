@@ -4,6 +4,13 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "packages": {
+    "workflows/anaconda-publish": {
+      "component": "anaconda-publish",
+      "release-type": "simple",
+      "package-name": "anaconda-publish",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
     "workflows/build-devcontainer": {
       "component": "build-devcontainer",
       "release-type": "simple",
@@ -29,6 +36,13 @@
       "component": "pandoc",
       "release-type": "simple",
       "package-name": "pandoc",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
+    "workflows/pypi-publish": {
+      "component": "pypi-publish",
+      "release-type": "simple",
+      "package-name": "pypi-publish",
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },

@@ -1,0 +1,403 @@
+id: anaconda-publish
+name: Anaconda Publish
+summary:
+  Publish python-build's conda-channel artifact to anaconda.org under a staging
+  label, promote (relabel) it to a final label as a separately-gated job, and
+  perform explicitly-gated destructive channel maintenance - every mutating
+  operation digest-verified against the dist-manifest, isolated in its own
+  environment-bound job, and dry-runnable without a credential.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Python
+  keywords:
+    - anaconda
+    - conda
+    - publish
+    - upload
+    - promote
+    - relabel
+    - anaconda-client
+    - packaging
+io:
+  job: verify
+  runtime: true
+  artifact-download: true
+  artifact-download-jobs:
+    - upload
+  runtime-jobs:
+    - validate
+    - upload
+    - promote
+    - maintain
+notes:
+  - >-
+    Callers must grant permissions: actions: read AND contents: read on the
+    calling job. actions: read is required because the verify and upload jobs host
+    the artifact-download channel that ingests python-build's conda-channel
+    artifact; contents: read is the DevFlows channel-host grant the generator
+    attaches to the ingesting job. This workflow deliberately disables checkout and
+    never requests any write scope (contents, packages, id-token, attestations):
+    all authority to mutate anaconda.org comes from the anaconda-token secret, not
+    from a GITHUB_TOKEN permission.
+  - >-
+    anaconda.org has no OIDC / trusted publishing, so a long-lived token is
+    unavoidable; the compensating control is least exposure. The anaconda-token
+    secret is declared required:false (dry-run needs none), is exposed as
+    ANACONDA_API_TOKEN on exactly one step per credentialed job (the CLI step),
+    never on a download, verify, or setup step, and never flows to a third-party
+    action - every anaconda-client invocation is a DevFlows-owned script that builds
+    argv directly and lets anaconda-client read the token from its environment.
+    Each credentialed job runs a tokenless preflight (it receives only the boolean
+    `secrets.anaconda-token != ''`, never the token) that fails loudly when the
+    token is empty and the run is not a dry-run, because validate cannot inspect
+    secrets. Store the token as an environment secret on the anaconda-* environments
+    and pass it with `secrets: inherit`; an explicit `secrets:` mapping is evaluated
+    in the caller's environment-less context and therefore needs a repo/org secret.
+  - >-
+    publish-dry-run-enabled is the credential-free rehearsal mode. When true the
+    upload, promote, and maintain jobs are SKIPPED at the job level: no GitHub
+    environment is bound, no deployment record is created, no required reviewer is
+    pinged, and no token is minted or needed. The verify job still downloads the
+    channel, recomputes every digest, and computes the full plan (versions and
+    specs, printed to the job summary and reported through the outputs); each
+    credentialed job builds the exact anaconda-client argv it runs. Rehearse an
+    irreversible removal or promotion this way before running it for real.
+  - >-
+    Staged-label publishing is the spine. upload always lands packages on
+    upload-label (default 'staging'); nothing reaches the default install label
+    until the separately-gated promote job relabels it with 'anaconda move'. Bind
+    each operation to its OWN GitHub environment via upload-environment-name /
+    promote-environment-name / maintain-environment-name (concurrency group
+    anaconda-publish-<environment>, cancel-in-progress false) so protection rules and
+    required reviewers scale with blast radius: put the strictest reviewers on the
+    promote (public release) and maintain (destruction) environments even if staging
+    is unreviewed.
+  - >-
+    promote never runs on a partial upload. Its condition requires validate and
+    verify to have succeeded and upload to be success-or-skipped, so a failed upload
+    strands packages on the staging label instead of promoting a half-published set.
+    The recovery path is a later promote-only call (upload-enabled false) fed
+    explicit promote-specs, typically taken from the earlier run's staged-specs
+    output with the owner segment stripped - the two-phase release the interface
+    makes possible.
+  - >-
+    The owner is the single blast-radius control. publish-owner is the ONLY source
+    of the owner segment: it is anaconda upload --user and is prepended by DevFlows
+    scripts to every promote/maintain spec. User-supplied specs are therefore
+    'package/version' or 'package/version/filename' WITHOUT an owner segment; a
+    three-segment spec is accepted only when its third segment is a conda filename
+    (ends in .conda or .tar.bz2), and any other three-segment shape is rejected as a
+    smuggled owner, so no call can touch another namespace.
+  - >-
+    Destructive maintenance is gated three ways and mutually exclusive with
+    publishing. maintain-enabled cannot be combined with upload-enabled or
+    promote-enabled (a call either publishes or destroys). Removal is armed only when
+    maintain-confirm equals publish-owner exactly (the type-the-name-to-destroy
+    guard - never an interactive prompt, which hangs in CI) and the maintain
+    environment's protection rules are satisfied; dry-run rehearses the exact
+    removals with neither confirmation nor token.
+  - >-
+    Existing-file collisions default to a loud failure. upload-existing-mode maps
+    onto anaconda-client's mutually-exclusive mode group: 'fail' (default, passes
+    neither flag), 'skip' (--skip-existing, for idempotent retry of a partially
+    failed publish), or 'overwrite' (--force). 'overwrite' is the only route to
+    --force, replacing the cd draft's silent unconditional --force.
+    upload-arguments is environment-mediated and shlex-split, and validation applies
+    a strict allowlist rather than a denylist (which argparse defeats via attached
+    short values like -lmain, long-flag abbreviations like --lab, and bare positional
+    file paths): only the cosmetic/metadata flags --no-progress, --no-register,
+    --register, --keep-basename, --summary=VALUE, and --description=VALUE are
+    accepted. Every owned flag (--force/--skip-existing and the collision-mode group,
+    -l/--label, -u/--user, -v/--version, -p/--package, -t/--token, -s/--site) and any
+    bare positional is rejected, so the safety inputs cannot be smuggled past.
+  - >-
+    Digest verification runs twice against the caller-supplied publish-dist-manifest.
+    First in the credential-free verify job, then again as a tokenless
+    re-verification step inside the upload job immediately before the token step -
+    a TOCTOU guard, because python-build uploads its artifacts with overwrite:true
+    so an artifact name is not immutable within a run. Verification recomputes both
+    sha256 AND size for every .conda file and matches them bidirectionally against
+    the manifest's kind=conda entries: a missing file, an unlisted file, a
+    wrong-kind file, a digest mismatch, or a size mismatch each fails loudly naming
+    the file. Publishing without a manifest is refused outright, and
+    artifacts.conda-channel must equal artifact-download-name (a loud
+    chaining-misconfig catch).
+  - >-
+    Chain from python-build: set artifact-download-enabled true, artifact-download-name
+    to python-build's conda-artifact-name output, artifact-download-path to a scratch
+    directory, publish-dist-path to that same directory, and publish-dist-manifest to
+    python-build's dist-manifest output, all guarded by `if: !cancelled()` plus a
+    non-empty check on conda-artifact-name (the documented cross-workflow chaining
+    convention). package-version mirrors python-build's package-version. Outputs are
+    empty strings when their mode is disabled; consumers guard on a non-empty value.
+  - >-
+    Tooling: anaconda-client is installed ephemerally at a pinned version via a
+    SHA-pinned setup-uv plus `uvx --from anaconda-client==<version>` (override with
+    publish-client-version), so no conda environment is needed - this replaces the
+    drafts' miniconda+conda-install boilerplate. The default version is registered
+    for Renovate (a custom pep440 manager over the pinned constant in
+    scripts/commands.py) so it stays current. anaconda-client was chosen over
+    rattler-build upload because promote (anaconda move) and maintain (anaconda
+    remove) require it; rattler-build upload is upload-only. uv-cache-mode is
+    deliberately NOT exposed: the only uv use is a one-shot tool install on
+    credentialed jobs, where cache restoration from caller-influenced keys is surface
+    without benefit (enable-cache: false).
+  - >-
+    All jobs run on ubuntu-latest in v1; adding <job>-runner inputs later is a
+    backward-compatible minor change.
+  - >-
+    HONESTY - what the in-repo scenarios prove and what they cannot. The hosted
+    dry-run scenarios exercise the full credential-free chain end to end (artifact
+    ingestion, both digest verifications, version and spec derivation, and exact
+    argv construction) and assert every environment-bound job stays skipped, all
+    without a token. They CANNOT prove: (a) that a digest MISMATCH is rejected mid
+    reusable-call - the harness cannot keep a failing `uses:` green, so digest,
+    size, unlisted, missing, wrong-kind, version-skew, spec-parsing, and
+    argv-construction behavior are covered exhaustively by unit tests of the shared
+    parsing/arguments/manifest/digest/commands modules and verify-dist.py in
+    tests/test_anaconda_publish.py; (b) that the token is accepted
+    and that server-side label semantics, skip/overwrite behavior, and move/remove
+    effects are correct - only a real-credential run proves those. The rehearsal path
+    is publish-dry-run-enabled for every consumer, and a post-merge weekly sentinel
+    in a sandbox repo using a dedicated anaconda.org staging org and a scoped
+    environment secret (upload to a throwaway label, promote, then maintain-remove
+    the same version - a self-cleaning full-cycle e2e), never in PR CI.
+    publish-server-url additionally allows a future mock-index e2e.
+examples:
+  - name: Stage and promote a conda channel from python-build
+    path: tests/fixtures/anaconda-publish/staged-publish.yaml
+  - name: Promote a soak-tested staging build (promote-only)
+    path: tests/fixtures/anaconda-publish/promote-only.yaml
+tests:
+  scenarios:
+    # The success scenarios are hosted-only and always dry-run: publishing cannot
+    # reach anaconda.org from PR CI, so they prove the credential-free verify chain
+    # and assert every environment-bound job is skipped. Digest-mismatch rejection
+    # and exhaustive spec/plan behavior live in tests/test_anaconda_publish.py.
+    - id: upload-dry-run
+      name: Dry-run stage-and-promote verifies digests and plans without a token
+      runs:
+        - hosted
+      setup-artifact:
+        name: anaconda-publish-dry-run-channel
+        path: .devflows-test/anaconda-publish/channel
+        files:
+          - path: .devflows-test/anaconda-publish/channel/noarch/anaconda_publish_fixture-0.1.0-h0.conda
+            source-path: tests/scenarios/anaconda-publish/anaconda_publish_fixture-0.1.0-h0.conda
+      inputs:
+        publish-owner: devflows-fixture
+        publish-dry-run-enabled: true
+        upload-enabled: true
+        promote-enabled: true
+        artifact-download-enabled: true
+        artifact-download-name: anaconda-publish-dry-run-channel
+        artifact-download-path: conda-channel-download
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"anaconda_publish_fixture-0.1.0-h0.conda","sha256":"94e0ba00271df37f4b8b083685c5004882cfc34718625fafa8f03faba5285224","size":196,"kind":"conda"}],"artifacts":{"sdist":"","wheels":"","conda-channel":"anaconda-publish-dry-run-channel"}}'
+      assertions:
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
+        - type: workflow-output-equals
+          name: staged-specs
+          value: devflows-fixture/anaconda_publish_fixture/0.1.0
+        - type: workflow-output-equals
+          name: uploaded-files
+          value: anaconda_publish_fixture-0.1.0-h0.conda
+        - type: workflow-output-equals
+          name: promoted-specs
+          value: devflows-fixture/anaconda_publish_fixture/0.1.0
+    - id: promote-only-dry-run
+      name: Promote-only dry-run plans a relabel and skips verify's upload derivation
+      runs:
+        - hosted
+      inputs:
+        publish-owner: devflows-fixture
+        publish-dry-run-enabled: true
+        upload-enabled: false
+        promote-enabled: true
+        promote-specs: anaconda_publish_fixture/0.1.0
+      assertions:
+        - type: workflow-output-equals
+          name: promoted-specs
+          value: devflows-fixture/anaconda_publish_fixture/0.1.0
+        - type: workflow-output-equals
+          name: staged-specs
+          value: ""
+    - id: maintain-dry-run
+      name: Maintain dry-run plans the exact owner-qualified removal without a token
+      runs:
+        - hosted
+      inputs:
+        publish-owner: devflows-fixture
+        publish-dry-run-enabled: true
+        upload-enabled: false
+        maintain-enabled: true
+        maintain-remove-specs: anaconda_publish_fixture/0.1.0
+      assertions:
+        - type: workflow-output-equals
+          name: removed-specs
+          value: devflows-fixture/anaconda_publish_fixture/0.1.0
+    # Failure-path scenarios run validate-inputs.py directly through the
+    # validation-failure harness (no reusable call), so they run under both act and
+    # hosted CI. Each pins a stable substring of the rejection it targets.
+    - id: nothing-to-do
+      name: No mode enabled fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "Nothing to do"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: false
+        promote-enabled: false
+        maintain-enabled: false
+    - id: maintain-not-exclusive
+      name: maintain combined with upload fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "mutually exclusive"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        maintain-enabled: true
+    - id: upload-without-manifest
+      name: upload without a manifest fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "publish-dist-manifest is required"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        artifact-download-enabled: true
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: ""
+    - id: malformed-manifest
+      name: unparseable manifest JSON fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "not valid JSON"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        artifact-download-enabled: true
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: "{not json"
+    - id: manifest-artifact-mismatch
+      name: manifest conda-channel not matching artifact-download-name fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "does not match artifact-download-name"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        artifact-download-enabled: true
+        artifact-download-name: some-other-artifact
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"p-1.0-h0.conda","sha256":"00","size":1,"kind":"conda"}],"artifacts":{"conda-channel":"the-real-channel"}}'
+    - id: manifest-no-conda-files
+      name: manifest with zero conda entries fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "contains no conda packages"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        artifact-download-enabled: true
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"p-1.0-py3-none-any.whl","sha256":"00","size":1,"kind":"wheel"}],"artifacts":{"conda-channel":""}}'
+    - id: promote-only-without-specs
+      name: promote-only without promote-specs fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "promote-specs is required"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: false
+        promote-enabled: true
+        promote-specs: ""
+    - id: spec-with-owner
+      name: an owner-qualified spec fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "without an owner segment"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: false
+        promote-enabled: true
+        promote-specs: someorg/pkg/1.0
+    - id: label-collision
+      name: equal upload-label and promote-label fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "must differ"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: false
+        promote-enabled: true
+        promote-specs: pkg/1.0
+        upload-label: main
+        promote-label: main
+    - id: maintain-unconfirmed
+      name: maintain without a matching confirm fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "maintain-confirm must equal publish-owner"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: false
+        maintain-enabled: true
+        maintain-remove-specs: pkg/1.0
+        maintain-confirm: ""
+    - id: forbidden-upload-argument
+      name: a safety flag smuggled through upload-arguments fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "owned by typed inputs"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        artifact-download-enabled: true
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"p-1.0-h0.conda","sha256":"00","size":1,"kind":"conda"}],"artifacts":{"conda-channel":""}}'
+        upload-arguments: "--force"
+    - id: bad-existing-mode
+      name: an invalid upload-existing-mode fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "must be one of fail, skip, overwrite"
+      inputs:
+        publish-owner: devflows-fixture
+        upload-enabled: true
+        artifact-download-enabled: true
+        publish-dist-path: conda-channel-download
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"p-1.0-h0.conda","sha256":"00","size":1,"kind":"conda"}],"artifacts":{"conda-channel":""}}'
+        upload-existing-mode: clobber
