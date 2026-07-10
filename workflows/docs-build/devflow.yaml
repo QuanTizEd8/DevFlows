@@ -74,6 +74,12 @@ notes:
     (string, default ubuntu-latest) can be added later as a compatible minor
     change if macOS/Windows docs builds ever matter; container mode stays
     linux-only.
+  - >-
+    Live-scenario coverage: the container, uv, pip, and micromamba environment
+    modes each have a real end-to-end build scenario. The pixi mode and the Sphinx
+    linkcheck builder are not yet exercised live (their scripts are covered by unit
+    tests); a pixi docs env and a linkcheck smoke are recorded Phase 5 stabilization
+    candidates, alongside pyright/ty live lint legs in python-lint.
 examples:
   - name: Sphinx docs with uv
     path: tests/fixtures/docs-build/sphinx-uv.yaml
@@ -152,6 +158,34 @@ tests:
         - type: file-contains
           path: index.html
           text: DevFlows Docs Build MkDocs Fixture
+    - id: sphinx-micromamba-artifact
+      # Exercises the micromamba (non-uv) adapter for real: setup-micromamba creates
+      # the conda-forge 'docs-build' environment from environment.yml (providing
+      # sphinx), then 'micromamba run' builds the site. Cheap relative to native
+      # builds (~1-2 min to solve a two-package env); complements the uv/pip/container
+      # scenarios so every environment mode except pixi has one live build.
+      name: Sphinx build in a micromamba environment with artifact upload
+      runs:
+        - hosted
+      artifact:
+        name: docs-build-sphinx-micromamba
+        path: .devflows-test-artifacts/docs-build/sphinx-micromamba
+      inputs:
+        docs-tool: sphinx
+        docs-environment: micromamba
+        micromamba-environment-file: tests/scenarios/docs-build/sphinx-micromamba/environment.yml
+        sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+        docs-output-directory: .devflows-test/docs-build/sphinx-micromamba/site
+        artifact-upload-enabled: true
+        artifact-upload-name: docs-build-sphinx-micromamba
+        artifact-upload-path: .devflows-test/docs-build/sphinx-micromamba/site
+        artifact-upload-if-no-files-found: error
+      assertions:
+        - type: file-exists
+          path: index.html
+        - type: file-contains
+          path: index.html
+          text: DevFlows Docs Build Fixture
     - id: pages-artifact-chain
       name: Pages artifact upload exposes the deploy-pages handoff outputs
       runs:

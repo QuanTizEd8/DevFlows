@@ -21,6 +21,9 @@ _IMAGE_REFERENCE = re.compile(rf"^(?:{_DOMAIN}/)?{_NAME}(?::{_TAG})?(?:@{_DIGEST
 _TOOLS = {"sphinx", "mkdocs"}
 _ENVIRONMENTS = {"pixi", "uv", "pip", "container", "micromamba"}
 _UV_CACHE_MODES = {"auto", "true", "false"}
+# Characters GitHub forbids in an artifact name (plus control characters). A
+# Pages artifact name carrying any of these would break the deploy-pages handoff.
+_ARTIFACT_NAME_FORBIDDEN = re.compile(r'[":<>|*?\r\n\\/]')
 
 
 def _bool(name: str) -> bool:
@@ -46,6 +49,11 @@ def _emit_outputs(**outputs: str) -> None:
         return
     with open(github_output, "a", encoding="utf-8") as handle:
         for name, value in outputs.items():
+            # Reject newlines so a consumer-controlled value (docs-output-directory,
+            # pages-artifact-name) cannot inject extra $GITHUB_OUTPUT lines. Mirrors
+            # python-lint's guard.
+            if "\n" in value or "\r" in value:
+                raise SystemExit(f"{name} must not contain a newline.")
             handle.write(f"{name}={value}\n")
 
 
@@ -63,7 +71,28 @@ def main() -> int:
     pages_enabled = _bool("PAGES_ARTIFACT_ENABLED")
     pages_name = _text("PAGES_ARTIFACT_NAME")
 
-    workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+    # GITHUB_WORKSPACE is always set on a runner; fail fast with a clear message
+    # (not a raw KeyError) when it is absent, e.g. a misconfigured local harness.
+    workspace_raw = os.environ.get("GITHUB_WORKSPACE")
+    if not workspace_raw:
+        raise SystemExit("GITHUB_WORKSPACE is not set.")
+    workspace = Path(workspace_raw).resolve()
+
+    # -- pages artifact name must be non-empty and artifact-name-safe when used --
+    # deploy-pages rejects an empty name; validating here keeps the chain from
+    # deferring the failure to the upload step (which breaks the deploy handoff).
+    if pages_enabled:
+        stripped_pages_name = pages_name.strip()
+        if not stripped_pages_name:
+            raise SystemExit(
+                "pages-artifact-name must not be empty when pages-artifact-enabled is true."
+            )
+        if _ARTIFACT_NAME_FORBIDDEN.search(stripped_pages_name):
+            raise SystemExit(
+                "pages-artifact-name contains characters forbidden in an artifact name "
+                f'(any of " : < > | * ? \\ / or a newline): {stripped_pages_name!r}.'
+            )
+        pages_name = stripped_pages_name
 
     # -- tool / environment enums (always validated) --------------------------
     if tool not in _TOOLS:

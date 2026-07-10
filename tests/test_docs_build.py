@@ -8,7 +8,7 @@ from types import ModuleType
 import pytest
 
 from devflows.catalog import load_catalog
-from devflows.publish import published_workflow_call
+from devflows.publish import build_published_workflow, published_workflow_call
 
 SCRIPT_DIR = Path("workflows/docs-build/scripts")
 
@@ -181,6 +181,14 @@ def test_validate_accepts_valid_combinations(monkeypatch, tmp_path, overrides) -
             },
             "not a valid image reference",
         ),
+        (
+            {"PAGES_ARTIFACT_ENABLED": "true", "PAGES_ARTIFACT_NAME": "   "},
+            "pages-artifact-name must not be empty",
+        ),
+        (
+            {"PAGES_ARTIFACT_ENABLED": "true", "PAGES_ARTIFACT_NAME": "bad/name"},
+            "forbidden in an artifact name",
+        ),
     ],
 )
 def test_validate_rejects_bad_combinations(monkeypatch, tmp_path, overrides, message) -> None:
@@ -209,6 +217,28 @@ def test_validate_container_login_ignores_password(monkeypatch, tmp_path) -> Non
 def test_validate_ignores_non_selected_group_inputs(monkeypatch, tmp_path) -> None:
     # A bogus uv-cache-mode is ignored when not in uv mode (pip mode selected).
     _run_validate(monkeypatch, tmp_path, UV_CACHE_MODE="garbage")
+
+
+def test_emit_outputs_rejects_newline_in_output_directory(monkeypatch, tmp_path) -> None:
+    # A newline in a consumer-controlled output value must be rejected before it can
+    # inject extra $GITHUB_OUTPUT lines (docs-output-directory keeps internal newlines
+    # through .strip()).
+    module = _load_script("validate-inputs.py")
+    for key, value in _validate_env(tmp_path, DOCS_OUTPUT_DIRECTORY="site\ninjected=1").items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert "must not contain a newline" in str(excinfo.value)
+
+
+def test_validate_fails_fast_when_github_workspace_unset(monkeypatch, tmp_path) -> None:
+    module = _load_script("validate-inputs.py")
+    for key, value in _validate_env(tmp_path).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert "GITHUB_WORKSPACE is not set" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #
@@ -563,3 +593,24 @@ def test_interface_environment_required() -> None:
     inputs = _docs_build_call()["inputs"]
     assert inputs["docs-environment"]["required"] is True
     assert inputs["pages-artifact-name"]["default"] == "github-pages"
+
+
+def _docs_build_steps() -> list[dict]:
+    item = next(item for item in load_catalog() if item.id == "docs-build")
+    return build_published_workflow(item)["jobs"]["docs-build"]["steps"]
+
+
+def test_require_container_password_step_shape() -> None:
+    # The container-login-enabled/container-password consistency check moved out of
+    # validate-inputs.py (to keep the validate step reconstructable) into this
+    # dedicated workflow step; pin its if-condition, secret env binding, and that it
+    # exits nonzero when the password is unset.
+    guard_name = "Require container-password when logging in"
+    step = next(s for s in _docs_build_steps() if s.get("name") == guard_name)
+    assert step["if"] == "inputs.docs-environment == 'container' && inputs.container-login-enabled"
+    assert step["env"]["CONTAINER_PASSWORD"] == "${{ secrets.container-password }}"
+    assert 'if [ -z "${CONTAINER_PASSWORD}" ]' in step["run"]
+    assert "exit 1" in step["run"]
+    # The guard precedes the docker login step so no login runs without a password.
+    names = [s.get("name", "") for s in _docs_build_steps()]
+    assert names.index(guard_name) < names.index("Log in to container registry")
