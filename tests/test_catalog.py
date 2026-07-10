@@ -9,6 +9,7 @@ def test_catalog_loads_active_workflows() -> None:
 
     assert [item.id for item in workflows] == [
         "build-devcontainer",
+        "deploy-pages",
         "docs-build",
         "pandoc",
         "python-build",

@@ -10,6 +10,12 @@
       "package-name": "build-devcontainer",
       "changelog-path": "CHANGELOG.md"
     },
+    "workflows/deploy-pages": {
+      "component": "deploy-pages",
+      "release-type": "simple",
+      "package-name": "deploy-pages",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/docs-build": {
       "component": "docs-build",
       "release-type": "simple",

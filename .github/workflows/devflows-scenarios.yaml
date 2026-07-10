@@ -66,123 +66,25 @@ jobs:
           ASSERT_PATH: .devflows-test-artifacts/build-devcontainer/build-only/linux-amd64
           ASSERT_TEXT: 'sha256:'
         run: python harness/scenarios/assert-file-contains.py
-  docs_build_sphinx_container_artifact_call:
-    name: 'Build Documentation: Sphinx build in a container image with artifact upload'
-    uses: ./.github/workflows/docs-build.yaml
+  deploy_pages_package_only_call:
+    name: 'Deploy Pages: Package a site directory into a Pages artifact without deploying'
+    uses: ./.github/workflows/deploy-pages.yaml
     with:
-      docs-tool: sphinx
-      docs-environment: container
-      container-image: sphinxdoc/sphinx:8.1.3
-      sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
-      docs-output-directory: .devflows-test/docs-build/sphinx-container-artifact/site
-      artifact-upload-enabled: true
-      artifact-upload-name: docs-build-sphinx-container
-      artifact-upload-path: .devflows-test/docs-build/sphinx-container-artifact/site
-      artifact-upload-if-no-files-found: error
-    permissions:
-      actions: read
-      contents: read
-  docs_build_sphinx_container_artifact_assert:
-    name: 'Build Documentation: Sphinx build in a container image with artifact upload assertions'
-    runs-on: ubuntu-latest
-    needs: docs_build_sphinx_container_artifact_call
-    if: always()
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Assert scenario succeeded
-        shell: bash
-        env:
-          ACTUAL_RESULT: ${{ needs.docs_build_sphinx_container_artifact_call.result }}
-        run: python harness/scenarios/assert-result.py
-      - name: Download scenario artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: docs-build-sphinx-container
-          path: .devflows-test-artifacts/docs-build/sphinx-container
-      - name: 'Assert file exists: index.html'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/docs-build/sphinx-container/index.html
-        run: python harness/scenarios/assert-file-exists.py
-      - name: 'Assert file contains: index.html'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/docs-build/sphinx-container/index.html
-          ASSERT_TEXT: DevFlows Docs Build Fixture
-        run: python harness/scenarios/assert-file-contains.py
-  docs_build_mkdocs_uv_artifact_call:
-    name: 'Build Documentation: MkDocs build in a uv environment with artifact upload'
-    uses: ./.github/workflows/docs-build.yaml
-    with:
-      docs-tool: mkdocs
-      docs-environment: uv
-      docs-working-directory: tests/scenarios/docs-build/mkdocs-uv
-      uv-sync-groups: |
-        docs
-      uv-sync-locked: false
-      mkdocs-config-file: tests/scenarios/docs-build/mkdocs-uv/mkdocs.yml
-      docs-output-directory: .devflows-test/docs-build/mkdocs-uv/site
-      artifact-upload-enabled: true
-      artifact-upload-name: docs-build-mkdocs-uv
-      artifact-upload-path: .devflows-test/docs-build/mkdocs-uv/site
-      artifact-upload-if-no-files-found: error
-    permissions:
-      actions: read
-      contents: read
-  docs_build_mkdocs_uv_artifact_assert:
-    name: 'Build Documentation: MkDocs build in a uv environment with artifact upload assertions'
-    runs-on: ubuntu-latest
-    needs: docs_build_mkdocs_uv_artifact_call
-    if: always()
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Assert scenario succeeded
-        shell: bash
-        env:
-          ACTUAL_RESULT: ${{ needs.docs_build_mkdocs_uv_artifact_call.result }}
-        run: python harness/scenarios/assert-result.py
-      - name: Download scenario artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: docs-build-mkdocs-uv
-          path: .devflows-test-artifacts/docs-build/mkdocs-uv
-      - name: 'Assert file exists: index.html'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/docs-build/mkdocs-uv/index.html
-        run: python harness/scenarios/assert-file-exists.py
-      - name: 'Assert file contains: index.html'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/docs-build/mkdocs-uv/index.html
-          ASSERT_TEXT: DevFlows Docs Build MkDocs Fixture
-        run: python harness/scenarios/assert-file-contains.py
-  docs_build_pages_artifact_chain_call:
-    name: 'Build Documentation: Pages artifact upload exposes the deploy-pages handoff outputs'
-    uses: ./.github/workflows/docs-build.yaml
-    with:
-      docs-tool: sphinx
-      docs-environment: pip
-      pip-install-targets: |
-        sphinx
-      sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
-      docs-output-directory: .devflows-test/docs-build/pages-chain/site
+      pages-path: tests/scenarios/deploy-pages/site
       pages-artifact-enabled: true
-      pages-artifact-name: docs-build-pages-chain
+      pages-deploy-enabled: false
+      pages-artifact-name: devflows-deploy-pages-package-only
     permissions:
       actions: read
       contents: read
-  docs_build_pages_artifact_chain_assert:
-    name: 'Build Documentation: Pages artifact upload exposes the deploy-pages handoff outputs assertions'
+      id-token: write
+      pages: write
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  deploy_pages_package_only_assert:
+    name: 'Deploy Pages: Package a site directory into a Pages artifact without deploying assertions'
     runs-on: ubuntu-latest
-    needs: docs_build_pages_artifact_chain_call
-    if: always()
+    needs: deploy_pages_package_only_call
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -191,15 +93,97 @@ jobs:
       - name: Assert scenario succeeded
         shell: bash
         env:
-          ACTUAL_RESULT: ${{ needs.docs_build_pages_artifact_chain_call.result }}
+          ACTUAL_RESULT: ${{ needs.deploy_pages_package_only_call.result }}
         run: python harness/scenarios/assert-result.py
-      - name: Assert output pages-artifact-name
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: devflows-deploy-pages-package-only
+          path: .devflows-test-artifacts/deploy-pages/package-only
+      - name: Assert output pages-url
         shell: bash
         env:
-          ASSERT_NAME: pages-artifact-name
-          EXPECTED: docs-build-pages-chain
-          ACTUAL: ${{ needs.docs_build_pages_artifact_chain_call.outputs.pages-artifact-name }}
+          ASSERT_NAME: pages-url
+          EXPECTED: ''
+          ACTUAL: ${{ needs.deploy_pages_package_only_call.outputs.pages-url }}
         run: python harness/scenarios/assert-equals.py
+      - name: 'Assert file exists: artifact.tar'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/deploy-pages/package-only/artifact.tar
+        run: python harness/scenarios/assert-file-exists.py
+  deploy_pages_package_from_artifact_setup:
+    name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact setup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Create setup files
+        shell: bash
+        env:
+          DEVFLOWS_SETUP_FILES: |-
+            [
+              {
+                "path": ".devflows-test/deploy-pages/from-artifact-input/index.html",
+                "content": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <title>DevFlows deploy-pages chained site</title>\n  </head>\n  <body>\n    <h1>Chained from a downloaded artifact</h1>\n  </body>\n</html>\n"
+              }
+            ]
+        run: python harness/scenarios/create-setup-files.py
+      - name: Upload setup artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: devflows-deploy-pages-input-site
+          path: .devflows-test/deploy-pages/from-artifact-input
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  deploy_pages_package_from_artifact_call:
+    name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact'
+    uses: ./.github/workflows/deploy-pages.yaml
+    with:
+      checkout-enabled: false
+      artifact-download-enabled: true
+      artifact-download-name: devflows-deploy-pages-input-site
+      artifact-download-path: site-input
+      pages-path: site-input
+      pages-artifact-enabled: true
+      pages-deploy-enabled: false
+      pages-artifact-name: devflows-deploy-pages-from-artifact
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      pages: write
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: deploy_pages_package_from_artifact_setup
+  deploy_pages_package_from_artifact_assert:
+    name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact assertions'
+    runs-on: ubuntu-latest
+    needs: deploy_pages_package_from_artifact_call
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.deploy_pages_package_from_artifact_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: devflows-deploy-pages-from-artifact
+          path: .devflows-test-artifacts/deploy-pages/from-artifact
+      - name: 'Assert file exists: artifact.tar'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/deploy-pages/from-artifact/artifact.tar
+        run: python harness/scenarios/assert-file-exists.py
   pandoc_markdown_html_artifact_call:
     name: 'Pandoc: Markdown to HTML with artifact upload'
     uses: ./.github/workflows/pandoc.yaml
@@ -368,185 +352,6 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/artifact-download-html/example.html
           ASSERT_TEXT: Pandoc Artifact Input
-        run: python harness/scenarios/assert-file-contains.py
-  python_test_reports_merge_hosted_call:
-    name: 'Python Test: Multi-leg matrix with merged report artifact'
-    uses: ./.github/workflows/python-test.yaml
-    with:
-      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.11", "name": "leg-a"}, {"runner": "ubuntu-latest", "python-version": "3.13", "name": "leg-b"}]'
-      test-install-source: source
-      test-source-directory: tests/scenarios/python-test/pkg
-      test-dependencies: pytest
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/reports/report.xml tests/scenarios/python-test/pkg/tests
-      report-artifact-enabled: true
-      report-merge-enabled: true
-      report-artifact-name: python-test-scn-reports
-      report-path: .devflows-test/python-test/reports/report.xml
-    permissions:
-      actions: read
-      contents: read
-  python_test_reports_merge_hosted_assert:
-    name: 'Python Test: Multi-leg matrix with merged report artifact assertions'
-    runs-on: ubuntu-latest
-    needs: python_test_reports_merge_hosted_call
-    if: always()
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Assert scenario succeeded
-        shell: bash
-        env:
-          ACTUAL_RESULT: ${{ needs.python_test_reports_merge_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
-      - name: Download scenario artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: python-test-scn-reports
-          path: .devflows-test-artifacts/python-test/reports
-      - name: 'Assert file exists: python-test-scn-reports-leg-a/report.xml'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-test/reports/python-test-scn-reports-leg-a/report.xml
-        run: python harness/scenarios/assert-file-exists.py
-      - name: 'Assert file exists: python-test-scn-reports-leg-b/report.xml'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-test/reports/python-test-scn-reports-leg-b/report.xml
-        run: python harness/scenarios/assert-file-exists.py
-      - name: Assert output report-artifact-name
-        shell: bash
-        env:
-          ASSERT_NAME: report-artifact-name
-          EXPECTED: python-test-scn-reports
-          ACTUAL: ${{ needs.python_test_reports_merge_hosted_call.outputs.report-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
-  python_test_artifact_install_hosted_setup:
-    name: 'Python Test: Install a staged wheel and run pytest setup'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Create setup files
-        shell: bash
-        env:
-          DEVFLOWS_SETUP_FILES: |-
-            [
-              {
-                "path": ".devflows-test/python-test/wheelhouse/devflows_test_fixture-0.1.0-py3-none-any.whl",
-                "source-path": "tests/scenarios/python-test/dist/devflows_test_fixture-0.1.0-py3-none-any.whl"
-              }
-            ]
-        run: python harness/scenarios/create-setup-files.py
-      - name: Upload setup artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: python-test-wheelhouse
-          path: .devflows-test/python-test/wheelhouse
-          if-no-files-found: error
-          retention-days: 1
-          overwrite: true
-  python_test_artifact_install_hosted_call:
-    name: 'Python Test: Install a staged wheel and run pytest'
-    uses: ./.github/workflows/python-test.yaml
-    with:
-      artifact-download-enabled: true
-      artifact-download-name: python-test-wheelhouse
-      artifact-download-path: dist
-      test-install-source: artifact
-      test-dist-path: dist
-      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "artifact"}]'
-      test-dependencies: pytest
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/artifact/report.xml tests/scenarios/python-test/pkg/tests
-      report-artifact-enabled: true
-      report-merge-enabled: false
-      report-artifact-name: python-test-artifact-report
-      report-path: .devflows-test/python-test/artifact/report.xml
-    permissions:
-      actions: read
-      contents: read
-    needs: python_test_artifact_install_hosted_setup
-  python_test_artifact_install_hosted_assert:
-    name: 'Python Test: Install a staged wheel and run pytest assertions'
-    runs-on: ubuntu-latest
-    needs: python_test_artifact_install_hosted_call
-    if: always()
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Assert scenario succeeded
-        shell: bash
-        env:
-          ACTUAL_RESULT: ${{ needs.python_test_artifact_install_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
-      - name: Download scenario artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: python-test-artifact-report-artifact
-          path: .devflows-test-artifacts/python-test/artifact
-      - name: 'Assert file exists: report.xml'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-test/artifact/report.xml
-        run: python harness/scenarios/assert-file-exists.py
-      - name: 'Assert file contains: report.xml'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-test/artifact/report.xml
-          ASSERT_TEXT: <testsuite
-        run: python harness/scenarios/assert-file-contains.py
-  python_test_micromamba_source_hosted_call:
-    name: 'Python Test: Install from source in a micromamba environment'
-    uses: ./.github/workflows/python-test.yaml
-    with:
-      test-env-manager: micromamba
-      test-environment-file: tests/scenarios/python-test/environment.yml
-      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.12", "name": "mamba"}]'
-      test-install-source: source
-      test-source-directory: tests/scenarios/python-test/pkg
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/micromamba/report.xml tests/scenarios/python-test/pkg/tests
-      report-artifact-enabled: true
-      report-merge-enabled: false
-      report-artifact-name: python-test-micromamba-report
-      report-path: .devflows-test/python-test/micromamba/report.xml
-    permissions:
-      actions: read
-      contents: read
-  python_test_micromamba_source_hosted_assert:
-    name: 'Python Test: Install from source in a micromamba environment assertions'
-    runs-on: ubuntu-latest
-    needs: python_test_micromamba_source_hosted_call
-    if: always()
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-      - name: Assert scenario succeeded
-        shell: bash
-        env:
-          ACTUAL_RESULT: ${{ needs.python_test_micromamba_source_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
-      - name: Download scenario artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: python-test-micromamba-report-mamba
-          path: .devflows-test-artifacts/python-test/micromamba
-      - name: 'Assert file exists: report.xml'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-test/micromamba/report.xml
-        run: python harness/scenarios/assert-file-exists.py
-      - name: 'Assert file contains: report.xml'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-test/micromamba/report.xml
-          ASSERT_TEXT: <testsuite
         run: python harness/scenarios/assert-file-contains.py
   writeback_ephemeral_branch_writeback_setup:
     name: 'Writeback: Writeback to ephemeral branch setup'
