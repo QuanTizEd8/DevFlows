@@ -49,9 +49,15 @@ tests:
 
 `inputs` : Inputs passed to the reusable workflow call.
 
-`expect` : Expected conclusion of the reusable workflow call. `success` (the
-default) asserts the call succeeded. `failure` marks a negative-path scenario;
-see [Failure-Path Scenarios](#failure-path-scenarios).
+`expect` : Expected outcome of the scenario. `success` (the default) calls the
+reusable workflow and asserts it succeeded. `validation-failure` is a
+negative-path scenario that runs the workflow's input-validation script directly
+instead of calling it; see
+[Validation-Failure Scenarios](#validation-failure-scenarios).
+
+`failure-message-contains` : Only with `expect: validation-failure`. Requires
+the rejected validation script's output to contain this substring, so a scenario
+can pin the specific rejection message.
 
 `cleanup` : Local files or directories removed before a local scenario runs.
 
@@ -152,11 +158,28 @@ Mutation scenarios are skipped on `pull_request` events. They run on trusted
 `push` and `workflow_dispatch` events, where the generated setup, writeback, and
 cleanup jobs can request `contents: write`.
 
-## Failure-Path Scenarios
+## Validation-Failure Scenarios
 
-Set `expect: failure` to assert that a reusable workflow call fails — for
-example, that a validate step rejects an empty matrix or a nothing-to-build
-call.
+Set `expect: validation-failure` to assert that a workflow **rejects bad
+inputs** — for example, that its validate step refuses an empty build matrix or
+a nothing-to-build call.
+
+This is deliberately honest about what it exercises. GitHub does **not** support
+`continue-on-error` on a `uses:` (reusable-workflow call) job, and actionlint
+rejects it, so we cannot let a real reusable call fail and keep the run green.
+Instead, a validation-failure scenario does **not** call the reusable workflow
+at all. The generated job:
+
+1. Checks the repository out (pinned, `persist-credentials: false`) on hosted
+   runners; local (`act`) runs use the bind-mounted workspace.
+2. Runs the target workflow's `validate-inputs.py` directly, with the exact
+   `env` its own validate step declares — reconstructed by substituting the
+   scenario's `inputs` (and the workflow input defaults for anything unset) into
+   the step's `${{ inputs.* }}` expressions.
+3. Asserts the script exits **nonzero**. The run stays green when validation
+   fails as designed; the job fails (with a clear message) if the script
+   unexpectedly accepts the inputs, or if `failure-message-contains` is set but
+   absent from the captured output.
 
 ```yaml
 tests:
@@ -164,35 +187,48 @@ tests:
     - id: nothing-to-build
       name: All build flavors disabled fails validation
       runs:
+        - local
         - hosted
-      expect: failure
+      expect: validation-failure
+      failure-message-contains: "at least one build flavor"
       inputs:
-        checkout-enabled: false
         sdist-enabled: false
         wheel-enabled: false
 ```
 
-The generated call job runs with `continue-on-error: true`, so the overall run
-stays green while the job itself is red; the assert job runs on `!cancelled()`
-and requires `needs.<call>.result == 'failure'`. If the call unexpectedly
-succeeds, the assert fails and the run goes red.
+This tests the input-validation **script layer** in CI. It does not exercise a
+full reusable-call failure end to end — that is a future capability that needs a
+throwaway sandbox repository to call into. Because a validation-failure job is a
+plain checkout-and-run job, it runs faithfully under `act`, so it supports both
+`local` and `hosted` runs.
 
-Constraints:
+Constraints (enforced by `devflows validate`):
 
-- `expect: failure` scenarios are **hosted-only**. `act` cannot reliably drive a
-  failed reusable-workflow call into a result-asserting job, so listing `local`
-  is a validation error.
-- They declare **no** `assertions` and no `artifact` metadata: a failed call
-  uploads no artifact and produces no outputs, so the only meaningful check is
-  the call result, which the assert job makes automatically.
+- The target workflow must expose a **discoverable validate step**: a step whose
+  `run` invokes `${DEVFLOWS_SCRIPT_ROOT}/<id>/validate-inputs.py`
+  (conventionally in a job named `validate`).
+- That step's `env` values may only reference `inputs.*` expressions. Any
+  `github.*`, `steps.*`, `secrets.*`, `matrix.*`, `needs.*`, or compound
+  expression is rejected, because the harness must reconstruct the env from the
+  scenario inputs alone — substitution has to be total. (The one exception is
+  the generator-injected `DEVFLOWS_SCRIPT_ROOT` runtime var, which is dropped:
+  the harness invokes the script by its checkout path.)
+- They declare **no** `assertions`, `artifact`, `setup-artifact`, `mutation`,
+  `writeback-payload`, or `cleanup`: the only check is that validation rejected
+  the inputs.
+- Boolean and number inputs are serialized the way GitHub presents them to an
+  expression (`true`/`false`, decimal strings), consistent with how the success
+  path feeds the same typed inputs to the call job's `with:` block.
 
-Matching a specific failure **message** is intentionally not supported. The
-failure originates in a nested reusable-call job whose logs cannot be reliably
-located (the nested-job naming GitHub renders is undocumented) or fetched with
-the run's default `actions: read` token while the run is still in progress, so a
-log grep would be flaky. Assert specific validate-script messages with unit
-tests of the script instead (this is why the validate scripts are extracted,
-lint-covered `.py` files).
+Because the validate scripts are extracted, lint-covered `.py` files, you can
+also assert their specific messages with plain unit tests of the script; the
+scenario proves the same rejection fires with the workflow's real input wiring.
+
+> **Adopting this in a workflow.** Give the workflow a `validate` job whose step
+> runs `${DEVFLOWS_SCRIPT_ROOT}/<id>/validate-inputs.py` and whose `env` maps
+> only `inputs.*` values (plus the injected `DEVFLOWS_SCRIPT_ROOT`). Then add a
+> scenario with `expect: validation-failure` and inputs that trip a specific
+> rejection, optionally pinning it with `failure-message-contains`.
 
 ## Local And Hosted Split
 

@@ -175,16 +175,67 @@ def test_create_setup_files_requires_exactly_one_source(
         _run("create-setup-files.py", {"DEVFLOWS_SETUP_FILES": json.dumps([item])}, monkeypatch)
 
 
-def test_assert_result_honors_expected_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Expect-failure scenarios pass EXPECTED_RESULT=failure.
+def _write_validate_script(tmp_path: Path) -> Path:
+    """A stand-in validate-inputs.py: rejects unless MODE == 'ok'."""
+    script = tmp_path / "validate-inputs.py"
+    script.write_text(
+        "import os, sys\n"
+        "mode = os.environ.get('MODE', '')\n"
+        "if mode == 'ok':\n"
+        "    sys.exit(0)\n"
+        "sys.exit(f'mode rejected: {mode!r}')\n",
+        encoding="utf-8",
+    )
+    return script
+
+
+def test_assert_validation_failure_passes_when_script_rejects(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    script = _write_validate_script(tmp_path)
+    # Reconstructed input env (MODE=bad) trips the validator -> scenario is green.
     _run(
-        "assert-result.py",
-        {"ACTUAL_RESULT": "failure", "EXPECTED_RESULT": "failure"},
+        "assert-validation-failure.py",
+        {"DEVFLOWS_VALIDATE_SCRIPT": str(script), "MODE": "bad"},
         monkeypatch,
     )
+
+
+def test_assert_validation_failure_fails_when_script_succeeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    script = _write_validate_script(tmp_path)
+    # MODE=ok is accepted, so the negative-path scenario must go red.
     with pytest.raises(SystemExit):
         _run(
-            "assert-result.py",
-            {"ACTUAL_RESULT": "success", "EXPECTED_RESULT": "failure"},
+            "assert-validation-failure.py",
+            {"DEVFLOWS_VALIDATE_SCRIPT": str(script), "MODE": "ok"},
+            monkeypatch,
+        )
+
+
+def test_assert_validation_failure_matches_required_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    script = _write_validate_script(tmp_path)
+    # Message present -> pass.
+    _run(
+        "assert-validation-failure.py",
+        {
+            "DEVFLOWS_VALIDATE_SCRIPT": str(script),
+            "MODE": "bad",
+            "DEVFLOWS_FAILURE_MESSAGE_CONTAINS": "mode rejected",
+        },
+        monkeypatch,
+    )
+    # Rejected for a different reason than the one under test -> red.
+    with pytest.raises(SystemExit):
+        _run(
+            "assert-validation-failure.py",
+            {
+                "DEVFLOWS_VALIDATE_SCRIPT": str(script),
+                "MODE": "bad",
+                "DEVFLOWS_FAILURE_MESSAGE_CONTAINS": "totally different",
+            },
             monkeypatch,
         )

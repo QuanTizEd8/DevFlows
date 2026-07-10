@@ -64,10 +64,19 @@ _BASE_METADATA = {
 }
 
 
-def test_schema_accepts_expect_failure_scenario_without_assertions() -> None:
+def test_schema_accepts_validation_failure_scenario_without_assertions() -> None:
     doc = {
         **_BASE_METADATA,
-        "tests": {"scenarios": [{"id": "boom", "runs": ["hosted"], "expect": "failure"}]},
+        "tests": {
+            "scenarios": [
+                {
+                    "id": "boom",
+                    "runs": ["local", "hosted"],
+                    "expect": "validation-failure",
+                    "failure-message-contains": "must be a nonempty",
+                }
+            ]
+        },
     }
 
     assert _validate_metadata(doc) == []
@@ -77,6 +86,16 @@ def test_schema_rejects_unknown_expect_value() -> None:
     doc = {
         **_BASE_METADATA,
         "tests": {"scenarios": [{"id": "boom", "runs": ["hosted"], "expect": "maybe"}]},
+    }
+
+    assert _validate_metadata(doc)
+
+
+def test_schema_rejects_removed_expect_failure_value() -> None:
+    # The old call-level `expect: failure` (continue-on-error) shape is gone.
+    doc = {
+        **_BASE_METADATA,
+        "tests": {"scenarios": [{"id": "boom", "runs": ["hosted"], "expect": "failure"}]},
     }
 
     assert _validate_metadata(doc)
