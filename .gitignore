@@ -9,7 +9,19 @@
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 docs/_build/
 docs/reference/
 devflows-pandoc-smoke.html
-test/scenarios/pandoc/working-directory/output.html
+tests/scenarios/pandoc/working-directory/output.html
+
+# Coverage output
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Python build artifacts
+/build/
+/dist/
+*.egg-info/

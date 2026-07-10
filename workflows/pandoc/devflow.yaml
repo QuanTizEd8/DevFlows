@@ -8,7 +8,7 @@ owners:
   - DevFlows maintainers
 release:
   type: simple
-  major: 1
+  major: 0
 docs:
   category: Documents
   keywords:
@@ -37,11 +37,18 @@ notes:
   - >-
     Commit writeback is opt-in, requires explicit commit paths, and runs in a
     separate job with contents: write so Pandoc execution remains read-only.
+  - >-
+    The internal writeback payload artifact name defaults to a run-scoped value
+    (devflows-pandoc-writeback-<run_id>-<run_attempt>), so commit-enabled
+    invocations in different runs never collide. Invoking this workflow more than
+    once with commit-enabled in the SAME run still needs a distinct
+    commit-internal-artifact-name per invocation, because the run-scoped default
+    is identical within one run.
 examples:
   - name: Markdown to HTML
-    path: test/fixtures/pandoc/markdown-to-html.yaml
+    path: tests/fixtures/pandoc/markdown-to-html.yaml
   - name: Extra image template path
-    path: test/fixtures/pandoc/extra-template.yaml
+    path: tests/fixtures/pandoc/extra-template.yaml
 tests:
   scenarios:
     - id: markdown-html-local
@@ -91,18 +98,18 @@ tests:
       runs:
         - local
       cleanup:
-        - test/scenarios/pandoc/working-directory/output.html
+        - tests/scenarios/pandoc/working-directory/output.html
       inputs:
         checkout-enabled: false
         pandoc-image: pandoc/core:3.8
-        pandoc-working-directory: test/scenarios/pandoc/working-directory
+        pandoc-working-directory: tests/scenarios/pandoc/working-directory
         pandoc-arguments: >-
           --standalone --output=output.html input.md
       assertions:
         - type: file-exists
-          path: test/scenarios/pandoc/working-directory/output.html
+          path: tests/scenarios/pandoc/working-directory/output.html
         - type: file-contains
-          path: test/scenarios/pandoc/working-directory/output.html
+          path: tests/scenarios/pandoc/working-directory/output.html
           text: "Pandoc Working Directory"
     - id: working-directory-artifact
       name: Working directory conversion with artifact upload
@@ -113,12 +120,12 @@ tests:
         path: .devflows-test-artifacts/pandoc/working-directory-artifact
       inputs:
         pandoc-image: pandoc/core:3.8
-        pandoc-working-directory: test/scenarios/pandoc/working-directory
+        pandoc-working-directory: tests/scenarios/pandoc/working-directory
         pandoc-arguments: >-
           --standalone --output=output.html input.md
         artifact-upload-enabled: true
         artifact-upload-name: pandoc-working-directory
-        artifact-upload-path: test/scenarios/pandoc/working-directory/output.html
+        artifact-upload-path: tests/scenarios/pandoc/working-directory/output.html
         artifact-upload-if-no-files-found: error
       assertions:
         - type: file-exists

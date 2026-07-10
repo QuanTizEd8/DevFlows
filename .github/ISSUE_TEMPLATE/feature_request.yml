@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an enhancement to an existing DevFlows workflow or the CLI.
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Use this for improvements to something that already exists. To propose a
+        brand-new workflow, use the "New workflow proposal" template instead.
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Which workflow or component?
+      options:
+        - pandoc
+        - build-devcontainer
+        - writeback
+        - devflows CLI
+        - general / catalog-wide
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description:
+        What are you trying to do, and where does the current behavior fall
+        short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description:
+        Describe the new input, output, behavior, or interface you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

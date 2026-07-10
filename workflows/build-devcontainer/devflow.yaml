@@ -8,7 +8,7 @@ owners:
   - DevFlows maintainers
 release:
   type: simple
-  major: 1
+  major: 0
 docs:
   category: Containers
   keywords:
@@ -20,27 +20,88 @@ io:
   job: build-devcontainer
   runtime: true
   runtime-jobs:
+    - validate
     - merge-devcontainer
   checkout: true
   artifact-download: true
 notes:
   - The only structured JSON input is build-matrix, because GitHub reusable
     workflow inputs do not support arrays or objects for matrix expansion.
+  - >-
+    The build-matrix is validated in a dedicated validate job before any image
+    is built or pushed, so a malformed matrix entry fails fast instead of
+    pushing partial per-platform tags.
   - The workflow intentionally does not expose devcontainers/ci runCmd, env,
     inheritEnv, or skipContainerUserIdUpdate because this workflow builds and
     publishes images rather than running commands inside the built container.
   - The workflow intentionally does not expose docker/login-action registry-auth
     because this workflow authenticates to one target registry per call.
+  - >-
+    The github.token docker-login fallback is restricted to ghcr.io. Any other
+    registry (including Docker Hub) must supply an explicit docker-password
+    secret or the run fails in the validate job.
   - The workflow intentionally does not expose actions/cache save-always because
     upstream marks it as deprecated.
+  - >-
+    When devcontainer-cache-from/to are empty and
+    devcontainer-cache-registry-enabled is true, the build reads and writes a
+    registry build cache tagged image-name:cache-key-prefix-platform_tag, which
+    requires packages write on the registry. Set
+    devcontainer-cache-registry-enabled to false, or the cache inputs to none,
+    to opt out. The derived cache-from and cache-to are both disabled
+    automatically when devcontainer-push is never, so build-only validation runs
+    need no registry credentials (an explicit cache-from is still honored).
   - Set devcontainer-push to never and merge-enabled to false for build-only
     validation jobs.
-  - If merge-enabled is true, platform-specific image tags must be pushed before
-    the merge job runs.
+  - >-
+    The multi-arch manifest is merged from the immutable image digests captured
+    by each build job (handed to the merge job as per-platform artifacts), not
+    from the mutable per-platform tags, so concurrent runs cannot publish
+    mixed-commit or stale manifests.
   - prepare-command is a trusted caller-controlled command and runs on the host
     runner after checkout and artifact download.
 examples:
   - name: Build and publish GHCR image
-    path: test/fixtures/build-devcontainer/ghcr-publish.yaml
+    path: tests/fixtures/build-devcontainer/ghcr-publish.yaml
 tests:
-  scenarios: []
+  scenarios:
+    - id: build-only-minimal
+      name: Build a minimal devcontainer without pushing
+      # Build-only, no registry credentials: docker login is disabled, push is
+      # never, the multi-arch merge is off, and the registry build cache is
+      # opted out. It needs no secrets, but its call still declares packages:
+      # write (build-devcontainer's workflow-level grant), so the generated
+      # hosted workflow gates this scenario off fork pull requests and runs it on
+      # same-repo PRs, pushes, and dispatches. build-digest-artifact-name makes
+      # the build job record the locally-built image digest and upload it; the
+      # file-contains assertion below then proves an image was really produced,
+      # so a silent no-op build (e.g. devcontainers/ci warning skopeo is missing)
+      # can no longer pass this scenario. The image-ref assertion still confirms
+      # the skipped merge job leaves the multi-arch output empty.
+      #
+      # Rate-limit flake mode: the minimal Dockerfile pulls its base image from
+      # anonymous docker.io, which is rate-limited on shared hosted-runner egress;
+      # a burst of scenario runs can flake here. Mirroring the base image to GHCR
+      # is future work (intentionally not implemented).
+      runs:
+        - hosted
+      inputs:
+        image-name: devflows-e2e-devcontainer
+        image-tag: e2e
+        devcontainer-config-file: tests/scenarios/build-devcontainer/minimal/devcontainer.json
+        docker-login-enabled: false
+        devcontainer-push: never
+        devcontainer-cache-registry-enabled: false
+        merge-enabled: false
+        cache-enabled: false
+        build-digest-artifact-name: build-only-digest
+      artifact:
+        name: build-only-digest-linux-amd64
+        path: .devflows-test-artifacts/build-devcontainer/build-only
+      assertions:
+        - type: workflow-output-equals
+          name: image-ref
+          value: ""
+        - type: file-contains
+          path: linux-amd64
+          text: "sha256:"

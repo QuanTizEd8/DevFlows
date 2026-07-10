@@ -3,52 +3,59 @@
 Each promoted DevFlows workflow has its own version line and release history.
 The repository does not use one global version for all workflows.
 
+## Project Status: Pre-1.0 (0.x)
+
+Every promoted workflow is currently on a `0.x` version line. While a workflow
+is pre-1.0:
+
+- Pin an **exact release tag** (`workflow-id/vX.Y.Z`) or a **commit SHA**.
+- **Moving major tags (`workflow-id/vN`) do not exist yet.** They begin at the
+  workflow's `1.0.0` release.
+- Interfaces may still change between `0.x` releases. Read the workflow
+  changelog before updating.
+
 ## Tag Format
 
 Workflow tags are scoped by workflow ID:
 
-- Exact release: `workflow-id/v1.2.3`
-- Moving minor: `workflow-id/v1.2`
-- Moving major: `workflow-id/v1`
+- Exact release: `workflow-id/vX.Y.Z` (available today)
+- Moving major: `workflow-id/vN` (published from `1.0.0` onward)
 
-For example, Pandoc consumers can reference:
-
-```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
-```
-
-or:
-
-```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
-```
+Moving minor tags (`workflow-id/vX.Y`) are intentionally **not** published; pin
+an exact patch release or a moving major tag instead.
 
 ## Which Reference Should You Use?
 
-Use a moving major tag when you want compatible updates:
+Pre-1.0, use an exact release tag for reproducible builds:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.2.0
 ```
 
-Use an exact release tag when reproducibility matters:
+Or a commit SHA for maximum supply-chain assurance:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@0123456789abcdef0123456789abcdef01234567
 ```
 
-Use a commit SHA when you need maximum supply-chain assurance:
+Once a workflow reaches `1.0.0`, a moving major tag becomes available for
+compatible updates:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@0123456789abcdef0123456789abcdef01234567
+# Available from the 1.0.0 release onward.
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
 ```
 
 ## Compatibility Expectations
 
-Within a major version, maintainers should avoid breaking existing callers.
-Breaking interface changes require a new major version line. Non-breaking
-additions, bug fixes, documentation changes, and security hardening can happen
-within the same major line.
+From `1.0.0` onward, maintainers avoid breaking existing callers within a major
+version. Breaking interface changes require a new major version line.
+Non-breaking additions, bug fixes, documentation changes, and security hardening
+can happen within the same major line.
+
+During `0.x`, breaking changes are released as **minor** bumps (for example
+`0.2.0` to `0.3.0`) and there is no cross-release compatibility promise, so pin
+exact tags or SHAs and review each update.
 
 ## Updating A Caller
 

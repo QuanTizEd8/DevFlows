@@ -7,16 +7,47 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+
+# Never cancel a release mid-flight; queue overlapping runs instead.
+concurrency:
+  group: devflows-release
+  cancel-in-progress: false
 
 jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create release tags and GitHub releases
+      pull-requests: write # open and update release pull requests
     steps:
       - name: Release Please
-        uses: googleapis/release-please-action@v4
+        id: release
+        # RELEASE_PLEASE_TOKEN is a fine-grained PAT (see docs/dev-guide/release.md).
+        # Using it instead of the default GITHUB_TOKEN lets release PRs trigger CI.
+        # The github.token fallback keeps this workflow runnable before the secret
+        # is provisioned.
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please/config.json
           manifest-file: .github/release-please/manifest.json
+      # Moving major tag automation. Dormant while the catalog is on 0.x because
+      # every released major is 0 (compute_major_tag_moves returns nothing); it
+      # activates automatically the first time a workflow is released at 1.0.0.
+      - name: Checkout for tag automation
+        if: steps.release.outputs.releases_created == 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          # Credentials are persisted so the tag push below authenticates. The PAT
+          # (or github.token fallback) is the push identity.
+          persist-credentials: true
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+      - name: Force-move moving major tags
+        if: steps.release.outputs.releases_created == 'true'
+        shell: bash
+        env:
+          RELEASE_PLEASE_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: python3 scripts/move_major_tags.py

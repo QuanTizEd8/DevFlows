@@ -5,13 +5,13 @@ security, and behavior problems before a workflow is released.
 
 ## Test Layers
 
-Static checks : `pixi run lint` validates metadata, generated-file drift, GitHub
+Static checks : `task lint` validates metadata, generated-file drift, GitHub
 Actions syntax, formatting, shell scripts, and security findings.
 
-Unit tests : `pixi run test` runs Python tests for catalog loading, docs
-generation, release checks, YAML handling, and scenario generation.
+Unit tests : `task test` runs Python tests for catalog loading, docs generation,
+release checks, YAML handling, and scenario generation.
 
-Local scenario tests : `pixi run test-local` generates local scenario workflows
+Local scenario tests : `task scenarios-local` generates local scenario workflows
 and runs them with `act`.
 
 Hosted scenario tests : `.github/workflows/devflows-scenarios.yaml` runs
@@ -30,16 +30,16 @@ tests:
       runs:
         - local
       cleanup:
-        - test/scenarios/pandoc/working-directory/output.html
+        - tests/scenarios/pandoc/working-directory/output.html
       inputs:
         checkout-enabled: false
         pandoc-image: pandoc/core:3.8
-        pandoc-working-directory: test/scenarios/pandoc/working-directory
+        pandoc-working-directory: tests/scenarios/pandoc/working-directory
         pandoc-arguments: >-
           --standalone --output=output.html input.md
       assertions:
         - type: file-exists
-          path: test/scenarios/pandoc/working-directory/output.html
+          path: tests/scenarios/pandoc/working-directory/output.html
 ```
 
 `id` : Stable scenario identifier. Use lowercase letters, numbers, and hyphens.
@@ -140,7 +140,7 @@ cannot emulate a hosted service, keep that scenario hosted-only.
 Generate scenario workflows with:
 
 ```bash
-pixi run devflows test-generate
+pixi run -- devflows test-generate
 ```
 
 Generated files:
@@ -151,15 +151,15 @@ Generated files:
 The lint task checks that these files are current:
 
 ```bash
-pixi run devflows test-generate --check
+pixi run -- devflows test-generate --check
 ```
 
 ## Adding A Scenario
 
-1. Add or update fixtures under `test/scenarios/<workflow-id>/`.
+1. Add or update fixtures under `tests/scenarios/<workflow-id>/`.
 2. Add a scenario under `tests.scenarios`.
 3. Include at least one assertion.
 4. Use `local` for fast paths and `hosted` for GitHub service paths.
-5. Run `pixi run devflows test-generate`.
-6. Run `pixi run test-local` for local scenarios.
+5. Run `pixi run -- devflows test-generate`.
+6. Run `task scenarios-local` for local scenarios.
 7. Let hosted CI run hosted scenarios after the branch is pushed.

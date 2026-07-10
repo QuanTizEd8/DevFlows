@@ -9,16 +9,16 @@ workflow promotion stays reviewable.
 | ------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `workflows/<workflow-id>/workflow.yaml`           | Source reusable workflow for a promoted workflow.                                  |
 | `workflows/<workflow-id>/devflow.yaml`            | Metadata, release config, docs fields, examples, and tests.                        |
-| `workflows/<workflow-id>/scripts/`                | Source support scripts synced next to the published reusable workflow.             |
+| `workflows/<workflow-id>/scripts/`                | Source support scripts inlined into the published workflow at sync time.           |
 | `workflows/_drafts/`                              | Inherited or experimental workflows not yet promoted.                              |
 | `.github/workflows/<workflow-id>.yaml`            | Generated publish location required by GitHub.                                     |
-| `.github/workflows/<workflow-id>/`                | Generated support scripts used by published reusable workflows.                    |
 | `.github/workflows/devflows-scenarios.yaml`       | Generated hosted scenario test workflow.                                           |
 | `.github/workflows/devflows-local-scenarios.yaml` | Generated local scenario test workflow.                                            |
+| `harness/scenarios/`                              | Scenario harness scripts run by the generated scenario workflows.                  |
 | `src/devflows/`                                   | Python CLI and generation logic.                                                   |
 | `tests/`                                          | Python unit tests for DevFlows tooling.                                            |
-| `test/fixtures/`                                  | Example caller workflows rendered into docs.                                       |
-| `test/scenarios/`                                 | Checked-in test inputs used by workflow scenarios.                                 |
+| `tests/fixtures/`                                 | Example caller workflows rendered into docs.                                       |
+| `tests/scenarios/`                                | Checked-in test inputs used by workflow scenarios.                                 |
 | `docs/`                                           | Sphinx documentation source.                                                       |
 | `docs/reference/`                                 | Ignored generated workflow catalog and reference pages created during docs builds. |
 
@@ -35,14 +35,14 @@ Edit source files first:
 Then regenerate committed generated files:
 
 ```bash
-pixi run devflows sync
-pixi run devflows test-generate
+pixi run -- devflows sync
+pixi run -- devflows test-generate
 ```
 
 Reference docs are generated as ignored build output by:
 
 ```bash
-pixi run devflows docs
+pixi run -- devflows docs
 ```
 
 Do not hand-edit generated workflow copies, scenario workflows, or reference

@@ -8,12 +8,17 @@ DevFlows CI protects both the project tooling and the reusable workflows.
 
 ```bash
 pixi install
-pixi run lint
-pixi run test
+task lint
+task test
+task propagation-check
 ```
 
 This covers static checks, generated-file drift, unit tests, formatting,
-workflow syntax, shell linting, and security findings.
+workflow syntax, shell linting, and security findings. On pull requests it also
+runs the shared-generator propagation guard (see the release guide). The job
+reuses the prebuilt devcontainer image/cache published by
+`devflows-devcontainer.yaml`, and a per-ref concurrency group cancels superseded
+runs.
 
 ## Hosted Scenario Workflow
 
@@ -31,7 +36,7 @@ then assertion jobs download those artifacts and inspect their contents.
 runs:
 
 ```bash
-pixi run test-local
+task scenarios-local
 ```
 
 Local scenarios are intended for fast feedback. They should avoid hosted-only
@@ -39,14 +44,31 @@ services unless `act` can emulate them reliably.
 
 ## Docs Workflow
 
-The docs workflow generates reference pages, builds Sphinx output, and deploys
-the resulting HTML to GitHub Pages. Source docs live under `docs/`, while
-`docs/reference/` is ignored build output created before Sphinx runs.
+`.github/workflows/devflows-docs.yaml` generates reference pages and builds
+Sphinx output. Pull requests build the docs to catch Sphinx errors; only pushes
+to `main` configure GitHub Pages and deploy. Source docs live under `docs/`,
+while `docs/reference/` is ignored build output created before Sphinx runs.
 
 ## Release Workflow
 
-The release workflow runs Release Please. Release behavior is driven by workflow
-metadata and `.github/release-please` configuration.
+`.github/workflows/devflows-release.yaml` runs Release Please and, once a
+workflow reaches major `>= 1`, moves its `<id>/v<major>` tag. Release behavior
+is driven by workflow metadata and `.github/release-please` configuration. See
+the {doc}`release guide <release>` for the token setup and runbook.
+
+## CodeQL Workflow
+
+`.github/workflows/devflows-codeql.yaml` runs CodeQL analysis over the Python
+code on push, pull requests, and a weekly schedule. It uses the default Python
+analysis (no custom query packs) with every action SHA-pinned.
+
+## Devcontainer Image Workflow
+
+`.github/workflows/devflows-devcontainer.yaml` dogfoods the catalog: it calls
+the repository's own `build-devcontainer` reusable workflow to prebuild and
+publish the CI/development devcontainer image plus a registry build cache to
+GHCR. It runs on `.devcontainer/**` changes on `main`, weekly, and on demand;
+`devflows-ci.yaml` and `devflows-docs.yaml` reuse the cache.
 
 ## Adding New CI Coverage
 

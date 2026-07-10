@@ -5,14 +5,23 @@
     // Currently, there is no way to define cache sources when using "image",
     // so we have to use "dockerfile" even though we don't need a custom one.
     "dockerfile": "Dockerfile",
-    "options": [
-      "--progress=plain"
-    ],
+    // These cache tags are produced by .github/workflows/devflows-devcontainer.yaml,
+    // which dogfoods the catalog's own build-devcontainer reusable workflow to
+    // prebuild and publish this image plus a registry build cache to GHCR
+    // (cache-key-prefix "cache" yields exactly image-name:cache-<platform_tag>).
+    // devflows-ci.yaml and devflows-docs.yaml reuse the same cache. Before the
+    // first devcontainer build runs, the cache simply misses and the build falls
+    // back to the pinned base image.
     "cacheFrom": [
       "ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64",
       "ghcr.io/quantized8/devflows-devcontainer:cache-linux-arm64"
     ]
   },
+  // The devcontainer installs INFRASTRUCTURE only (pixi, go-task, act, docker,
+  // plus shell/CLI niceties). Project tools (ruff, shellcheck, shfmt, actionlint,
+  // zizmor, taplo, yamllint, prettier, lefthook, ...) come from pixi — see
+  // pixi.toml. gitleaks is the one lint tool pixi cannot package; it is installed
+  // by the Dockerfile as infrastructure.
   "features": {
     "ghcr.io/quantized8/devfeats/install-act": {},
     "ghcr.io/quantized8/devfeats/install-bash": {},
@@ -22,7 +31,6 @@
     "ghcr.io/quantized8/devfeats/install-git": {},
     "ghcr.io/quantized8/devfeats/install-jq": {},
     "ghcr.io/quantized8/devfeats/install-jsonschema": {},
-    "ghcr.io/quantized8/devfeats/install-lefthook": {},
     "ghcr.io/quantized8/devfeats/install-nvm": {},
     "ghcr.io/quantized8/devfeats/install-os-pkg-bundle": {
       "archive_tools": true,
@@ -31,19 +39,11 @@
       "dev_tools": true,
       "network_tools": true,
       "sys_monitor": true,
-      "text_processing": true,
-      "log_level": "debug"
+      "text_processing": true
     },
     "ghcr.io/quantized8/devfeats/install-pixi": {},
     "ghcr.io/quantized8/devfeats/install-ripgrep": {},
     "ghcr.io/quantized8/devfeats/install-ripgrep-all": {},
-    "ghcr.io/quantized8/devfeats/install-ruff": {},
-    "ghcr.io/quantized8/devfeats/install-shellcheck": {
-      "version": "0.11.0"
-    },
-    "ghcr.io/quantized8/devfeats/install-shfmt": {
-      "version": "3.13.1"
-    },
     "ghcr.io/quantized8/devfeats/install-taskfile": {},
     "ghcr.io/quantized8/devfeats/install-yq": {},
     "ghcr.io/quantized8/devfeats/install-zsh": {},
@@ -66,14 +66,8 @@
     "ghcr.io/quantized8/devfeats/install-yq",
     "ghcr.io/quantized8/devfeats/install-gh",
     "ghcr.io/quantized8/devfeats/install-jsonschema",
-    "ghcr.io/quantized8/devfeats/install-shfmt",
-    "ghcr.io/quantized8/devfeats/install-shellcheck",
-    "ghcr.io/quantized8/devfeats/install-miniforge",
     "ghcr.io/quantized8/devfeats/install-pixi",
     "ghcr.io/quantized8/devfeats/install-nvm",
-    "ghcr.io/quantized8/devfeats/install-devcontainer-cli",
-    "ghcr.io/quantized8/devfeats/install-oras",
-    "ghcr.io/quantized8/devfeats/install-lefthook",
     "ghcr.io/quantized8/devfeats/install-codex",
     "ghcr.io/quantized8/devfeats/install-claude",
     "ghcr.io/devcontainers/features/docker-in-docker:2"
@@ -85,7 +79,10 @@
   // Limit CPU to avoid host starvation if a process spirals (uncomment and tune as needed)
   // "runArgs": ["--cpus=3"],
 
-  // "postCreateCommand": "lefthook install",
+  // Bootstrap the pixi environment and install git hooks on first create. The
+  // lefthook stub records the absolute path to the pixi-provided lefthook, so the
+  // hooks work even though lefthook is not on the system PATH.
+  "postCreateCommand": "pixi install && pixi run -- lefthook install",
 
   "customizations": {
     "vscode": {
@@ -121,10 +118,8 @@
         // which is what makes each shellcheck process so expensive here.
         "bashIde.enableSourceErrorDiagnostics": false,
         // ── YAML Schema ─────────────────────────────────────────────────────────
-        "yaml.schemas": {
-        },
-        "yaml.schemaStore.enable": true,
-        "yaml.trace.server": "verbose"
+        "yaml.schemas": {},
+        "yaml.schemaStore.enable": true
       },
       "extensions": [
         "EditorConfig.EditorConfig",

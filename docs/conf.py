@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from devflows.project import load_project
+
+# Identity is sourced from the central .config/project.yaml.
+_project = load_project()
+
 project = "DevFlows"
 author = "DevFlows maintainers"
 copyright = "2026, DevFlows maintainers"
@@ -21,8 +26,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 html_theme = "pydata_sphinx_theme"
 html_static_path = ["_static"]
 html_title = "DevFlows"
+html_baseurl = _project.docs_url
 html_theme_options = {
-    "github_url": "https://github.com/quantized8/devflows",
+    "github_url": _project.github_url,
     "navbar_align": "left",
     "show_toc_level": 2,
 }

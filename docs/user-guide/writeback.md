@@ -43,8 +43,11 @@ valid writeback payload artifact:
 ```yaml
 jobs:
   writeback:
-    uses: owner/devflows/.github/workflows/writeback.yaml@writeback/v1
+    # Replace writeback/v0.1.0 with the latest released tag; moving major tags
+    # (writeback/v1) do not exist during the 0.x series.
+    uses: QuanTizEd8/DevFlows/.github/workflows/writeback.yaml@writeback/v0.1.0
     permissions:
+      # The writeback job requires both scopes; validated before the run starts.
       actions: read
       contents: write
     with:

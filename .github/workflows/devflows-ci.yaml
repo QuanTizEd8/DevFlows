@@ -10,20 +10,97 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same ref (a new PR push supersedes the old one).
+concurrency:
+  group: devflows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # pull the prebuilt CI devcontainer image / build cache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # Full history so the propagation guard can diff against the PR base.
+          fetch-depth: 0
           persist-credentials: false
+      - name: Log in to GHCR for the devcontainer cache
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
       - name: Run in devcontainer
-        uses: devcontainers/ci@b63b30de439b47a52267f241112c5b453b673db5
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
           configFile: .devcontainer/devcontainer.json
+          push: never
+          # Reuse the prebuilt CI image / registry cache published by
+          # devflows-devcontainer.yaml so CI stops rebuilding from scratch. Until
+          # that pipeline first runs the cache simply misses and the build falls
+          # back to the pinned base image.
+          cacheFrom: ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64
+          # The propagation guard only runs on pull_request, where a base sha
+          # exists; on push this is empty and the guard is a no-op.
+          env: |
+            DEVFLOWS_BASE_SHA=${{ github.event.pull_request.base.sha }}
           runCmd: |
             pixi install
-            pixi run lint
-            pixi run test
+            git config --global --add safe.directory "$PWD"
+            task lint
+            task test
+            task propagation-check
+
+  contract:
+    name: Adapter contract
+    # The adapter contract test hits the network (fetches each pinned action's
+    # action.yml) and is excluded from `task test`. Run it only on pull requests
+    # that touch an action pin or a workflow that consumes one, so a pin bump that
+    # drops or renames an action input is caught before it ships.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # pull the prebuilt CI devcontainer image / build cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect pin-affecting changes
+        id: changes
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pattern='^(src/devflows/actions\.py|workflows/[^/]+/workflow\.yaml|\.github/workflows/[^/]+\.ya?ml)$'
+          count=$(git diff --name-only "$BASE_SHA...HEAD" | grep -Ec "$pattern" || true)
+          if [ "$count" -gt 0 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No action-pin or workflow changes; skipping the contract test."
+          fi
+      - name: Log in to GHCR for the devcontainer cache
+        if: steps.changes.outputs.changed == 'true'
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: Run adapter contract test in devcontainer
+        if: steps.changes.outputs.changed == 'true'
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+          cacheFrom: ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64
+          runCmd: |
+            pixi install
+            task test-contract

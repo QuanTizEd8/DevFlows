@@ -45,11 +45,6 @@
       "resolved": "ghcr.io/quantized8/devfeats/install-jsonschema@sha256:033df54165a62deeafa5c9cae0e761235439b5f6168e86724accfa7142845e60",
       "integrity": "sha256:033df54165a62deeafa5c9cae0e761235439b5f6168e86724accfa7142845e60"
     },
-    "ghcr.io/quantized8/devfeats/install-lefthook": {
-      "version": "0.1.0",
-      "resolved": "ghcr.io/quantized8/devfeats/install-lefthook@sha256:71692710738cfff9a9262383ad98995be0142fd836b0ef7aa9f9cd25c3e5367b",
-      "integrity": "sha256:71692710738cfff9a9262383ad98995be0142fd836b0ef7aa9f9cd25c3e5367b"
-    },
     "ghcr.io/quantized8/devfeats/install-nvm": {
       "version": "0.1.0",
       "resolved": "ghcr.io/quantized8/devfeats/install-nvm@sha256:a924f44e2ff2b741bb186ed61428177531c80abaf329bfd9f1b3865a23739960",
@@ -74,21 +69,6 @@
       "version": "0.1.0",
       "resolved": "ghcr.io/quantized8/devfeats/install-ripgrep-all@sha256:8e4ad521b0be400108cc8cdaa1949bf723fb8c18466aa7829c1ea14b78402e5f",
       "integrity": "sha256:8e4ad521b0be400108cc8cdaa1949bf723fb8c18466aa7829c1ea14b78402e5f"
-    },
-    "ghcr.io/quantized8/devfeats/install-ruff": {
-      "version": "0.1.0",
-      "resolved": "ghcr.io/quantized8/devfeats/install-ruff@sha256:149ec92f2b06c2b8c8bfbf966ecf9a00b621604759d12d335a43785cb10ec39e",
-      "integrity": "sha256:149ec92f2b06c2b8c8bfbf966ecf9a00b621604759d12d335a43785cb10ec39e"
-    },
-    "ghcr.io/quantized8/devfeats/install-shellcheck": {
-      "version": "0.1.0",
-      "resolved": "ghcr.io/quantized8/devfeats/install-shellcheck@sha256:db4e5fda2c19954e3b6aa003324add347a0650a302617651a4b9d96a04861a83",
-      "integrity": "sha256:db4e5fda2c19954e3b6aa003324add347a0650a302617651a4b9d96a04861a83"
-    },
-    "ghcr.io/quantized8/devfeats/install-shfmt": {
-      "version": "0.1.0",
-      "resolved": "ghcr.io/quantized8/devfeats/install-shfmt@sha256:6aeeea1de17472f52b0ef995d251fef02881282ed26dc19afd8ecbb533154666",
-      "integrity": "sha256:6aeeea1de17472f52b0ef995d251fef02881282ed26dc19afd8ecbb533154666"
     },
     "ghcr.io/quantized8/devfeats/install-taskfile": {
       "version": "0.1.0",

@@ -67,8 +67,11 @@ io:
 ```
 
 `job` names the runner job that should receive the generated steps. `runtime`
-adds the DevFlows runtime checkout needed by workflows that execute support
-scripts published under `.github/workflows/<workflow-id>/`. `writeback` requires
+injects the "Materialize DevFlows runtime scripts" step (id `devflows-runtime`),
+which at run time inlines every `${DEVFLOWS_SCRIPT_ROOT}/...` script the job
+references into `$RUNNER_TEMP/devflows` — there is no runtime checkout of the
+DevFlows repository. List any additional job that also runs those scripts under
+`runtime-jobs` so it gets its own materialize step. `writeback` requires
 `runtime` because generated workflows create the writeback payload with the
 shared writeback script.
 
@@ -79,7 +82,7 @@ Examples are checked-in caller workflows:
 ```yaml
 examples:
   - name: Markdown to HTML
-    path: test/fixtures/pandoc/markdown-to-html.yaml
+    path: tests/fixtures/pandoc/markdown-to-html.yaml
 ```
 
 Generated workflow reference pages render these example files inline. Keep

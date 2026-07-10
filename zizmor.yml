@@ -1,5 +1,9 @@
+# Require every third-party action to be pinned to a full commit SHA. The
+# previous "ref-pin" relaxation let tag/branch pins pass; DevFlows ships reusable
+# workflows, so it must hold its own CI to the strict SHA-pinning it recommends.
+# Local (./...) reusable-workflow calls are exempt (they cannot be SHA-pinned).
 rules:
   unpinned-uses:
     config:
       policies:
-        "*": ref-pin
+        "*": hash-pin

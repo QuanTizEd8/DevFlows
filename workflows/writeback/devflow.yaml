@@ -6,7 +6,7 @@ owners:
   - DevFlows maintainers
 release:
   type: simple
-  major: 1
+  major: 0
 docs:
   category: Utilities
   keywords:
@@ -14,13 +14,30 @@ docs:
     - commit
     - artifacts
     - generated-files
+io:
+  job: writeback
+  runtime: true
 notes:
   - Writeback consumes a manifest-based payload artifact rather than a raw tar
     archive.
-  - Payload files are checked against recorded SHA-256 digests before they are
-    copied into the target checkout.
+  - >-
+    The per-file SHA-256 digests in the manifest provide integrity (they detect
+    corruption of the payload in transit), not authenticity. Because the
+    manifest ships alongside the files it validates, an attacker who can
+    substitute the whole artifact can also rewrite the digests. Treat the
+    artifact upload/download channel and the job's contents: write permission as
+    the trust boundary, not the digests.
   - Directory writebacks are treated as replacements, so removed generated files
     are staged as deletions.
+  - >-
+    Deletions are idempotent: a delete path that is already absent from the
+    target branch is a no-op, not an error. Listing a path to delete never
+    aborts the writeback just because it is already gone.
+  - >-
+    Payload files are written only after resolving the target's real parent
+    chain and confirming it stays inside GITHUB_WORKSPACE. Writing through a
+    symlinked parent directory, or over a symlink leaf, is refused so a payload
+    cannot escape the checkout.
   - >-
     The workflow is intended to run with contents: write and actions: read.
 examples: []
@@ -46,7 +63,11 @@ tests:
         paths:
           - generated
         delete-paths:
+          # remove.html exists on the branch; absent-on-branch.html never did.
+          # Deleting a path absent from the target must succeed (idempotent
+          # deletion), which this scenario now exercises end-to-end.
           - remove.html
+          - absent-on-branch.html
         files:
           - path: generated/index.html
             content: |
@@ -64,5 +85,7 @@ tests:
           path: generated/stale.html
         - type: branch-file-missing
           path: remove.html
+        - type: branch-file-missing
+          path: absent-on-branch.html
         - type: latest-commit-message-equals
           value: "test: writeback e2e"

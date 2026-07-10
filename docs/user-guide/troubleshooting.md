@@ -8,7 +8,9 @@ repository.
 Check the `uses` path and tag:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+# Replace pandoc/v0.1.0 with the latest released tag; moving major tags
+# (pandoc/v1) do not exist during the 0.x series.
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
 ```
 
 Reusable workflows must be published directly under `.github/workflows` in the
@@ -46,6 +48,17 @@ scenario tests for behavior that depends on GitHub services.
 Start by checking the caller workflow's top-level `permissions`. If a workflow
 needs to write packages, pages, checks, or repository contents, the caller must
 grant that permission explicitly.
+
+GitHub validates nested reusable-workflow permissions **before the run starts**,
+so the caller must grant at least the union every job in the called workflow
+declares — even scopes only an optional, disabled job would use. In practice:
+
+- Calling `pandoc` requires `contents: write` and `actions: read` (its embedded
+  writeback commit job requires them) even for a read-only conversion.
+- Calling `build-devcontainer` requires `packages: write`, `contents: read`, and
+  `actions: read`.
+
+A missing scope here fails the whole run at startup, before any job executes.
 
 ## Secret Or Checkout Failures
 

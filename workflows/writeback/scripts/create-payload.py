@@ -11,6 +11,18 @@ from typing import Any
 
 INTERNAL_PATH_NAMES = {".devflows-writeback", ".git"}
 
+# Payload layout produced under WRITEBACK_PAYLOAD_DIR:
+#   manifest.json            -- version, source, replace_paths, deletions, files
+#   files/<repo-relative>    -- one regular file per manifest "files" entry
+# Selected paths keep their repo-relative layout under files/, so the subtree can
+# contain dotfiles and dot-directories (e.g. .github/**). apply-payload.py reads
+# each file back from files/<path> and verifies its sha256 against the manifest.
+# CONTRACT: whatever uploads this directory as an artifact MUST preserve hidden
+# files (actions/upload-artifact include-hidden-files: true). upload-artifact v4+
+# excludes hidden paths by default, which would drop those files while leaving the
+# manifest that references them -- apply-payload.py then aborts with
+# "Payload file is missing or invalid".
+
 
 def main() -> int:
     workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()

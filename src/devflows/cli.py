@@ -1,50 +1,102 @@
 from __future__ import annotations
 
 import argparse
-import filecmp
 import json
+import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-from devflows.catalog import PUBLISHED_DIR, load_catalog, validate_workflow
+from devflows.catalog import (
+    CATALOG_DIR,
+    PUBLISHED_DIR,
+    RESERVED_ID_PREFIX,
+    load_catalog,
+    validate_workflow,
+)
 from devflows.docs import write_generated_docs
+from devflows.errors import DevflowsError
+from devflows.project import find_root, load_project
+from devflows.propagation import changed_paths_since, propagation_violations
 from devflows.publish import render_published_workflow, validate_publish_config
 from devflows.scenarios import (
     run_local_scenarios,
     validate_scenarios,
     write_generated_test_workflows,
 )
+from devflows.schema import schema_errors
+
+INTERNAL_PREFIX = RESERVED_ID_PREFIX
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="devflows")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="Catalog root directory. Defaults to walking up to .config/project.yaml.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate = subparsers.add_parser("validate", help="Validate workflow catalog metadata.")
+    validate = subparsers.add_parser(
+        "validate", parents=[common], help="Validate workflow catalog metadata."
+    )
     validate.add_argument("--include-drafts", action="store_true")
 
-    sync = subparsers.add_parser("sync", help="Sync catalog workflows into .github/workflows.")
+    sync = subparsers.add_parser(
+        "sync", parents=[common], help="Sync catalog workflows into .github/workflows."
+    )
     sync.add_argument("--check", action="store_true", help="Fail if published workflows are stale.")
 
-    docs = subparsers.add_parser("docs", help="Generate Sphinx workflow reference pages.")
-    docs.add_argument("--check", action="store_true", help="Fail if generated docs are stale.")
+    docs = subparsers.add_parser(
+        "docs", parents=[common], help="Generate Sphinx workflow reference pages."
+    )
+    docs.add_argument(
+        "--check",
+        action="store_true",
+        help="Render docs to a temporary directory and fail on render errors (does not write).",
+    )
 
     test_generate = subparsers.add_parser(
-        "test-generate", help="Generate workflow scenario test workflows."
+        "test-generate", parents=[common], help="Generate workflow scenario test workflows."
     )
     test_generate.add_argument(
         "--check", action="store_true", help="Fail if generated test workflows are stale."
     )
 
-    subparsers.add_parser("test-local", help="Run local workflow scenario tests with act.")
-
-    subparsers.add_parser("release-check", help="Validate local release-please config.")
-
-    subparsers.add_parser("list", help="List active workflow IDs.")
+    subparsers.add_parser(
+        "test-local", parents=[common], help="Run local workflow scenario tests with act."
+    )
+    subparsers.add_parser(
+        "release-check", parents=[common], help="Validate local release-please config."
+    )
+    propagation_check = subparsers.add_parser(
+        "propagation-check",
+        parents=[common],
+        help="Fail when a shared-generator change alters a published workflow "
+        "without a change release-please can attribute to it.",
+    )
+    propagation_check.add_argument(
+        "--base",
+        default=None,
+        help="Base git ref to diff against. Defaults to the DEVFLOWS_BASE_SHA "
+        "environment variable; the check is skipped when neither is set.",
+    )
+    subparsers.add_parser("list", parents=[common], help="List active workflow IDs.")
 
     args = parser.parse_args(argv)
+    try:
+        os.chdir(find_root(args.root))
+        return _dispatch(args)
+    except DevflowsError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "validate":
         return _validate(include_drafts=args.include_drafts)
     if args.command == "sync":
@@ -57,17 +109,33 @@ def main(argv: list[str] | None = None) -> int:
         return _test_local()
     if args.command == "release-check":
         return _release_check()
+    if args.command == "propagation-check":
+        return _propagation_check(base=args.base)
     if args.command == "list":
-        for item in load_catalog():
+        workflows = load_catalog()
+        for item in workflows:
             print(item.id)
+        print(f"listed {len(workflows)} workflows", file=sys.stderr)
         return 0
     return 2
 
 
-def _validate(*, include_drafts: bool = False) -> int:
-    errors: list[str] = []
+def _require_catalog(*, include_drafts: bool = False) -> list:
+    if not CATALOG_DIR.is_dir():
+        raise DevflowsError(f"catalog directory {CATALOG_DIR} does not exist.")
     workflows = load_catalog(include_drafts=include_drafts)
+    if not workflows:
+        raise DevflowsError(f"catalog directory {CATALOG_DIR} contains no workflows.")
+    return workflows
+
+
+def _validate(*, include_drafts: bool = False) -> int:
+    # Loading the project verifies the identity config is present and well-formed.
+    load_project()
+    workflows = _require_catalog(include_drafts=include_drafts)
+    errors: list[str] = []
     for item in workflows:
+        errors.extend(schema_errors(item))
         errors.extend(validate_workflow(item))
         errors.extend(validate_publish_config(item))
     errors.extend(validate_scenarios(workflows))
@@ -75,14 +143,14 @@ def _validate(*, include_drafts: bool = False) -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
+    print(f"validated {len(workflows)} workflows", file=sys.stderr)
     return 0
 
 
 def _sync(*, check: bool = False) -> int:
-    workflows = load_catalog()
+    workflows = _require_catalog()
     PUBLISHED_DIR.mkdir(parents=True, exist_ok=True)
     changed: list[Path] = []
-    expected = {item.published_path for item in workflows}
     for item in workflows:
         published = render_published_workflow(item).rstrip() + "\n"
         existing = (
@@ -94,65 +162,69 @@ def _sync(*, check: bool = False) -> int:
             changed.append(item.published_path)
             if not check:
                 item.published_path.write_text(published, encoding="utf-8")
-        if _support_tree_changed(item.support_path, item.published_support_path):
-            changed.append(item.published_support_path)
-            if not check:
-                _sync_support_tree(item.support_path, item.published_support_path)
-    if check:
-        stale_extra = sorted(
-            path
-            for path in PUBLISHED_DIR.glob("*.yaml")
-            if path not in expected and not path.name.startswith("devflows-")
-        )
-        changed.extend(stale_extra)
+    for orphan in _orphans(workflows):
+        changed.append(orphan)
+        if not check:
+            if orphan.is_dir():
+                shutil.rmtree(orphan)
+            else:
+                orphan.unlink()
     if changed:
-        for path in changed:
+        for path in sorted(set(changed)):
             print(path, file=sys.stderr)
+        if check:
+            print(
+                "error: published workflows are stale (drift from workflows/<id>/ sources). "
+                "This commonly follows a grouped action-pin bump that updated a source "
+                "workflow.yaml but not its generated copy. Run `task sync` "
+                "(or `pixi run -- devflows sync`) and commit the regenerated files above.",
+                file=sys.stderr,
+            )
         return 1 if check else 0
+    print(f"synced {len(workflows)} workflows", file=sys.stderr)
     return 0
 
 
-def _support_tree_changed(source: Path, destination: Path) -> bool:
-    if not source.exists():
-        return destination.exists()
-    if not destination.exists():
-        return True
-    comparison = filecmp.dircmp(source, destination)
-    return bool(
-        comparison.left_only
-        or comparison.right_only
-        or comparison.diff_files
-        or comparison.funny_files
-        or any(
-            _support_tree_changed(source / name, destination / name)
-            for name in comparison.common_dirs
-        )
-    )
+def _orphans(workflows: list) -> list[Path]:
+    """Published entries with no owning workflow (stale YAML or leftover script dirs).
 
-
-def _sync_support_tree(source: Path, destination: Path) -> None:
-    if destination.exists():
-        shutil.rmtree(destination)
-    if source.exists():
-        shutil.copytree(source, destination)
+    Published workflows no longer carry a `.github/workflows/<id>/` script tree, so
+    any non-internal directory there is orphaned, as is any `<name>.yaml`/`<name>.yml`
+    that no active workflow produces. Internal `devflows-*` files/dirs are left alone.
+    """
+    expected = {item.published_path for item in workflows}
+    orphans: list[Path] = []
+    for entry in sorted(PUBLISHED_DIR.iterdir()):
+        if entry.name.startswith(INTERNAL_PREFIX):
+            continue
+        if entry.is_dir():
+            orphans.append(entry)
+        elif entry.suffix in {".yaml", ".yml"} and entry not in expected:
+            orphans.append(entry)
+    return orphans
 
 
 def _docs(*, check: bool = False) -> int:
+    load_project()
+    workflows = _require_catalog()
     if check:
+        # docs/reference/ is a gitignored build artifact, so there is no committed
+        # baseline to diff against. Render to a throwaway directory instead and let
+        # any render error (missing fixture, template failure) surface as nonzero.
         with tempfile.TemporaryDirectory(prefix="devflows-docs-check-") as temporary_dir:
-            write_generated_docs(load_catalog(), output_dir=Path(temporary_dir) / "reference")
+            write_generated_docs(workflows, output_dir=Path(temporary_dir) / "reference")
+        print(f"rendered docs for {len(workflows)} workflows", file=sys.stderr)
         return 0
 
-    changed = write_generated_docs(load_catalog())
-    if changed:
-        for path in changed:
-            print(path, file=sys.stderr)
-        return 1 if check else 0
+    changed = write_generated_docs(workflows)
+    for path in changed:
+        print(path, file=sys.stderr)
     return 0
 
 
 def _test_generate(*, check: bool = False) -> int:
-    changed = write_generated_test_workflows(load_catalog(), check=check)
+    workflows = _require_catalog()
+    changed = write_generated_test_workflows(workflows, check=check)
     if changed:
         for path in changed:
             print(path, file=sys.stderr)
@@ -161,15 +233,17 @@ def _test_generate(*, check: bool = False) -> int:
 
 
 def _test_local() -> int:
-    return run_local_scenarios(load_catalog())
+    return run_local_scenarios(_require_catalog())
 
 
 def _release_check() -> int:
     config_path = Path(".github/release-please/config.json")
     manifest_path = Path(".github/release-please/manifest.json")
+    if not config_path.is_file() or not manifest_path.is_file():
+        raise DevflowsError("release-please config or manifest is missing.")
     config = json.loads(config_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    workflows = load_catalog()
+    workflows = _require_catalog()
     expected_packages = {f"workflows/{item.id}" for item in workflows}
     configured_packages = set(config.get("packages", {}))
     errors: list[str] = []
@@ -192,11 +266,12 @@ def _release_check() -> int:
             errors.append(f"{config_path}: {package_path} component must be {item.id!r}.")
         if package_config.get("package-name") != item.id:
             errors.append(f"{config_path}: {package_path} package-name must be {item.id!r}.")
-        release_type = item.metadata.get("release", {}).get("type")
-        if package_config.get("release-type") != release_type:
+        release = item.metadata.get("release", {}) or {}
+        if package_config.get("release-type") != release.get("type"):
             errors.append(
                 f"{config_path}: {package_path} release-type must match devflow release.type."
             )
+        errors.extend(_release_major_errors(item, manifest, package_path, manifest_path))
 
     if errors:
         for error in errors:
@@ -204,3 +279,39 @@ def _release_check() -> int:
         return 1
     print("Release configuration is valid.")
     return 0
+
+
+def _propagation_check(*, base: str | None) -> int:
+    base_ref = base or os.environ.get("DEVFLOWS_BASE_SHA") or ""
+    if not base_ref:
+        print(
+            "propagation-check: no base ref (pass --base or set DEVFLOWS_BASE_SHA); skipping.",
+            file=sys.stderr,
+        )
+        return 0
+    workflows = _require_catalog()
+    changed = changed_paths_since(base_ref)
+    violations = propagation_violations(changed, [item.id for item in workflows])
+    if violations:
+        for violation in violations:
+            print(f"error: {violation}", file=sys.stderr)
+        return 1
+    print(f"propagation-check: {len(workflows)} workflows propagate cleanly.", file=sys.stderr)
+    return 0
+
+
+def _release_major_errors(item, manifest, package_path: str, manifest_path: Path) -> list[str]:
+    release = item.metadata.get("release", {}) or {}
+    declared_major = release.get("major")
+    if declared_major is None:
+        return [f"{item.metadata_path}: release.major is required."]
+    manifest_version = manifest.get(package_path)
+    if not isinstance(manifest_version, str) or "." not in manifest_version:
+        return [f"{manifest_path}: {package_path} must declare a semver version."]
+    manifest_major = manifest_version.split(".", 1)[0]
+    if manifest_major != str(declared_major):
+        return [
+            f"{manifest_path}: {package_path} version {manifest_version!r} major "
+            f"({manifest_major}) must match devflow release.major ({declared_major})."
+        ]
+    return []

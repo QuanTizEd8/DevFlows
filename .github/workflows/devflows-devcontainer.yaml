@@ -1,0 +1,56 @@
+name: DevFlows Devcontainer
+
+# Dogfood the catalog: prebuild and publish the CI/development devcontainer image
+# and its build cache to GHCR by CALLING the repository's own reusable
+# build-devcontainer workflow. devflows-ci.yaml and devflows-docs.yaml then reuse
+# the cache instead of rebuilding the container from scratch every run.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devflows-devcontainer.yaml"
+  schedule:
+    # Weekly rebuild so the image tracks upstream base-image and feature updates.
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devflows-devcontainer
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and publish CI image
+    permissions:
+      actions: read # build-devcontainer declares actions: read at workflow level
+      contents: read # checkout the repository
+      packages: write # push the image and registry cache to GHCR
+    uses: ./.github/workflows/build-devcontainer.yaml
+    with:
+      # Identity from .config/project.yaml (owner QuanTizEd8; GHCR lowercases it).
+      image-name: ghcr.io/quantized8/devflows-devcontainer
+      image-tag: latest
+      # cache-key-prefix "cache" makes the derived registry cache tags exactly
+      # image-name:cache-<platform_tag>, matching .devcontainer/devcontainer.json's
+      # build.cacheFrom entries so the dev container and CI share one cache.
+      cache-key-prefix: cache
+      devcontainer-config-file: .devcontainer/devcontainer.json
+      build-matrix: |
+        [
+          {
+            "runner": "ubuntu-latest",
+            "platform": "linux/amd64",
+            "platform_tag": "linux-amd64"
+          },
+          {
+            "runner": "ubuntu-24.04-arm",
+            "platform": "linux/arm64",
+            "platform_tag": "linux-arm64"
+          }
+        ]

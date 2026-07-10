@@ -1,0 +1,38 @@
+name: Build Devcontainer
+
+on:
+  workflow_dispatch:
+
+# build-devcontainer declares actions: read, contents: read, and packages: write;
+# GitHub validates the nested permissions before the run starts.
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+jobs:
+  build-devcontainer:
+    # Replace build-devcontainer/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v0.1.0
+    with:
+      image-name: ghcr.io/owner/project-devcontainer
+      image-tag: latest
+      image-sha-tag-enabled: true
+      build-matrix: |
+        [
+          {
+            "runner": "ubuntu-latest",
+            "platform": "linux/amd64",
+            "platform_tag": "linux-amd64"
+          },
+          {
+            "runner": "ubuntu-24.04-arm",
+            "platform": "linux/arm64",
+            "platform_tag": "linux-arm64"
+          }
+        ]
+      devcontainer-config-file: .devcontainer/devcontainer.json
+      prepare-command: |
+        ./scripts/prepare-devcontainer-build.sh
+    secrets:
+      docker-password: ${{ secrets.GITHUB_TOKEN }}

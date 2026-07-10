@@ -17,6 +17,15 @@ or publishing workflows may need package, pages, id-token, or repository write
 permissions. Those requirements should be documented on each workflow reference
 page.
 
+Because a reusable workflow can declare its own job permissions, GitHub
+validates the **nested** permissions before the run starts: the caller must
+grant at least the union of every scope the called workflow's jobs declare, even
+a scope only a disabled optional job would use. For example, calling `pandoc`
+requires `contents: write` and `actions: read` (for its embedded writeback
+commit job) even for a read-only conversion, and calling `build-devcontainer`
+requires `packages: write`, `contents: read`, and `actions: read`.
+Under-granting fails the whole run at startup.
+
 ## Pass Secrets Deliberately
 
 Secrets are not automatically available to reusable workflows unless the caller
@@ -25,7 +34,9 @@ passes them. Prefer explicit secrets:
 ```yaml
 jobs:
   publish:
-    uses: owner/devflows/.github/workflows/some-workflow.yaml@some-workflow/v1
+    # Replace some-workflow/v0.1.0 with the latest released tag; moving major
+    # tags (some-workflow/v1) do not exist during the 0.x series.
+    uses: QuanTizEd8/DevFlows/.github/workflows/some-workflow.yaml@some-workflow/v0.1.0
     secrets:
       publish-token: ${{ secrets.PUBLISH_TOKEN }}
 ```
