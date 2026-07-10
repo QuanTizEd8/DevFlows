@@ -84,3 +84,107 @@ def test_create_setup_files_rejects_unsafe_paths(
             {"DEVFLOWS_SETUP_FILES": json.dumps([{"path": bad_path, "content": "x"}])},
             monkeypatch,
         )
+
+
+def test_create_setup_files_content_base64(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import base64
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    payload = bytes(range(256))  # a non-UTF-8 binary blob
+    _run(
+        "create-setup-files.py",
+        {
+            "DEVFLOWS_SETUP_FILES": json.dumps(
+                [{"path": "bin/blob.dat", "content-base64": base64.b64encode(payload).decode()}]
+            )
+        },
+        monkeypatch,
+    )
+    assert (tmp_path / "bin/blob.dat").read_bytes() == payload
+
+
+def test_create_setup_files_source_path_copies_from_checkout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    payload = bytes(range(256))
+    source = tmp_path / "fixtures/example.whl"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(payload)
+    _run(
+        "create-setup-files.py",
+        {
+            "DEVFLOWS_SETUP_FILES": json.dumps(
+                [{"path": "wheelhouse/example.whl", "source-path": "fixtures/example.whl"}]
+            )
+        },
+        monkeypatch,
+    )
+    assert (tmp_path / "wheelhouse/example.whl").read_bytes() == payload
+
+
+def test_create_setup_files_source_path_rejects_traversal(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    with pytest.raises(SystemExit):
+        _run(
+            "create-setup-files.py",
+            {
+                "DEVFLOWS_SETUP_FILES": json.dumps(
+                    [{"path": "out.dat", "source-path": "../outside.dat"}]
+                )
+            },
+            monkeypatch,
+        )
+
+
+def test_create_setup_files_source_path_missing_file_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    with pytest.raises(SystemExit):
+        _run(
+            "create-setup-files.py",
+            {
+                "DEVFLOWS_SETUP_FILES": json.dumps(
+                    [{"path": "out.dat", "source-path": "fixtures/absent.dat"}]
+                )
+            },
+            monkeypatch,
+        )
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"path": "a.txt"},  # no source
+        {"path": "a.txt", "content": "x", "content-base64": "eA=="},  # two sources
+    ],
+)
+def test_create_setup_files_requires_exactly_one_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, item: dict
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    with pytest.raises(SystemExit):
+        _run("create-setup-files.py", {"DEVFLOWS_SETUP_FILES": json.dumps([item])}, monkeypatch)
+
+
+def test_assert_result_honors_expected_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Expect-failure scenarios pass EXPECTED_RESULT=failure.
+    _run(
+        "assert-result.py",
+        {"ACTUAL_RESULT": "failure", "EXPECTED_RESULT": "failure"},
+        monkeypatch,
+    )
+    with pytest.raises(SystemExit):
+        _run(
+            "assert-result.py",
+            {"ACTUAL_RESULT": "success", "EXPECTED_RESULT": "failure"},
+            monkeypatch,
+        )

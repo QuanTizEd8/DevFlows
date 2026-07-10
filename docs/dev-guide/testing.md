@@ -49,6 +49,10 @@ tests:
 
 `inputs` : Inputs passed to the reusable workflow call.
 
+`expect` : Expected conclusion of the reusable workflow call. `success` (the
+default) asserts the call succeeded. `failure` marks a negative-path scenario;
+see [Failure-Path Scenarios](#failure-path-scenarios).
+
 `cleanup` : Local files or directories removed before a local scenario runs.
 
 `artifact` : Hosted artifact metadata used when hosted assertions need to
@@ -100,6 +104,28 @@ The generated setup job uploads that artifact, the reusable workflow downloads
 it through its normal artifact-download inputs, and assertion jobs inspect the
 workflow's output artifact.
 
+Each `files[*]` entry supplies its bytes with exactly one of three keys:
+
+- `content` : inline UTF-8 text.
+- `source-path` : a workspace-relative path (no `..`) of a file already in the
+  checkout, copied verbatim. Use this for binary or large payloads such as a
+  prebuilt wheel that a fixture commits under `tests/scenarios/<workflow-id>/`.
+- `content-base64` : base64-encoded bytes decoded at setup time. Use this for a
+  small inline binary payload.
+
+```yaml
+setup-artifact:
+  name: python-test-wheelhouse
+  path: .devflows-test/python-test/wheelhouse
+  files:
+    - path: .devflows-test/python-test/wheelhouse/example-1.0-py3-none-any.whl
+      source-path: tests/scenarios/python-test/fixtures/example-1.0-py3-none-any.whl
+```
+
+Both `source-path` and the destination `path` are validated to stay inside the
+workspace (absolute paths, `..`, and internal workflow directories are
+rejected).
+
 Hosted writeback scenarios can declare ephemeral branch mutation:
 
 ```yaml
@@ -125,6 +151,48 @@ writeback-payload:
 Mutation scenarios are skipped on `pull_request` events. They run on trusted
 `push` and `workflow_dispatch` events, where the generated setup, writeback, and
 cleanup jobs can request `contents: write`.
+
+## Failure-Path Scenarios
+
+Set `expect: failure` to assert that a reusable workflow call fails — for
+example, that a validate step rejects an empty matrix or a nothing-to-build
+call.
+
+```yaml
+tests:
+  scenarios:
+    - id: nothing-to-build
+      name: All build flavors disabled fails validation
+      runs:
+        - hosted
+      expect: failure
+      inputs:
+        checkout-enabled: false
+        sdist-enabled: false
+        wheel-enabled: false
+```
+
+The generated call job runs with `continue-on-error: true`, so the overall run
+stays green while the job itself is red; the assert job runs on `!cancelled()`
+and requires `needs.<call>.result == 'failure'`. If the call unexpectedly
+succeeds, the assert fails and the run goes red.
+
+Constraints:
+
+- `expect: failure` scenarios are **hosted-only**. `act` cannot reliably drive a
+  failed reusable-workflow call into a result-asserting job, so listing `local`
+  is a validation error.
+- They declare **no** `assertions` and no `artifact` metadata: a failed call
+  uploads no artifact and produces no outputs, so the only meaningful check is
+  the call result, which the assert job makes automatically.
+
+Matching a specific failure **message** is intentionally not supported. The
+failure originates in a nested reusable-call job whose logs cannot be reliably
+located (the nested-job naming GitHub renders is undocumented) or fetched with
+the run's default `actions: read` token while the run is still in progress, so a
+log grep would be flaky. Assert specific validate-script messages with unit
+tests of the script instead (this is why the validate scripts are extracted,
+lint-covered `.py` files).
 
 ## Local And Hosted Split
 

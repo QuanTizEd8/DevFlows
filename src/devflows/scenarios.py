@@ -115,10 +115,15 @@ class Scenario:
     setup_artifact: dict[str, Any]
     mutation: dict[str, Any]
     writeback_payload: dict[str, Any]
+    expect: str
 
     @property
     def job_prefix(self) -> str:
         return f"{self.workflow.id}-{self.id}".replace("-", "_")
+
+    @property
+    def expects_failure(self) -> bool:
+        return self.expect == "failure"
 
 
 def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
@@ -142,6 +147,7 @@ def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
                     setup_artifact=dict(raw_scenario.get("setup-artifact") or {}),
                     mutation=dict(raw_scenario.get("mutation") or {}),
                     writeback_payload=dict(raw_scenario.get("writeback-payload") or {}),
+                    expect=str(raw_scenario.get("expect") or "success"),
                 )
             )
     return scenarios
@@ -177,7 +183,30 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 errors.append(f"{prefix}: unsupported runner {runner!r}.")
         if not isinstance(scenario.inputs, dict):
             errors.append(f"{prefix}: inputs must be a mapping.")
-        if not scenario.assertions:
+        if scenario.expect not in {"success", "failure"}:
+            errors.append(f"{prefix}: expect must be 'success' or 'failure'.")
+        if scenario.expects_failure:
+            # act cannot reliably drive a failed reusable-workflow call into a
+            # result-asserting job, so expect-failure is hosted-only (mirrors the
+            # mutation-scenario restriction).
+            if "local" in scenario.runs:
+                errors.append(f"{prefix}: expect-failure scenarios are hosted-only.")
+            # The call fails, so it uploads no artifact and produces no outputs; the
+            # only meaningful check is that the call failed, which the assert job makes
+            # from needs.<call>.result. Reject inspection assertions/artifacts that
+            # would fail spuriously against a failed run.
+            if scenario.assertions:
+                errors.append(
+                    f"{prefix}: expect-failure scenarios assert only that the call failed; "
+                    "remove file/output assertions."
+                )
+            if scenario.artifact:
+                errors.append(
+                    f"{prefix}: expect-failure scenarios cannot declare artifact metadata."
+                )
+            if scenario.mutation:
+                errors.append(f"{prefix}: expect-failure is not supported with mutation scenarios.")
+        if not scenario.assertions and not scenario.expects_failure:
             errors.append(f"{prefix}: assertions must not be empty.")
         if not scenario.mutation:
             for assertion in scenario.assertions:
@@ -215,6 +244,29 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 for index, file_item in enumerate(files):
                     if not isinstance(file_item, dict) or not file_item.get("path"):
                         errors.append(f"{prefix}: setup-artifact.files[{index}] requires path.")
+                        continue
+                    # Exactly one payload source; mirrors the schema oneOf and the
+                    # create-setup-files.py runtime guard.
+                    modes = [
+                        key
+                        for key in ("content", "source-path", "content-base64")
+                        if key in file_item
+                    ]
+                    if len(modes) != 1:
+                        errors.append(
+                            f"{prefix}: setup-artifact.files[{index}] must set exactly one of "
+                            "content, source-path, content-base64."
+                        )
+                    source_path = file_item.get("source-path")
+                    if (
+                        isinstance(source_path, str)
+                        and source_path
+                        and (Path(source_path).is_absolute() or ".." in Path(source_path).parts)
+                    ):
+                        errors.append(
+                            f"{prefix}: setup-artifact.files[{index}] source-path must be a "
+                            "workspace-relative path without '..'."
+                        )
         if scenario.mutation:
             if "hosted" not in scenario.runs:
                 errors.append(f"{prefix}: mutation is supported for hosted scenarios.")
@@ -591,6 +643,12 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     permissions = _required_call_permissions(scenario.workflow)
     if permissions:
         job["permissions"] = permissions
+    if scenario.expects_failure:
+        # The call is designed to fail. continue-on-error keeps the overall run
+        # green (the job is red on its own) while needs.<call>.result still reports
+        # 'failure', so the assert job can require it. Without this the whole run
+        # would fail even though the failure is the expected outcome.
+        job["continue-on-error"] = True
     if runner == "hosted" and scenario.mutation:
         setup_job_id = f"{scenario.job_prefix}_setup"
         job["with"] = {
@@ -601,6 +659,22 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
             "writeback-artifact-name": f"${{{{ needs.{setup_job_id}.outputs.artifact-name }}}}",
         }
     return job
+
+
+def _assert_result_step(scenario: Scenario, call_job_id: str) -> dict[str, Any]:
+    """Step asserting the call job reached the scenario's expected conclusion."""
+    env = {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"}
+    if scenario.expects_failure:
+        env["EXPECTED_RESULT"] = "failure"
+        name = "Assert scenario failed as expected"
+    else:
+        name = "Assert scenario succeeded"
+    return {
+        "name": name,
+        "shell": "bash",
+        "env": env,
+        "run": f"python {_script('assert-result.py')}",
+    }
 
 
 def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
@@ -615,12 +689,7 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
                 name="Checkout ephemeral branch",
                 ref=f"${{{{ needs.{setup_job_id}.outputs.branch }}}}",
             ),
-            {
-                "name": "Assert scenario succeeded",
-                "shell": "bash",
-                "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
-                "run": f"python {_script('assert-result.py')}",
-            },
+            _assert_result_step(scenario, call_job_id),
             {
                 "name": "Assert ephemeral branch",
                 "shell": "bash",
@@ -643,14 +712,7 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     if runner == "hosted":
         # Fresh runner without repository content; check out before any script.
         steps.append(_hosted_checkout_step())
-    steps.append(
-        {
-            "name": "Assert scenario succeeded",
-            "shell": "bash",
-            "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
-            "run": f"python {_script('assert-result.py')}",
-        }
-    )
+    steps.append(_assert_result_step(scenario, call_job_id))
     if runner == "hosted" and scenario.artifact:
         download_path = str(
             scenario.artifact.get("path") or f".devflows-test-artifacts/{scenario.id}"
@@ -667,11 +729,14 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
         )
     for assertion in scenario.assertions:
         steps.extend(_assertion_steps(scenario, assertion, runner=runner))
+    # Expect-failure asserts run on !cancelled() so they observe the (continue-on-error)
+    # call's 'failure' result; success asserts stay on always() as before.
+    assert_if = "!cancelled()" if scenario.expects_failure else "always()"
     return {
         "name": f"{scenario.workflow.name}: {scenario.name} assertions",
         "runs-on": "ubuntu-latest",
         "needs": call_job_id,
-        "if": "always()",
+        "if": assert_if,
         "steps": steps,
     }
 

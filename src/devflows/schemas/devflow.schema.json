@@ -70,7 +70,18 @@
             "writeback": { "type": "boolean" },
             "runtime-jobs": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": { "type": "string" },
+              "description": "Additional runner jobs that also materialize the DevFlows runtime scripts."
+            },
+            "checkout-jobs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Additional runner jobs that also receive the injected checkout channel step. Requires checkout: true. None may equal io.job."
+            },
+            "artifact-download-jobs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Additional runner jobs that also receive the injected artifact-download channel step (granted actions: read). Requires artifact-download: true. None may equal io.job."
             }
           }
         }
@@ -113,6 +124,32 @@
         "content": { "type": "string" }
       }
     },
+    "setupFileEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "description": "A file placed into the checkout before the setup artifact is uploaded. Exactly one of content, source-path, or content-base64 supplies the bytes.",
+      "properties": {
+        "path": { "type": "string" },
+        "content": {
+          "type": "string",
+          "description": "Inline UTF-8 text written to path."
+        },
+        "source-path": {
+          "type": "string",
+          "description": "Workspace-relative path (no '..') of a file in the checkout, copied verbatim to path. Use for binary or large payloads such as a prebuilt wheel."
+        },
+        "content-base64": {
+          "type": "string",
+          "description": "Base64-encoded bytes decoded and written to path. Use for small inline binary payloads."
+        }
+      },
+      "oneOf": [
+        { "required": ["content"] },
+        { "required": ["source-path"] },
+        { "required": ["content-base64"] }
+      ]
+    },
     "assertion": {
       "type": "object",
       "additionalProperties": false,
@@ -138,13 +175,18 @@
     "scenario": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "runs", "assertions"],
+      "required": ["id", "runs"],
       "properties": {
         "id": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]*$"
         },
         "name": { "type": "string" },
+        "expect": {
+          "type": "string",
+          "enum": ["success", "failure"],
+          "description": "Expected conclusion of the reusable-workflow call. 'success' (default) asserts the call succeeded. 'failure' is a negative-path scenario: the call job runs with continue-on-error so the run stays green while the assert job requires needs.<call>.result == 'failure' (RED if it unexpectedly succeeds). Expect-failure scenarios are hosted-only (act cannot reliably assert a failed reusable call) and declare no file/output assertions, because a failed call uploads no artifact. Matching a specific failure MESSAGE is intentionally unsupported: the failure originates in a nested reusable-call job whose logs cannot be reliably located (nested-job naming is undocumented) or fetched with the run's default actions:read token while the run is still in progress, so a log grep would be flaky. Assert specific validate-script messages with unit tests of the script instead."
+        },
         "runs": {
           "type": "array",
           "minItems": 1,
@@ -171,7 +213,7 @@
             "path": { "type": "string" },
             "files": {
               "type": "array",
-              "items": { "$ref": "#/$defs/fileEntry" }
+              "items": { "$ref": "#/$defs/setupFileEntry" }
             }
           }
         },

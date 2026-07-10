@@ -1,4 +1,5 @@
 import dataclasses
+import json
 
 from devflows.catalog import Workflow, load_catalog
 from devflows.scenarios import (
@@ -14,6 +15,25 @@ from devflows.scenarios import (
     render_test_workflow,
     validate_scenarios,
 )
+
+
+def _with_scenarios(workflow_id: str, scenarios: list[dict]) -> Workflow:
+    """A copy of a real catalog workflow whose scenarios are replaced for testing."""
+    workflow = {item.id: item for item in load_catalog()}[workflow_id]
+    metadata = dict(workflow.metadata)
+    metadata["tests"] = {"scenarios": scenarios}
+    return dataclasses.replace(workflow, metadata=metadata)
+
+
+def _failure_scenario(scenario_id: str = "nothing-to-build", **overrides) -> dict:
+    scenario = {
+        "id": scenario_id,
+        "runs": ["hosted"],
+        "expect": "failure",
+        "inputs": {"checkout-enabled": False},
+    }
+    scenario.update(overrides)
+    return scenario
 
 
 def _writeback_mutation_scenario(scenario_id: str, branch_prefix: str, runs=("hosted",)) -> dict:
@@ -403,6 +423,156 @@ def test_local_workflow_has_act_guard() -> None:
     assert "require_act:" in rendered
     assert "task scenarios-local" in rendered
     assert '"${ACT:-}" != "true"' in rendered
+
+
+# --- expect: failure scenarios (negative-path harness) ---
+
+
+def test_expect_failure_call_job_runs_continue_on_error() -> None:
+    workflow = _with_scenarios("pandoc", [_failure_scenario()])
+    scenario = load_scenarios([workflow])[0]
+
+    call_job = _call_job(scenario, runner="hosted")
+
+    assert call_job["continue-on-error"] is True
+
+
+def test_expect_failure_assert_job_requires_failure_result() -> None:
+    workflow = _with_scenarios("pandoc", [_failure_scenario()])
+    scenario = load_scenarios([workflow])[0]
+
+    assert_job = _assert_job(scenario, runner="hosted")
+
+    assert assert_job["if"] == "!cancelled()"
+    result_step = next(
+        step for step in assert_job["steps"] if "assert-result.py" in step.get("run", "")
+    )
+    assert result_step["env"]["EXPECTED_RESULT"] == "failure"
+    assert result_step["env"]["ACTUAL_RESULT"] == "${{ needs.pandoc_nothing_to_build_call.result }}"
+
+
+def test_success_scenario_assert_job_omits_expected_result_env() -> None:
+    # Success path is unchanged: no EXPECTED_RESULT env, keep always().
+    scenario = _scenario("pandoc", "markdown-html-artifact")
+
+    assert_job = _assert_job(scenario, runner="hosted")
+
+    assert assert_job["if"] == "always()"
+    result_step = next(
+        step for step in assert_job["steps"] if "assert-result.py" in step.get("run", "")
+    )
+    assert "EXPECTED_RESULT" not in result_step["env"]
+
+
+def test_expect_failure_scenario_renders_hosted_and_skips_local() -> None:
+    workflow = _with_scenarios("pandoc", [_failure_scenario()])
+    scenarios = load_scenarios([workflow])
+
+    hosted = render_test_workflow(scenarios, runner="hosted", name="H")
+    local = render_test_workflow(scenarios, runner="local", name="L")
+
+    assert "continue-on-error: true" in hosted
+    assert "pandoc_nothing_to_build_assert" in hosted
+    assert "EXPECTED_RESULT: failure" in hosted
+    # Hosted-only: the scenario never appears in the local workflow.
+    assert "pandoc_nothing_to_build" not in local
+
+
+def test_expect_failure_rejects_local_runner() -> None:
+    workflow = _with_scenarios("pandoc", [_failure_scenario(runs=["local", "hosted"])])
+
+    errors = validate_scenarios([workflow])
+
+    assert any("expect-failure scenarios are hosted-only" in error for error in errors)
+
+
+def test_expect_failure_rejects_inspection_assertions() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_failure_scenario(assertions=[{"type": "file-exists", "path": "x"}])],
+    )
+
+    errors = validate_scenarios([workflow])
+
+    assert any("assert only that the call failed" in error for error in errors)
+
+
+def test_expect_failure_rejects_artifact_metadata() -> None:
+    workflow = _with_scenarios("pandoc", [_failure_scenario(artifact={"name": "x"})])
+
+    errors = validate_scenarios([workflow])
+
+    assert any("cannot declare artifact metadata" in error for error in errors)
+
+
+def test_expect_failure_scenario_without_assertions_is_valid() -> None:
+    workflow = _with_scenarios("pandoc", [_failure_scenario()])
+
+    assert validate_scenarios([workflow]) == []
+
+
+# --- setup-artifact binary payloads (source-path / content-base64) ---
+
+
+def _setup_scenario(files: list[dict]) -> dict:
+    return {
+        "id": "setup-bin",
+        "runs": ["hosted"],
+        "inputs": {"artifact-download-enabled": True},
+        "setup-artifact": {"name": "n", "path": "p", "files": files},
+        "assertions": [{"type": "workflow-output-equals", "name": "o", "value": "v"}],
+    }
+
+
+def test_setup_artifact_job_passes_source_path_and_base64_verbatim() -> None:
+    files = [
+        {"path": "wheelhouse/pkg.whl", "source-path": "tests/scenarios/x/pkg.whl"},
+        {"path": "wheelhouse/data.bin", "content-base64": "AAECAw=="},
+    ]
+    workflow = _with_scenarios("pandoc", [_setup_scenario(files)])
+    scenario = load_scenarios([workflow])[0]
+
+    job = _setup_artifact_job(scenario)
+    create_step = next(
+        step for step in job["steps"] if "create-setup-files.py" in step.get("run", "")
+    )
+    passed = json.loads(create_step["env"]["DEVFLOWS_SETUP_FILES"])
+
+    assert passed[0]["source-path"] == "tests/scenarios/x/pkg.whl"
+    assert passed[1]["content-base64"] == "AAECAw=="
+
+
+def test_setup_artifact_file_requires_exactly_one_source() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_setup_scenario([{"path": "a", "content": "x", "source-path": "b"}])],
+    )
+
+    errors = validate_scenarios([workflow])
+
+    assert any(
+        "must set exactly one of content, source-path, content-base64" in error for error in errors
+    )
+
+
+def test_setup_artifact_source_path_rejects_traversal() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_setup_scenario([{"path": "a", "source-path": "../escape.whl"}])],
+    )
+
+    errors = validate_scenarios([workflow])
+
+    assert any("source-path must be a workspace-relative path" in error for error in errors)
+
+
+def test_setup_artifact_source_path_scenario_is_valid() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_setup_scenario([{"path": "a/pkg.whl", "source-path": "tests/scenarios/x/pkg.whl"}])],
+    )
+
+    assert validate_scenarios([workflow]) == []
 
 
 def test_every_local_job_depends_on_require_act() -> None:

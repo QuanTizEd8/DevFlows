@@ -75,6 +75,32 @@ DevFlows repository. List any additional job that also runs those scripts under
 `runtime` because generated workflows create the writeback payload with the
 shared writeback script.
 
+A workflow whose jobs each need a channel beyond the single `job` lists those
+jobs under `checkout-jobs` or `artifact-download-jobs` (mirroring
+`runtime-jobs`). The generator injects the same pinned checkout /
+artifact-download step into each listed job, ahead of that job's own steps and
+in the same order as `job`, and grants the job the permission the channel needs
+(`contents: read` for checkout, `actions: read` for artifact-download). A matrix
+build whose legs all need the checked-out source is the motivating case. None of
+the listed jobs may repeat `job`, and the corresponding channel (`checkout` or
+`artifact-download`) must be enabled.
+
+```yaml
+io:
+  job: dist
+  runtime: true
+  checkout: true
+  artifact-download: true
+  checkout-jobs:
+    - cibw
+    - conda
+  artifact-download-jobs:
+    - conda
+  runtime-jobs:
+    - cibw
+    - conda
+```
+
 ## Examples
 
 Examples are checked-in caller workflows:
