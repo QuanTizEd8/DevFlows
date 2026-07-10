@@ -1,0 +1,73 @@
+name: Bug report
+description: Report incorrect or unexpected behavior in a DevFlows workflow or the CLI.
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thanks for filing a bug report. Please include enough detail for us to
+        reproduce the problem. Do not report security vulnerabilities here — see
+        SECURITY.md for private reporting.
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Which workflow or component?
+      description: Select the workflow (or the CLI) the bug affects.
+      options:
+        - pandoc
+        - build-devcontainer
+        - writeback
+        - devflows CLI
+        - other / not sure
+    validations:
+      required: true
+  - type: input
+    id: ref
+    attributes:
+      label: Version or ref pinned
+      description: The tag or commit SHA you referenced (e.g. pandoc/v1.0.0 or a full SHA).
+      placeholder: "pandoc/v1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: caller
+    attributes:
+      label: Caller workflow snippet
+      description: The relevant part of the workflow that calls DevFlows (redact secrets).
+      render: yaml
+      placeholder: |
+        jobs:
+          convert:
+            uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1.0.0
+            with:
+              pandoc-arguments: --standalone --output=out.html README.md
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: run-link
+    attributes:
+      label: Workflow run link
+      description: A link to the failing GitHub Actions run, if available.
+      placeholder: "https://github.com/<owner>/<repo>/actions/runs/<id>"
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, or anything else that helps.
+    validations:
+      required: false
