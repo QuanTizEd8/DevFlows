@@ -15,6 +15,552 @@ permissions:
   contents: read
   actions: read
 jobs:
+  anaconda_publish_upload_dry_run_setup:
+    name: 'Anaconda Publish: Dry-run stage-and-promote verifies digests and plans without a token setup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Create setup files
+        shell: bash
+        env:
+          DEVFLOWS_SETUP_FILES: |-
+            [
+              {
+                "path": ".devflows-test/anaconda-publish/channel/noarch/anaconda_publish_fixture-0.1.0-h0.conda",
+                "source-path": "tests/scenarios/anaconda-publish/anaconda_publish_fixture-0.1.0-h0.conda"
+              }
+            ]
+        run: python harness/scenarios/create-setup-files.py
+      - name: Upload setup artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: anaconda-publish-dry-run-channel
+          path: .devflows-test/anaconda-publish/channel
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+  anaconda_publish_upload_dry_run_call:
+    name: 'Anaconda Publish: Dry-run stage-and-promote verifies digests and plans without a token'
+    uses: ./.github/workflows/anaconda-publish.yaml
+    with:
+      publish-owner: devflows-fixture
+      publish-dry-run-enabled: true
+      upload-enabled: true
+      promote-enabled: true
+      artifact-download-enabled: true
+      artifact-download-name: anaconda-publish-dry-run-channel
+      artifact-download-path: conda-channel-download
+      publish-dist-path: conda-channel-download
+      publish-dist-manifest: '{"schema":1,"files":[{"name":"anaconda_publish_fixture-0.1.0-h0.conda","sha256":"94e0ba00271df37f4b8b083685c5004882cfc34718625fafa8f03faba5285224","size":196,"kind":"conda"}],"artifacts":{"sdist":"","wheels":"","conda-channel":"anaconda-publish-dry-run-channel"}}'
+    permissions:
+      actions: read
+      contents: read
+    needs: anaconda_publish_upload_dry_run_setup
+  anaconda_publish_upload_dry_run_assert:
+    name: 'Anaconda Publish: Dry-run stage-and-promote verifies digests and plans without a token assertions'
+    runs-on: ubuntu-latest
+    needs: anaconda_publish_upload_dry_run_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.anaconda_publish_upload_dry_run_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Assert output package-version
+        shell: bash
+        env:
+          ASSERT_NAME: package-version
+          EXPECTED: 0.1.0
+          ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.package-version }}
+        run: python harness/scenarios/assert-equals.py
+      - name: Assert output staged-specs
+        shell: bash
+        env:
+          ASSERT_NAME: staged-specs
+          EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
+          ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.staged-specs }}
+        run: python harness/scenarios/assert-equals.py
+      - name: Assert output uploaded-files
+        shell: bash
+        env:
+          ASSERT_NAME: uploaded-files
+          EXPECTED: anaconda_publish_fixture-0.1.0-h0.conda
+          ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.uploaded-files }}
+        run: python harness/scenarios/assert-equals.py
+      - name: Assert output promoted-specs
+        shell: bash
+        env:
+          ASSERT_NAME: promoted-specs
+          EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
+          ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.promoted-specs }}
+        run: python harness/scenarios/assert-equals.py
+  anaconda_publish_promote_only_dry_run_call:
+    name: 'Anaconda Publish: Promote-only dry-run plans a relabel and skips verify''s upload derivation'
+    uses: ./.github/workflows/anaconda-publish.yaml
+    with:
+      publish-owner: devflows-fixture
+      publish-dry-run-enabled: true
+      upload-enabled: false
+      promote-enabled: true
+      promote-specs: anaconda_publish_fixture/0.1.0
+    permissions:
+      actions: read
+      contents: read
+  anaconda_publish_promote_only_dry_run_assert:
+    name: 'Anaconda Publish: Promote-only dry-run plans a relabel and skips verify''s upload derivation assertions'
+    runs-on: ubuntu-latest
+    needs: anaconda_publish_promote_only_dry_run_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.anaconda_publish_promote_only_dry_run_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Assert output promoted-specs
+        shell: bash
+        env:
+          ASSERT_NAME: promoted-specs
+          EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
+          ACTUAL: ${{ needs.anaconda_publish_promote_only_dry_run_call.outputs.promoted-specs }}
+        run: python harness/scenarios/assert-equals.py
+      - name: Assert output staged-specs
+        shell: bash
+        env:
+          ASSERT_NAME: staged-specs
+          EXPECTED: ''
+          ACTUAL: ${{ needs.anaconda_publish_promote_only_dry_run_call.outputs.staged-specs }}
+        run: python harness/scenarios/assert-equals.py
+  anaconda_publish_maintain_dry_run_call:
+    name: 'Anaconda Publish: Maintain dry-run plans the exact owner-qualified removal without a token'
+    uses: ./.github/workflows/anaconda-publish.yaml
+    with:
+      publish-owner: devflows-fixture
+      publish-dry-run-enabled: true
+      upload-enabled: false
+      maintain-enabled: true
+      maintain-remove-specs: anaconda_publish_fixture/0.1.0
+    permissions:
+      actions: read
+      contents: read
+  anaconda_publish_maintain_dry_run_assert:
+    name: 'Anaconda Publish: Maintain dry-run plans the exact owner-qualified removal without a token assertions'
+    runs-on: ubuntu-latest
+    needs: anaconda_publish_maintain_dry_run_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.anaconda_publish_maintain_dry_run_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Assert output removed-specs
+        shell: bash
+        env:
+          ASSERT_NAME: removed-specs
+          EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
+          ACTUAL: ${{ needs.anaconda_publish_maintain_dry_run_call.outputs.removed-specs }}
+        run: python harness/scenarios/assert-equals.py
+  anaconda_publish_nothing_to_do_validate:
+    name: 'Anaconda Publish: No mode enabled fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          UPLOAD_ENABLED: 'false'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_maintain_not_exclusive_validate:
+    name: 'Anaconda Publish: maintain combined with upload fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'true'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: mutually exclusive
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_upload_without_manifest_validate:
+    name: 'Anaconda Publish: upload without a manifest fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: conda-channel-download
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is required
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_malformed_manifest_validate:
+    name: 'Anaconda Publish: unparseable manifest JSON fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: '{not json'
+          PUBLISH_DIST_PATH: conda-channel-download
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: not valid JSON
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_manifest_artifact_mismatch_validate:
+    name: 'Anaconda Publish: manifest conda-channel not matching artifact-download-name fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"p-1.0-h0.conda","sha256":"00","size":1,"kind":"conda"}],"artifacts":{"conda-channel":"the-real-channel"}}'
+          PUBLISH_DIST_PATH: conda-channel-download
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          ARTIFACT_DOWNLOAD_NAME: some-other-artifact
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: does not match artifact-download-name
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_manifest_no_conda_files_validate:
+    name: 'Anaconda Publish: manifest with zero conda entries fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"p-1.0-py3-none-any.whl","sha256":"00","size":1,"kind":"wheel"}],"artifacts":{"conda-channel":""}}'
+          PUBLISH_DIST_PATH: conda-channel-download
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: contains no conda packages
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_promote_only_without_specs_validate:
+    name: 'Anaconda Publish: promote-only without promote-specs fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          UPLOAD_ENABLED: 'false'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'true'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: promote-specs is required
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_spec_with_owner_validate:
+    name: 'Anaconda Publish: an owner-qualified spec fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          UPLOAD_ENABLED: 'false'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'true'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: someorg/pkg/1.0
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: without an owner segment
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_label_collision_validate:
+    name: 'Anaconda Publish: equal upload-label and promote-label fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          UPLOAD_ENABLED: 'false'
+          UPLOAD_LABEL: main
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'true'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: pkg/1.0
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must differ
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_maintain_unconfirmed_validate:
+    name: 'Anaconda Publish: maintain without a matching confirm fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          UPLOAD_ENABLED: 'false'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'true'
+          MAINTAIN_REMOVE_SPECS: pkg/1.0
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: maintain-confirm must equal publish-owner
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_forbidden_upload_argument_validate:
+    name: 'Anaconda Publish: a safety flag smuggled through upload-arguments fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"p-1.0-h0.conda","sha256":"00","size":1,"kind":"conda"}],"artifacts":{"conda-channel":""}}'
+          PUBLISH_DIST_PATH: conda-channel-download
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: fail
+          UPLOAD_ARGUMENTS: --force
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
+        run: python harness/scenarios/assert-validation-failure.py
+  anaconda_publish_bad_existing_mode_validate:
+    name: 'Anaconda Publish: an invalid upload-existing-mode fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/anaconda-publish/scripts/validate-inputs.py
+          PUBLISH_OWNER: devflows-fixture
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          PUBLISH_EXPECTED_VERSION: ''
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"p-1.0-h0.conda","sha256":"00","size":1,"kind":"conda"}],"artifacts":{"conda-channel":""}}'
+          PUBLISH_DIST_PATH: conda-channel-download
+          UPLOAD_ENABLED: 'true'
+          UPLOAD_LABEL: staging
+          UPLOAD_EXISTING_MODE: clobber
+          UPLOAD_ARGUMENTS: ''
+          PROMOTE_ENABLED: 'false'
+          PROMOTE_LABEL: main
+          PROMOTE_SPECS: ''
+          MAINTAIN_ENABLED: 'false'
+          MAINTAIN_REMOVE_SPECS: ''
+          MAINTAIN_CONFIRM: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          ARTIFACT_DOWNLOAD_NAME: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of fail, skip, overwrite
+        run: python harness/scenarios/assert-validation-failure.py
   build_devcontainer_build_only_minimal_call:
     name: 'Build Devcontainer: Build a minimal devcontainer without pushing'
     uses: ./.github/workflows/build-devcontainer.yaml
