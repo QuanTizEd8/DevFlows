@@ -16,7 +16,7 @@ def main() -> int:
     registry_cache_enabled = _bool("DEVCONTAINER_CACHE_REGISTRY_ENABLED", default=True)
     push = _optional("DEVCONTAINER_PUSH").lower()
     default_cache_ref = f"{image_name}:{cache_key_prefix}-{platform_tag}"
-    cache_from = _resolve_cache_from(registry_cache_enabled, default_cache_ref)
+    cache_from = _resolve_cache_from(registry_cache_enabled, push, default_cache_ref)
     cache_to = _resolve_cache_to(registry_cache_enabled, push, default_cache_ref)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
@@ -30,13 +30,20 @@ def main() -> int:
     return 0
 
 
-def _resolve_cache_from(registry_cache_enabled: bool, default_ref: str) -> str:
+def _resolve_cache_from(registry_cache_enabled: bool, push: str, default_ref: str) -> str:
     raw = _optional("DEVCONTAINER_CACHE_FROM")
     if raw.lower() == "none":
         return ""
+    # An explicit caller-provided cache-from is always honored: cache-from is a
+    # read, so it is safe even in build-only mode (e.g. type=gha).
     if raw:
         return raw
-    if not registry_cache_enabled:
+    # Do not derive the default registry cache ref when the registry cache is
+    # opted out or the build does not push (build-only validation). Reading that
+    # ref needs registry pull rights the run may not have -- buildx logs a noisy
+    # "failed to configure registry cache importer: pull access denied" -- and it
+    # is a cache-poisoning surface. Symmetric with _resolve_cache_to's push guard.
+    if not registry_cache_enabled or push == "never":
         return ""
     return default_ref
 

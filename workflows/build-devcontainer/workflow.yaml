@@ -238,7 +238,10 @@ on:
       devcontainer-cache-from:
         description:
           Additional images to use for build caching. Empty derives the default registry cache
-          tag when devcontainer-cache-registry-enabled is true; set to none to disable cache-from.
+          tag when devcontainer-cache-registry-enabled is true and devcontainer-push is not
+          never; set to none to disable cache-from. An explicit value is always honored. The
+          default is dropped automatically when devcontainer-push is never so build-only
+          validation runs need no registry pull rights.
         type: string
         required: false
         default: ""
@@ -429,17 +432,21 @@ jobs:
           compression-level: 0
           overwrite: true
 
-      # Build-only proof: for a push-never run, capture the digest of the image
-      # devcontainers/ci loaded into the local daemon and upload it. `docker image
-      # inspect` fails if nothing was built, so a scenario asserting on this digest
-      # cannot pass on a vacuous (no-op) build. Credential-free and hosted-safe.
+      # Build-only proof: for a push-never run, devcontainers/ci exports the image
+      # to an OCI archive (type=oci,dest=/tmp/output.tar) instead of loading it into
+      # the local daemon, so `docker image inspect` finds nothing. Read the manifest
+      # digest straight out of that archive and upload it. The archive only exists
+      # when a build actually produced an image, so this fails on a vacuous (no-op)
+      # build. DIGEST_OCI_ARCHIVE is the path the pinned devcontainers/ci hard-codes.
+      # Credential-free and hosted-safe.
       - name: Capture build-only image digest
         if: inputs.build-digest-artifact-name != '' && inputs.devcontainer-push == 'never'
         shell: bash
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DIGEST_DIR: ${{ runner.temp }}/devflows-build-only-digest
-          DIGEST_SOURCE: local
+          DIGEST_SOURCE: oci
+          DIGEST_OCI_ARCHIVE: /tmp/output.tar
           IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_TAG: ${{ inputs.image-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}

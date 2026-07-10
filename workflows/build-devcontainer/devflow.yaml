@@ -48,8 +48,9 @@ notes:
     registry build cache tagged image-name:cache-key-prefix-platform_tag, which
     requires packages write on the registry. Set
     devcontainer-cache-registry-enabled to false, or the cache inputs to none,
-    to opt out. Cache-to is disabled automatically when devcontainer-push is
-    never.
+    to opt out. The derived cache-from and cache-to are both disabled
+    automatically when devcontainer-push is never, so build-only validation runs
+    need no registry credentials (an explicit cache-from is still honored).
   - Set devcontainer-push to never and merge-enabled to false for build-only
     validation jobs.
   - >-

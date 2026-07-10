@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import subprocess
+import tarfile
 from pathlib import Path
 from types import ModuleType
 
@@ -65,11 +67,25 @@ def test_resolve_cache_none_sentinel_disables_registry_cache(monkeypatch, tmp_pa
     assert parsed["cache-to"] == ""
 
 
-def test_resolve_cache_to_disabled_when_push_never(monkeypatch, tmp_path) -> None:
+def test_resolve_cache_disabled_when_push_never(monkeypatch, tmp_path) -> None:
     parsed = _run_resolve(monkeypatch, tmp_path, DEVCONTAINER_PUSH="never")
-    # cache-from (a read) is still allowed to speed up build-only validation...
-    assert parsed["cache-from"] == "ghcr.io/example/project-devcontainer:devcontainer-linux-amd64"
-    # ...but cache-to (a push) is auto-disabled so no push rights are needed.
+    # A build-only run (push=never) needs no registry credentials, so neither the
+    # derived cache-from (a read that would need pull rights and logs an
+    # auth-denied importer error) nor cache-to (a push) is emitted.
+    assert parsed["cache-from"] == ""
+    assert parsed["cache-to"] == ""
+
+
+def test_resolve_explicit_cache_from_honored_when_push_never(monkeypatch, tmp_path) -> None:
+    parsed = _run_resolve(
+        monkeypatch,
+        tmp_path,
+        DEVCONTAINER_PUSH="never",
+        DEVCONTAINER_CACHE_FROM="type=gha",
+    )
+    # An explicit cache-from is a read and is safe in build-only mode, so it is
+    # honored even when push=never; the write-side cache-to stays disabled.
+    assert parsed["cache-from"] == "type=gha"
     assert parsed["cache-to"] == ""
 
 
@@ -226,44 +242,112 @@ def test_capture_digest_rejects_non_sha256(monkeypatch, tmp_path) -> None:
     assert "unexpected manifest digest" in str(excinfo.value)
 
 
-def test_capture_digest_local_mode_uses_docker_image_inspect(monkeypatch, tmp_path) -> None:
+def _write_oci_archive(path: Path, manifests: list[dict]) -> None:
+    """Write a minimal OCI archive whose index.json lists the given manifests."""
+    index = {"schemaVersion": 2, "manifests": manifests}
+    payload = json.dumps(index).encode("utf-8")
+    with tarfile.open(path, mode="w") as tar:
+        # A real archive also carries oci-layout and blobs/; capture-digest only
+        # reads index.json, so a faithful subset is enough for the parser.
+        members = (("oci-layout", b'{"imageLayoutVersion":"1.0.0"}'), ("index.json", payload))
+        for name, data in members:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+
+
+def _run_capture_oci(monkeypatch, tmp_path, archive: Path) -> Path:
     module = _load_script("capture-digest.py")
+    digest_dir = tmp_path / "digests"
+    monkeypatch.setenv("IMAGE_NAME", "devflows-e2e-devcontainer")
+    monkeypatch.setenv("IMAGE_TAG", "e2e")
+    monkeypatch.setenv("MATRIX_PLATFORM_TAG", "linux-amd64")
+    monkeypatch.setenv("DIGEST_DIR", str(digest_dir))
+    monkeypatch.setenv("DIGEST_SOURCE", "oci")
+    monkeypatch.setenv("DIGEST_OCI_ARCHIVE", str(archive))
+    # docker must never be shelled out to in OCI mode -- the archive is the source.
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda *a, **k: pytest.fail("OCI mode must not call docker/buildx"),
+    )
+    assert module.main() == 0
+    return digest_dir / "linux-amd64"
+
+
+def test_capture_digest_oci_mode_reads_manifest_from_archive(monkeypatch, tmp_path) -> None:
     digest = "sha256:" + "b" * 64
+    archive = tmp_path / "output.tar"
+    _write_oci_archive(
+        archive,
+        [
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": digest,
+                "size": 123,
+                "platform": {"architecture": "amd64", "os": "linux"},
+            }
+        ],
+    )
+    written = _run_capture_oci(monkeypatch, tmp_path, archive)
+    assert written.read_text(encoding="utf-8").strip() == digest
 
-    def fake_run(command, *, check, capture_output, text):
-        assert command[:3] == ["docker", "image", "inspect"]
-        assert "devflows-e2e-devcontainer:e2e-linux-amd64" in command
-        assert command[-1] == "{{.Id}}"
-        return subprocess.CompletedProcess(command, 0, stdout=digest + "\n")
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+def test_capture_digest_oci_mode_skips_attestation_manifest(monkeypatch, tmp_path) -> None:
+    digest = "sha256:" + "c" * 64
+    archive = tmp_path / "output.tar"
+    _write_oci_archive(
+        archive,
+        [
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": digest,
+                "platform": {"architecture": "amd64", "os": "linux"},
+            },
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": "sha256:" + "d" * 64,
+                "platform": {"architecture": "unknown", "os": "unknown"},
+                "annotations": {"vnd.docker.reference.type": "attestation-manifest"},
+            },
+        ],
+    )
+    written = _run_capture_oci(monkeypatch, tmp_path, archive)
+    assert written.read_text(encoding="utf-8").strip() == digest
+
+
+def test_capture_digest_oci_mode_errors_when_archive_missing(monkeypatch, tmp_path) -> None:
+    module = _load_script("capture-digest.py")
     monkeypatch.setenv("IMAGE_NAME", "devflows-e2e-devcontainer")
     monkeypatch.setenv("IMAGE_TAG", "e2e")
     monkeypatch.setenv("MATRIX_PLATFORM_TAG", "linux-amd64")
     monkeypatch.setenv("DIGEST_DIR", str(tmp_path / "digests"))
-    monkeypatch.setenv("DIGEST_SOURCE", "local")
+    monkeypatch.setenv("DIGEST_SOURCE", "oci")
+    monkeypatch.setenv("DIGEST_OCI_ARCHIVE", str(tmp_path / "nope.tar"))
 
-    assert module.main() == 0
-    assert (tmp_path / "digests/linux-amd64").read_text(encoding="utf-8").strip() == digest
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    # A no-op build leaves no archive; that must fail rather than pass vacuously.
+    assert "OCI archive not found" in str(excinfo.value)
 
 
-def test_capture_digest_local_mode_rejects_non_sha256(monkeypatch, tmp_path) -> None:
+def test_capture_digest_oci_mode_rejects_non_sha256(monkeypatch, tmp_path) -> None:
     module = _load_script("capture-digest.py")
-
-    monkeypatch.setattr(
-        module.subprocess,
-        "run",
-        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout="not-a-digest\n"),
+    archive = tmp_path / "output.tar"
+    _write_oci_archive(
+        archive,
+        [{"digest": "deadbeef", "platform": {"architecture": "amd64", "os": "linux"}}],
     )
     monkeypatch.setenv("IMAGE_NAME", "devflows-e2e-devcontainer")
     monkeypatch.setenv("IMAGE_TAG", "e2e")
     monkeypatch.setenv("MATRIX_PLATFORM_TAG", "linux-amd64")
     monkeypatch.setenv("DIGEST_DIR", str(tmp_path / "digests"))
-    monkeypatch.setenv("DIGEST_SOURCE", "local")
+    monkeypatch.setenv("DIGEST_SOURCE", "oci")
+    monkeypatch.setenv("DIGEST_OCI_ARCHIVE", str(archive))
 
     with pytest.raises(SystemExit) as excinfo:
         module.main()
-    assert "unexpected local image id" in str(excinfo.value)
+    assert "unexpected manifest digest" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #
