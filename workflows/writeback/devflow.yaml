@@ -6,7 +6,7 @@ owners:
   - DevFlows maintainers
 release:
   type: simple
-  major: 1
+  major: 0
 docs:
   category: Utilities
   keywords:

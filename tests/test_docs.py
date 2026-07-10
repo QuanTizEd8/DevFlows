@@ -16,7 +16,11 @@ def test_workflow_docs_include_interface_sections() -> None:
 
     assert "# Pandoc" in rendered
     assert "| pandoc-image | string | False | pandoc/latex:3-ubuntu |" in rendered
-    assert "QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1" in rendered
+    # Pre-1.0 (0.x): the reference recommends exact tags / SHAs, not a moving
+    # major tag, and documents that moving majors begin at 1.0.
+    assert "QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/vX.Y.Z" in rendered
+    assert "pre-1.0 (0.x)" in rendered
+    assert "Moving major tags (`pandoc/vN`) begin at the 1.0 release." in rendered
 
 
 def test_pandoc_docs_include_image_notes() -> None:
@@ -41,7 +45,7 @@ def test_build_devcontainer_docs_include_filtered_interface() -> None:
 
     assert "# Build Devcontainer" in rendered
     assert (
-        "QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1"
+        "QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/vX.Y.Z"
         in rendered
     )
     assert "| image-name | string | True |  |" in rendered

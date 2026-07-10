@@ -33,8 +33,15 @@
       "additionalProperties": false,
       "required": ["type", "major"],
       "properties": {
-        "type": { "type": "string" },
-        "major": { "type": "integer", "minimum": 0 }
+        "type": {
+          "type": "string",
+          "description": "release-please release-type for this package (e.g. simple)."
+        },
+        "major": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current released major version line for this workflow, cross-validated against the major of its release-please manifest version. It is 0 while the workflow is pre-1.0 (the 0.x pre-completion contract); moving-major-tag automation and moving-major consumer references activate only once this reaches 1. Bump it to 1 in the same change that bumps the manifest baseline to 1.0.0."
+        }
       }
     },
     "docs": {

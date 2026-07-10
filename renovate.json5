@@ -1,0 +1,71 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+    // Keep every GitHub Action SHA-pinned AND carry a readable version comment,
+    // matching the repository's strict-SHA-pin policy (zizmor hash-pin).
+    "helpers:pinGitHubActionDigestsToSemver",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  // Conventional-commit scopes so release-please attributes dependency PRs to the
+  // right area. Action/pin bumps to the shared generator are shared-tooling
+  // changes; the propagation guard flags any that need a per-workflow release.
+  commitMessagePrefix: "chore(deps):",
+  labels: ["dependencies"],
+  // ---------------------------------------------------------------- managers
+  // github-actions:   uses: <action>@<sha> # <version> in .github/workflows/**
+  // dockerfile:       FROM ...@sha256:...  in .devcontainer/Dockerfile
+  // devcontainer:     features + images in .devcontainer/devcontainer.json
+  // pixi:             pixi.toml dependencies + pixi.lock refresh (experimental;
+  //                   a manual `task pixi-lock` fallback is documented in
+  //                   docs/dev-guide/environment.md).
+  // custom (regex):   the ActionPin registry in src/devflows/actions.py.
+  dockerfile: {
+    managerFilePatterns: ["/^\\.devcontainer/Dockerfile$/"]
+  },
+  pixi: {
+    enabled: true
+  },
+  lockFileMaintenance: {
+    // Refresh pixi.lock (and any other lockfiles) on a schedule; the manual
+    // `task pixi-lock` path stays authoritative if the pixi manager lags.
+    enabled: true,
+    schedule: ["before 5am on monday"]
+  },
+  customManagers: [
+    {
+      // Update the SHA-pin registry that publish.py and scenarios.py consume.
+      // Each entry is ActionPin("<repo>", "<40-char sha>", "v<version>"); Renovate
+      // bumps the digest and the version string together from github-tags.
+      customType: "regex",
+      managerFilePatterns: ["/^src/devflows/actions\\.py$/"],
+      matchStrings: [
+        'ActionPin\\(\\s*"(?<depName>[^"]+?)",\\s*"(?<currentDigest>[a-f0-9]{40})",\\s*"(?<currentValue>v[0-9][^"]*)"'
+      ],
+      datasourceTemplate: "github-tags",
+      versioningTemplate: "semver"
+    }
+  ],
+  // ------------------------------------------------------------- packageRules
+  packageRules: [
+    {
+      // Group routine GitHub Action digest refreshes (both the workflow files
+      // and the actions.py registry) into one PR to cut review noise.
+      matchManagers: ["github-actions", "custom.regex"],
+      matchUpdateTypes: ["digest", "pin", "pinDigest", "minor", "patch"],
+      groupName: "github actions"
+    },
+    {
+      // Major action bumps can change interfaces the generator maps 1:1, so keep
+      // them separate for deliberate review.
+      matchManagers: ["github-actions", "custom.regex"],
+      matchUpdateTypes: ["major"],
+      groupName: "github actions (major)"
+    },
+    {
+      matchManagers: ["devcontainer"],
+      groupName: "devcontainer features"
+    }
+  ]
+}

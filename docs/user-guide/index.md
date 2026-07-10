@@ -12,7 +12,7 @@ it independently. A consuming repository calls a workflow as a job:
 ```yaml
 jobs:
   convert-docs:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.2.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -30,8 +30,9 @@ owner/name if you consume DevFlows from a fork.
 1. Pick a workflow from the {doc}`workflow catalog </reference/catalog>`.
 2. Read its generated reference page for inputs, secrets, outputs, permissions,
    examples, and test scenarios.
-3. Call the workflow with a versioned reference:
-   `QuanTizEd8/DevFlows/.github/workflows/<workflow-id>.yaml@<workflow-id>/v1`.
+3. Call the workflow with a versioned reference. Every workflow is currently
+   pre-1.0, so pin an exact release tag or a commit SHA:
+   `QuanTizEd8/DevFlows/.github/workflows/<workflow-id>.yaml@<workflow-id>/vX.Y.Z`.
 4. Prefer pinned input values, especially Docker image tags and release tags.
 5. Give the caller workflow only the permissions and secrets it needs.
 6. Use the standard IO channels when available: checkout for source input,
@@ -42,18 +43,19 @@ owner/name if you consume DevFlows from a fork.
 
 ### Recommended Version References
 
-DevFlows uses per-workflow tags. For a workflow named `pandoc`, common
-references look like this:
+DevFlows uses per-workflow tags. Every workflow is currently pre-1.0 (`0.x`), so
+pin an exact release tag or a commit SHA. Moving major tags become available
+once a workflow reaches `1.0.0`. For a workflow named `pandoc`:
 
 ```yaml
-# Stable convenience reference for compatible v1 updates.
-uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
-
-# Exact workflow release.
-uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
+# Exact workflow release (recommended during 0.x).
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.2.0
 
 # Highest assurance, pinned to a commit.
 uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@<commit-sha>
+
+# Available from the 1.0.0 release onward: moving major tag for compatible updates.
+# uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
 ```
 
 ### What To Read Next

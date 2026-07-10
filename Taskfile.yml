@@ -66,8 +66,15 @@ tasks:
   lint:workflows:
     desc: Lint GitHub Actions workflows with actionlint and zizmor.
     cmds:
+      # actionlint scans the generated, runnable workflows. Source workflows
+      # reference the generator-injected `devflows-runtime` step, so actionlint
+      # cannot type-check them standalone; the sync drift check guarantees the
+      # generated output faithfully reflects the sources it does scan.
       - pixi run -- actionlint .github/workflows/*.yaml
-      - pixi run -- zizmor .
+      # zizmor's security audits do not depend on injected steps, so it scans
+      # BOTH the generated workflows and the source workflows, catching template
+      # injection or unpinned-uses in sources before they are ever generated.
+      - pixi run -- zizmor . workflows/*/workflow.yaml
 
   lint:yaml:
     desc: Lint YAML files with yamllint.
@@ -137,7 +144,30 @@ tasks:
     cmds:
       - pixi run -- devflows release-check
 
+  propagation-check:
+    desc: >-
+      Fail when a shared-generator change alters a published workflow without a
+      change release-please can attribute to it. Diffs against DEVFLOWS_BASE_SHA
+      (set in CI); a no-op when it is unset.
+    cmds:
+      - pixi run -- devflows propagation-check
+
   # ---------------------------------------------------------------- maintenance
+  pixi-lock:
+    desc: >-
+      Refresh pixi.lock from pixi.toml (the reliable path when Renovate's
+      experimental pixi manager lags). Review the diff before committing.
+    cmds:
+      - pixi lock
+
+  env-lock:
+    desc: >-
+      Refresh the reproducible-environment locks (pixi.lock now; see
+      docs/dev-guide/environment.md for the devcontainer feature and base-image
+      digest refresh, which need docker / the devcontainer CLI).
+    deps:
+      - pixi-lock
+
   clean:
     desc: Remove generated docs, build artifacts, and tool caches.
     cmds:
