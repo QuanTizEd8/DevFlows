@@ -13,7 +13,8 @@ body:
     id: workflow-id
     attributes:
       label: Proposed workflow ID
-      description: A stable, lowercase, hyphenated identifier (e.g. build-devcontainer).
+      description:
+        A stable, lowercase, hyphenated identifier (e.g. build-devcontainer).
       placeholder: "my-workflow"
     validations:
       required: true
@@ -21,7 +22,8 @@ body:
     id: purpose
     attributes:
       label: Purpose
-      description: What does this workflow do, and what problem does it solve for callers?
+      description:
+        What does this workflow do, and what problem does it solve for callers?
     validations:
       required: true
   - type: dropdown
@@ -38,20 +40,25 @@ body:
     id: interface
     attributes:
       label: Proposed interface
-      description: Key inputs, secrets, outputs, and which shared IO channels (checkout, artifact, writeback) it needs.
+      description:
+        Key inputs, secrets, outputs, and which shared IO channels (checkout,
+        artifact, writeback) it needs.
     validations:
       required: true
   - type: textarea
     id: tools
     attributes:
       label: Underlying tools or actions
-      description: The container images or third-party actions this workflow would wrap.
+      description:
+        The container images or third-party actions this workflow would wrap.
     validations:
       required: false
   - type: textarea
     id: prior-art
     attributes:
       label: Prior art or draft
-      description: Link an existing draft under workflows/_drafts/ or similar workflows elsewhere, if any.
+      description:
+        Link an existing draft under workflows/_drafts/ or similar workflows
+        elsewhere, if any.
     validations:
       required: false

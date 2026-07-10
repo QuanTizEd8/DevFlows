@@ -13,8 +13,9 @@ See CONTRIBUTING.md for details.
 
 ## Checklist
 
-- [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/)
-      (e.g. `feat(pandoc): ...`, `fix(writeback): ...`).
+- [ ] PR title follows
+      [Conventional Commits](https://www.conventionalcommits.org/) (e.g.
+      `feat(pandoc): ...`, `fix(writeback): ...`).
 - [ ] I edited workflow **sources** under `workflows/<id>/`, not the generated
       files in `.github/workflows/`.
 - [ ] Regenerated outputs are committed (`devflows sync`, `devflows docs`,

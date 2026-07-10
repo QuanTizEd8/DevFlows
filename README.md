@@ -13,11 +13,11 @@ publishing), so a project can adopt one workflow or compose several.
 
 ## Promoted workflows
 
-| Workflow                                | What it does                                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `.github/workflows/pandoc.yaml`         | Convert documents with official Pandoc Docker images, with checkout, artifact, and optional writeback channels. |
-| `.github/workflows/build-devcontainer.yaml` | Build platform-specific devcontainer images and optionally merge them into a multi-arch image tag. |
-| `.github/workflows/writeback.yaml`      | Commit a validated writeback payload artifact back to a repository branch.                        |
+| Workflow                                    | What it does                                                                                                    |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/pandoc.yaml`             | Convert documents with official Pandoc Docker images, with checkout, artifact, and optional writeback channels. |
+| `.github/workflows/build-devcontainer.yaml` | Build platform-specific devcontainer images and optionally merge them into a multi-arch image tag.              |
+| `.github/workflows/writeback.yaml`          | Commit a validated writeback payload artifact back to a repository branch.                                      |
 
 Every other workflow lives under `workflows/_drafts/` and is not part of the
 public catalog until it is reviewed, documented, tested, and promoted.
@@ -49,8 +49,8 @@ tags before wiring a workflow into CI.
 Each workflow has its own independent version line and release history; the
 repository does not share one global version across workflows.
 
-- Per-workflow tags are scoped by workflow ID: `<id>/vX.Y.Z`
-  (for example `pandoc/v1.0.0`, `writeback/v1.2.3`).
+- Per-workflow tags are scoped by workflow ID: `<id>/vX.Y.Z` (for example
+  `pandoc/v1.0.0`, `writeback/v1.2.3`).
 - Within a major version, promoted workflows avoid breaking existing callers.
   Breaking interface changes ship in a new major line.
 - The project is **pre-release**: no tags are published yet and interfaces may
@@ -90,9 +90,9 @@ devflows sync      # regenerate .github/workflows/ from workflows/<id>/
 ```
 
 The `pixi run lint` gate fails if the generated workflows, docs, or scenario
-tests have drifted from their sources. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide and
-[SECURITY.md](SECURITY.md) for the security policy.
+tests have drifted from their sources. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the full contributor guide and [SECURITY.md](SECURITY.md) for the security
+policy.
 
 ## License
 

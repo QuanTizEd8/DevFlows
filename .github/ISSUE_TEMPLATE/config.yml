@@ -2,7 +2,8 @@ blank_issues_enabled: false
 contact_links:
   - name: Documentation
     url: https://quantized8.github.io/DevFlows/
-    about: User and developer guides for calling, versioning, and building workflows.
+    about:
+      User and developer guides for calling, versioning, and building workflows.
   - name: Security vulnerability
     url: https://github.com/QuanTizEd8/DevFlows/security/advisories/new
     about: Report a security issue privately. Please do not open a public issue.

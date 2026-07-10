@@ -1,5 +1,6 @@
 name: Bug report
-description: Report incorrect or unexpected behavior in a DevFlows workflow or the CLI.
+description:
+  Report incorrect or unexpected behavior in a DevFlows workflow or the CLI.
 labels:
   - bug
 body:
@@ -26,7 +27,8 @@ body:
     id: ref
     attributes:
       label: Version or ref pinned
-      description: The tag or commit SHA you referenced (e.g. pandoc/v1.0.0 or a full SHA).
+      description:
+        The tag or commit SHA you referenced (e.g. pandoc/v1.0.0 or a full SHA).
       placeholder: "pandoc/v1.0.0"
     validations:
       required: true
@@ -34,7 +36,8 @@ body:
     id: caller
     attributes:
       label: Caller workflow snippet
-      description: The relevant part of the workflow that calls DevFlows (redact secrets).
+      description:
+        The relevant part of the workflow that calls DevFlows (redact secrets).
       render: yaml
       placeholder: |
         jobs:

@@ -33,10 +33,9 @@ Local GitHub Actions scenario tests (require Docker + `act`):
 pixi run test-local   # or: task test:local
 ```
 
-`pixi run lint` is the gate: it runs `devflows validate`, the `--check`
-variants of `sync`, `docs`, and `test-generate`, plus actionlint, ruff,
-yamllint, taplo, shell linting, and zizmor. Run it before opening a pull
-request.
+`pixi run lint` is the gate: it runs `devflows validate`, the `--check` variants
+of `sync`, `docs`, and `test-generate`, plus actionlint, ruff, yamllint, taplo,
+shell linting, and zizmor. Run it before opening a pull request.
 
 ## Source vs generated model
 
@@ -49,9 +48,9 @@ under `workflows/<workflow-id>/`:
 
 `devflows sync` expands those sources into the consumer-facing copies in
 `.github/workflows/`, injecting the shared checkout / artifact / writeback IO
-channels. **Never edit `.github/workflows/<id>.yaml` (or its `.github/workflows/<id>/`
-support scripts) directly** — your change will be overwritten and CI will fail
-the drift check.
+channels. **Never edit `.github/workflows/<id>.yaml` (or its
+`.github/workflows/<id>/` support scripts) directly** — your change will be
+overwritten and CI will fail the drift check.
 
 After changing any source, regenerate and commit the outputs together:
 
@@ -66,10 +65,10 @@ committed outputs are stale.
 
 ## Conventional commits (required)
 
-DevFlows uses [Conventional Commits](https://www.conventionalcommits.org/).
-This is **required**: release-please derives each workflow's version and
-changelog from commit messages, so an incorrectly typed or scoped commit
-produces a wrong (or missing) release.
+DevFlows uses [Conventional Commits](https://www.conventionalcommits.org/). This
+is **required**: release-please derives each workflow's version and changelog
+from commit messages, so an incorrectly typed or scoped commit produces a wrong
+(or missing) release.
 
 Use a workflow ID as the scope for changes to that workflow's behavior:
 
