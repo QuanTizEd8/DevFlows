@@ -1,0 +1,405 @@
+id: zenodo-release
+name: Zenodo Release
+summary: >-
+  Cut a research-software release from a tag in-house: create or update a GitHub
+  Release (assets, optional linked discussion, DOI-annotated notes) via the gh CLI,
+  and create or update a matching Zenodo (or Zenodo Sandbox) deposition with metadata
+  and file uploads and a reserved-or-registered DOI via a DevFlows-owned requests
+  script hitting the Zenodo REST API directly. The two targets are independently
+  gated; no third-party action ever holds a secret.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Publishing
+  keywords:
+    - zenodo
+    - doi
+    - github-release
+    - citation
+    - research-software
+    - archive
+    - publish
+io:
+  job: prepare
+  runtime: true
+  checkout: true
+  artifact-download: true
+  artifact-download-jobs:
+    - zenodo-deposit
+    - release
+  runtime-jobs:
+    - validate
+    - zenodo-deposit
+    - release
+notes:
+  - >-
+    Callers must grant permissions: contents: write, actions: read, and
+    discussions: write on the calling job. contents: write creates the GitHub
+    Release; actions: read is the artifact-download channel grant on the jobs that
+    ingest assets; discussions: write is requested by the release job (only
+    exercised when release-discussion-category is set, but GitHub validates every
+    nested job permission at startup, before any `if:`, so a skipped job's grant
+    must still be present). The workflow declares permissions: {} at the top and no
+    contents: write on any Zenodo job: all authority to mutate Zenodo comes from the
+    zenodo-token / zenodo-sandbox-token secret, never a GITHUB_TOKEN scope.
+  - >-
+    Replaces the draft cd-github-zenodo, whose single matrix job forwarded both
+    Zenodo tokens AND contents: write to the mutable third-party action
+    RepoDynamics/ReleaseMan@main. Here NO third-party action ever holds a secret: the
+    GitHub Release is driven by the gh CLI with the built-in GITHUB_TOKEN, and Zenodo
+    by a DevFlows-owned requests script (deposit.py) that calls the Zenodo REST API
+    directly. The token reaches exactly one step -- deposit.py -- as ZENODO_TOKEN,
+    never a download, checkout, preflight, or gh step, and the credentialed
+    zenodo-deposit job disables checkout so caller code never coexists with the token.
+  - >-
+    Two independently-gated targets, not a fused matrix job. release-enabled and
+    zenodo-enabled are separate booleans and at least one must be true (validate
+    rejects a nothing-to-do call), so a consumer can do GitHub-release-only with no
+    Zenodo account, Zenodo-only, or both. When both run, the release job is ordered
+    AFTER zenodo-deposit (needs it, tolerates skipped) so the minted or reserved DOI
+    is appended to the release notes when release-append-doi-enabled -- preserving
+    the DOI-per-release story without fusing credentials or blast radii.
+  - >-
+    Three-tier irreversibility, honest by construction. dry-run
+    (publish-dry-run-enabled: prepare previews everything, both credentialed jobs
+    skipped at the job level, no environment bound, no token minted) -> draft
+    (default: create/update the deposition and reserve a DOI on the real or sandbox
+    server, fully discardable) -> publish (opt-in zenodo-publish-enabled, IRREVERSIBLE
+    registered DOI). A published Zenodo record cannot be deleted, so a real
+    (non-sandbox, non-dry-run) publish additionally requires zenodo-publish-confirm to
+    equal release-tag exactly (type-the-name guard) AND a protected
+    zenodo-environment-name. Publishing is never the default and never silent.
+  - >-
+    Environment gating mirrors pypi's testpypi/pypi split. zenodo-environment-name is
+    required non-empty whenever zenodo-enabled: bind a distinct UNPROTECTED
+    environment for sandbox and a PROTECTED environment (required reviewers) for real
+    Zenodo, with concurrency group zenodo-release-<environment> and
+    cancel-in-progress: false. release-environment-name is optional (empty expression
+    = unbound, the GITHUB_TOKEN-only precedent) so a lightweight same-repo release is
+    not forced into an environment. Keep sandbox and production tokens as separate
+    secrets so a sandbox rehearsal never risks the production credential.
+  - >-
+    Metadata comes from typed inputs or CITATION.cff, explicit always winning.
+    zenodo-title / zenodo-creators / zenodo-description (and zenodo-upload-type /
+    zenodo-version / zenodo-license / zenodo-keywords) are primary;
+    zenodo-metadata-cff-path is an optional convenience parsed ONLY in the
+    credential-free prepare job (which alone checks out) and overridden by any
+    explicit input; zenodo-metadata-extra is a validated JSON escape hatch for
+    advanced fields (related_identifiers, communities, grants, access_right) that
+    rejects DevFlows-owned/derived keys (doi, prereserve_doi, conceptdoi, and the
+    typed fields) so nothing is smuggled past the typed inputs. The credentialed
+    deposit job consumes the resolved metadata JSON as a job output and never checks
+    out.
+  - >-
+    Digest verification is OPTIONAL here because the assets are heterogeneous (a
+    python-build dist has a schema-1 dist-manifest; a paper PDF has none). When
+    publish-dist-manifest is supplied, every matched Zenodo asset is sha256+size
+    verified bidirectionally in prepare and re-verified atomically inside the
+    credentialed zenodo-deposit job immediately before upload (a TOCTOU guard, since
+    an artifact handed across jobs is not immutable), and every parsed manifest
+    version must equal the resolved version; a mismatch, an unlisted file, a missing
+    file, or version skew fails loudly. When it is empty, assets upload as-is with
+    their computed sha256 recorded in the job summary for provenance. The name is the
+    canonical publish-dist-manifest even though consumption is optional.
+  - >-
+    No raw-argument passthrough. Both underlying tools are driven entirely by typed
+    inputs -- the gh CLI by release.py and the Zenodo REST API by deposit.py -- so
+    this workflow exposes NO gh/zenodo argument passthrough at all, the tightest form
+    of the -arguments-hardening convention (there is nothing to smuggle). The concept
+    vs version DOI split is explicit: zenodo-concept-doi empty creates a brand-new
+    record, non-empty adds a new version of that concept (deposit.py resolves it to
+    the latest record and POSTs newversion); the stable concept DOI is output as
+    zenodo-concept-doi and the per-release version DOI as zenodo-doi, with
+    zenodo-new-version-file-mode choosing whether inherited files are replaced or kept.
+  - >-
+    Tooling and footprint. The GitHub Release uses the gh CLI (preinstalled).
+    deposit.py drives the Zenodo REST API with requests, and prepare parses
+    CITATION.cff with PyYAML; both libraries are installed ephemerally via a
+    SHA-pinned setup-uv (uv run --with, enable-cache: false) at a Renovate-managed
+    pinned version, so no third-party publishing action exists. Scripts are ASCII-only
+    and split into per-job slices -- the requests-based zenodo_api client is inlined
+    only into the deposit job and the credentialed job carries a LEAN reverify.py
+    (recompute + atomic manifest compare, no glob/metadata re-inline) -- so the
+    generated workflow stays well under GitHub's size limit. uv-cache-mode is
+    deliberately NOT exposed: the only uv use is a one-shot tool install, so
+    enable-cache: false with no caller-influenced cache key.
+  - >-
+    HONESTY -- what the in-repo scenarios prove and what they cannot. The hosted
+    dry-run scenarios exercise the full credential-free prepare chain end to end
+    (artifact ingestion, glob resolution, digest verification, CITATION.cff parsing,
+    metadata merge, plan preview) and assert every credentialed job stays skipped and
+    every credentialed output is empty, all without a token. They CANNOT prove: real
+    GitHub Release creation (needs contents: write and a real tag), Zenodo token
+    exchange, DOI reservation or minting, server-side metadata acceptance, newversion
+    semantics, or that a mid-run digest MISMATCH is rejected (a `uses:` job cannot be
+    kept green while failing). Those paths -- deposit.py against a mocked requests
+    session, release.py against a fake gh, and the verify/reverify/parse matrices --
+    are covered exhaustively by tests/test_zenodo_release.py. Credential-real
+    rehearsal paths: (a) zenodo-sandbox-enabled against sandbox.zenodo.org with a
+    sandbox token (discardable 10.5072 DOIs -- the reason the selector exists); (b)
+    draft-only mode leaves a discardable draft even on real Zenodo; (c) a documented
+    workflow_dispatch dogfood publishing this repo's own release to sandbox once
+    before the first real release; (d) the GitHub-release path is rehearsable via an
+    ephemeral-tag scenario on trusted push/dispatch.
+examples:
+  - name: Release to GitHub and Zenodo from a tag
+    path: tests/fixtures/zenodo-release/github-and-zenodo.yaml
+  - name: Cut a GitHub Release only (no Zenodo account)
+    path: tests/fixtures/zenodo-release/github-release-only.yaml
+tests:
+  scenarios:
+    # Success scenarios are hosted-only and always dry-run: a release/deposition
+    # cannot reach GitHub or Zenodo from PR CI, so they prove the credential-free
+    # prepare chain and assert every credentialed job is skipped. Digest-mismatch
+    # rejection and the deposit/release matrices live in tests/test_zenodo_release.py.
+    - id: dry-run-explicit
+      name: Dry-run with explicit metadata verifies globs and digests without a token
+      runs:
+        - hosted
+      setup-artifact:
+        name: zenodo-release-dry-assets
+        path: .devflows-test/zenodo-release/assets
+        files:
+          - path: .devflows-test/zenodo-release/assets/zenodo_release_fixture-0.1.0.tar.gz
+            content: "zenodo-release sdist fixture\n"
+          - path: .devflows-test/zenodo-release/assets/paper.pdf
+            content: "zenodo-release paper fixture\n"
+      inputs:
+        release-tag: v0.1.0
+        release-enabled: true
+        release-asset-globs: "*.tar.gz"
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-title: Zenodo Release Fixture
+        zenodo-creators: "Doe, Jane | DevFlows | 0000-0002-1825-0097"
+        zenodo-description: A dry-run fixture deposition.
+        zenodo-asset-globs: |
+          *.tar.gz
+          *.pdf
+        publish-dry-run-enabled: true
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"zenodo_release_fixture-0.1.0.tar.gz","sha256":"cb6fb5c419a852a3f126b9676d43952b46f1ecc0837597227bd9577173d77662","size":29,"kind":"sdist"},{"name":"paper.pdf","sha256":"ac68639147e871041ae2dfd1fd252ee7579bf0161f643b82929ace51b520006c","size":29,"kind":"other"}]}'
+        checkout-enabled: false
+        artifact-download-enabled: true
+        artifact-download-name: zenodo-release-dry-assets
+        artifact-download-path: download-assets
+      assertions:
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
+        - type: workflow-output-equals
+          name: release-tag
+          value: v0.1.0
+        - type: workflow-output-equals
+          name: release-url
+          value: ""
+        - type: workflow-output-equals
+          name: zenodo-doi
+          value: ""
+        - type: workflow-output-equals
+          name: zenodo-state
+          value: ""
+    - id: dry-run-cff
+      name: Dry-run derives Zenodo metadata from CITATION.cff without a token
+      runs:
+        - hosted
+      setup-artifact:
+        name: zenodo-release-cff-assets
+        path: .devflows-test/zenodo-release/cff-assets
+        files:
+          - path: .devflows-test/zenodo-release/cff-assets/zenodo_release_fixture-0.1.0.tar.gz
+            content: "zenodo-release sdist fixture\n"
+      inputs:
+        release-tag: v0.1.0
+        release-enabled: false
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-metadata-cff-path: tests/scenarios/zenodo-release/CITATION.cff
+        zenodo-asset-globs: "*.tar.gz"
+        publish-dry-run-enabled: true
+        checkout-enabled: true
+        artifact-download-enabled: true
+        artifact-download-name: zenodo-release-cff-assets
+        artifact-download-path: download-assets
+      assertions:
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
+        - type: workflow-output-equals
+          name: zenodo-doi
+          value: ""
+    # Failure-path scenarios run validate-inputs.py directly through the
+    # validation-failure harness (no reusable call), so they run under both act and
+    # hosted CI. Each pins a stable substring of the rejection it targets.
+    - id: nothing-to-do
+      name: Neither target enabled fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "Nothing to do"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: false
+        zenodo-enabled: false
+    - id: bad-tag
+      name: A non-ref-safe release-tag fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "valid git ref"
+      inputs:
+        release-tag: "bad tag..name"
+        release-enabled: true
+    - id: notes-mutually-exclusive
+      name: release-notes and release-notes-file together fail validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "mutually exclusive"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: true
+        release-notes: Hand-written notes.
+        release-notes-file: NOTES.md
+    - id: discussion-on-draft
+      name: A discussion category on a draft release fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "release-draft-enabled"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: true
+        release-discussion-category: General
+        release-draft-enabled: true
+    - id: bad-existing-mode
+      name: An invalid release-existing-mode fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "must be one of"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: true
+        release-existing-mode: clobber
+    - id: zenodo-missing-environment
+      name: zenodo-enabled with an empty environment name fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "zenodo-environment-name is required"
+      inputs:
+        release-tag: v1.0.0
+        zenodo-enabled: true
+        zenodo-environment-name: ""
+    - id: zenodo-missing-metadata
+      name: zenodo-enabled without a CFF path and metadata fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "deposition metadata"
+      inputs:
+        release-tag: v1.0.0
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-asset-globs: "*.tar.gz"
+        artifact-download-enabled: true
+    - id: zenodo-no-assets
+      name: zenodo-enabled with empty zenodo-asset-globs fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "zenodo-asset-globs is required"
+      inputs:
+        release-tag: v1.0.0
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-asset-globs: ""
+    - id: publish-confirm-mismatch
+      name: A real publish without a matching confirm fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "zenodo-publish-confirm must equal release-tag"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: false
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-title: Fixture
+        zenodo-creators: "Doe, Jane"
+        zenodo-description: A fixture deposition.
+        zenodo-asset-globs: "*.tar.gz"
+        artifact-download-enabled: true
+        zenodo-publish-enabled: true
+        zenodo-sandbox-enabled: false
+        zenodo-publish-confirm: v9.9.9
+    - id: globs-without-download
+      name: Asset globs with artifact-download disabled fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "artifact-download channel"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: true
+        release-asset-globs: "*.tar.gz"
+        artifact-download-enabled: false
+    - id: unsafe-notes-path
+      name: A release-notes-file escaping the workspace fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "workspace-relative"
+      inputs:
+        release-tag: v1.0.0
+        release-enabled: true
+        release-notes-file: "../secrets.txt"
+    - id: malformed-manifest
+      name: An unparseable publish-dist-manifest fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "not valid JSON"
+      inputs:
+        release-tag: v1.0.0
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-title: Fixture
+        zenodo-creators: "Doe, Jane"
+        zenodo-description: A fixture deposition.
+        zenodo-asset-globs: "*.tar.gz"
+        artifact-download-enabled: true
+        publish-dist-manifest: "{not json"
+    - id: metadata-extra-owned-key
+      name: An owned key in zenodo-metadata-extra fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "owned"
+      inputs:
+        release-tag: v1.0.0
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-asset-globs: "*.tar.gz"
+        artifact-download-enabled: true
+        zenodo-metadata-extra: '{"doi": "10.5281/zenodo.1"}'
+    - id: metadata-extra-not-object
+      name: A non-object zenodo-metadata-extra fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "must be a JSON object"
+      inputs:
+        release-tag: v1.0.0
+        zenodo-enabled: true
+        zenodo-environment-name: zenodo
+        zenodo-asset-globs: "*.tar.gz"
+        artifact-download-enabled: true
+        zenodo-metadata-extra: '["not", "an", "object"]'

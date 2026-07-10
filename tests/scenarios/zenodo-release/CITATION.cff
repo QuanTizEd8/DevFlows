@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+title: Zenodo Release Fixture
+message: If you use this software, please cite it.
+abstract: A fixture project for exercising zenodo-release CITATION.cff parsing.
+version: 0.1.0
+license: MIT
+keywords:
+  - fixture
+  - zenodo
+authors:
+  - family-names: Doe
+    given-names: Jane
+    affiliation: DevFlows
+    orcid: https://orcid.org/0000-0002-1825-0097
+  - name: The DevFlows Maintainers

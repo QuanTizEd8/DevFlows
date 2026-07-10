@@ -87,6 +87,13 @@
       "package-name": "writeback",
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
+    },
+    "workflows/zenodo-release": {
+      "component": "zenodo-release",
+      "release-type": "simple",
+      "package-name": "zenodo-release",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     }
   }
 }

@@ -105,6 +105,28 @@
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: "(?<currentValue>[^"]+)"'
       ],
       versioningTemplate: "pep440"
+    },
+    {
+      // Keep the PyYAML version zenodo-release installs ephemerally (uv run --with
+      // "pyyaml==<version>") in the prepare job current. A unit test
+      // (tests/test_zenodo_release.py) asserts this regex still matches the pin.
+      customType: "regex",
+      managerFilePatterns: ["/^workflows/zenodo-release/workflow\\.yaml$/"],
+      matchStrings: ['--with "pyyaml==(?<currentValue>[^"]+)"'],
+      datasourceTemplate: "pypi",
+      depNameTemplate: "pyyaml",
+      versioningTemplate: "pep440"
+    },
+    {
+      // Keep the requests version zenodo-release installs ephemerally (uv run
+      // --with "requests==<version>") in the zenodo-deposit job current. A unit test
+      // (tests/test_zenodo_release.py) asserts this regex still matches the pin.
+      customType: "regex",
+      managerFilePatterns: ["/^workflows/zenodo-release/workflow\\.yaml$/"],
+      matchStrings: ['--with "requests==(?<currentValue>[^"]+)"'],
+      datasourceTemplate: "pypi",
+      depNameTemplate: "requests",
+      versioningTemplate: "pep440"
     }
   ],
   // ------------------------------------------------------------- packageRules

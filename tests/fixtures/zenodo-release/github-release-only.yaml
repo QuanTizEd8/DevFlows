@@ -1,0 +1,43 @@
+name: Cut a GitHub Release only (no Zenodo account)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# release-only still grants the full permission union: GitHub validates the called
+# workflow's whole job tree at startup, and the release job requests contents: write
+# and discussions: write regardless of the `if:` that skips it. discussions: write is
+# only exercised when release-discussion-category is set.
+permissions: {}
+
+jobs:
+  build:
+    name: Build distributions
+    permissions:
+      contents: read
+      actions: read
+    # Replace python-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    with:
+      dist-artifact-prefix: myproject
+
+  release:
+    name: Cut the GitHub release
+    needs: build
+    if: ${{ !cancelled() && needs.build.outputs.sdist-artifact-name != '' }}
+    permissions:
+      contents: write
+      discussions: write
+      actions: read
+    # Replace zenodo-release/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/zenodo-release.yaml@zenodo-release/v0.1.0
+    with:
+      release-tag: ${{ github.ref_name }}
+      release-enabled: true
+      zenodo-enabled: false
+      release-asset-globs: "*.tar.gz"
+      release-generate-notes-enabled: true
+      artifact-download-enabled: true
+      artifact-download-name: ${{ needs.build.outputs.sdist-artifact-name }}
+      artifact-download-path: dist
