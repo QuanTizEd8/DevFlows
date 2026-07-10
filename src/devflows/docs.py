@@ -45,8 +45,26 @@ def render_workflow(item: Workflow, project: Project | None = None) -> str:
     release = item.metadata.get("release") or {}
     notes = item.metadata.get("notes") or []
     scenarios = item.metadata.get("tests", {}).get("scenarios", []) or []
-    major = release.get("major", 1)
-    uses_reference = project.uses_reference(item.id, f"{item.id}/v{major}")
+    major = release.get("major", 0)
+    if major >= 1:
+        # Post-1.0: moving major tags are published and are the recommended
+        # convenience reference.
+        usage_ref = project.uses_reference(item.id, f"{item.id}/v{major}")
+        versioning_lines = [
+            f"- Current line: `{item.id}/v{major}` (moving major tag).",
+            f"- Exact release tags use `{item.id}/vX.Y.Z`.",
+            "- Commit SHAs remain the highest-assurance reference.",
+        ]
+    else:
+        # Pre-1.0 (0.x): no moving major tag exists yet, so pin an exact release
+        # tag or a commit SHA. Moving major tags activate at the 1.0 release.
+        usage_ref = project.uses_reference(item.id, f"{item.id}/vX.Y.Z")
+        versioning_lines = [
+            "- Status: pre-1.0 (0.x). Pin an exact release tag or a commit SHA.",
+            f"- Exact release tags use `{item.id}/vX.Y.Z`.",
+            f"- Moving major tags (`{item.id}/vN`) begin at the 1.0 release.",
+            "- Commit SHAs remain the highest-assurance reference.",
+        ]
 
     lines = [
         _header(f"workflows/{item.id}/"),
@@ -60,14 +78,12 @@ def render_workflow(item: Workflow, project: Project | None = None) -> str:
         "```yaml",
         "jobs:",
         f"  call-{item.id}:",
-        f"    uses: {uses_reference}",
+        f"    uses: {usage_ref}",
         "```",
         "",
         "## Versioning",
         "",
-        f"- Current line: `{item.id}/v{release.get('major', 1)}`",
-        f"- Exact release tags use `{item.id}/vX.Y.Z`.",
-        "- Commit SHAs remain the highest-assurance reference.",
+        *versioning_lines,
         "",
         "## Inputs",
         "",
