@@ -22,6 +22,12 @@
       "package-name": "python-lint",
       "changelog-path": "CHANGELOG.md"
     },
+    "workflows/python-build": {
+      "component": "python-build",
+      "release-type": "simple",
+      "package-name": "python-build",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/writeback": {
       "component": "writeback",
       "release-type": "simple",

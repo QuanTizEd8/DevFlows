@@ -1,0 +1,438 @@
+name: "[Reusable]: Python Build"
+
+on:
+  workflow_call:
+    inputs:
+      build-package-path:
+        description:
+          Directory containing pyproject.toml, relative to the checked-out workspace. Used as the
+          package directory for the sdist/wheel build and as the cibuildwheel package-dir. Must stay
+          inside GITHUB_WORKSPACE (script-enforced).
+        type: string
+        required: false
+        default: "."
+      build-tool:
+        description:
+          Tool used to build the sdist and pure wheel; either uv (uv build) or python-build
+          (python -m build). Any other value fails validation loudly.
+        type: string
+        required: false
+        default: uv
+      build-tool-version:
+        description:
+          Exact version of the selected build tool (uv release, or the PyPI build version for
+          python-build). Empty installs the workflow's pinned default. Pin for reproducible releases.
+        type: string
+        required: false
+        default: ""
+      build-python-version:
+        description:
+          Python version for the sdist/pure-wheel build environment. Empty defers to the tool's own
+          discovery (.python-version, pyproject requires-python, or tool default).
+        type: string
+        required: false
+        default: ""
+      build-sdist-enabled:
+        description: Whether the dist job builds a source distribution.
+        type: boolean
+        required: false
+        default: true
+      build-wheel-enabled:
+        description:
+          Whether the dist job builds a wheel with the host build tool. Set false for native projects
+          that produce all wheels through cibw-enabled; a host-built wheel of a native project would
+          be a single-platform wheel.
+        type: boolean
+        required: false
+        default: true
+      build-tool-arguments:
+        description:
+          Extra arguments appended to the build command (for example --no-build-isolation or -C
+          config settings). Passed through an environment variable and shlex-split by a DevFlows
+          script; never interpolated into shell text.
+        type: string
+        required: false
+        default: ""
+      build-runner:
+        description: Runner label for the sdist/pure-wheel job.
+        type: string
+        required: false
+        default: ubuntu-latest
+      build-timeout-minutes:
+        description: Maximum minutes for the sdist/pure-wheel job.
+        type: number
+        required: false
+        default: 30
+      cibw-enabled:
+        description:
+          Whether to build native wheels with cibuildwheel across cibw-matrix. When true, cibw-matrix
+          must be a non-empty valid matrix or validation fails.
+        type: boolean
+        required: false
+        default: false
+      cibw-matrix:
+        description: >-
+          JSON array of cibuildwheel legs; this input carries ONLY the matrix (all other cibuildwheel
+          configuration belongs in pyproject.toml [tool.cibuildwheel]). Leg schema (validated before
+          use); each leg is an object with a required string "runner" (e.g. ubuntu-latest, macos-14,
+          windows-latest), an optional string "only" (exact cibuildwheel build identifier such as
+          cp313-manylinux_x86_64), an optional string "build" (CIBW_BUILD pattern), and an optional
+          string "archs" (CIBW_ARCHS). "only" and "build" are mutually exclusive per leg.
+        type: string
+        required: false
+        default: "[]"
+      cibw-config-file:
+        description:
+          Path to a cibuildwheel config file, passed to the pinned pypa/cibuildwheel action's
+          config-file input. Empty uses {package}/pyproject.toml.
+        type: string
+        required: false
+        default: ""
+      cibw-fail-fast:
+        description: Whether one failing cibuildwheel leg cancels the remaining legs.
+        type: boolean
+        required: false
+        default: false
+      cibw-timeout-minutes:
+        description: Maximum minutes per cibuildwheel matrix leg.
+        type: number
+        required: false
+        default: 120
+      conda-enabled:
+        description:
+          Whether to build conda packages with rattler-build across conda-matrix. When true,
+          conda-recipe-path and conda-matrix must be set or validation fails.
+        type: boolean
+        required: false
+        default: false
+      conda-recipe-path:
+        description:
+          Path to the rattler-build recipe (recipe.yaml, v1 recipe format) relative to the workspace.
+          Legacy conda-build meta.yaml recipes are not supported. Required when conda-enabled is true.
+        type: string
+        required: false
+        default: ""
+      conda-matrix:
+        description: >-
+          JSON array of conda build legs; carries ONLY the matrix. Leg schema (validated before use);
+          each leg is an object with a required string "runner" and an optional string
+          "target-platform" (e.g. noarch, linux-64, osx-arm64; passed as rattler-build
+          --target-platform).
+        type: string
+        required: false
+        default: '[{"runner": "ubuntu-latest"}]'
+      conda-channels:
+        description:
+          Newline-separated conda channels used to resolve build/host dependencies (each becomes a -c
+          argument, environment-mediated).
+        type: string
+        required: false
+        default: conda-forge
+      conda-build-arguments:
+        description:
+          Extra arguments appended to rattler-build build. Environment-mediated and shlex-split;
+          never shell-interpolated.
+        type: string
+        required: false
+        default: ""
+      conda-fail-fast:
+        description: Whether one failing conda leg cancels the remaining legs.
+        type: boolean
+        required: false
+        default: false
+      conda-timeout-minutes:
+        description: Maximum minutes per conda matrix leg.
+        type: number
+        required: false
+        default: 60
+      dist-artifact-prefix:
+        description:
+          Prefix for every artifact this workflow publishes (prefix-sdist, prefix-wheels,
+          prefix-conda-channel) and its run-internal intermediates (prefix-internal-*). Callers
+          invoking this workflow more than once in the same run MUST pass distinct values or artifact
+          names collide. Must be non-empty and artifact-name safe (validated).
+        type: string
+        required: false
+        default: python-build
+      dist-artifact-retention-days:
+        description:
+          Retention in days for the final published artifacts. 0 uses the repository default. Internal
+          per-leg intermediates always use 1 day.
+        type: number
+        required: false
+        default: 0
+    outputs:
+      sdist-artifact-name:
+        description:
+          Canonical artifact name containing the sdist (prefix-sdist). Empty string when no sdist was
+          built. Chain into pypi-publish via artifact-download by name.
+        value: ${{ jobs.collect.outputs.sdist-artifact-name }}
+      wheels-artifact-name:
+        description:
+          Canonical wheelhouse artifact name (prefix-wheels); a flat directory of every wheel from the
+          dist and cibw jobs. Empty string when no wheels were built.
+        value: ${{ jobs.collect.outputs.wheels-artifact-name }}
+      conda-artifact-name:
+        description:
+          Canonical conda channel artifact name (prefix-conda-channel); platform subdirectories plus
+          authoritative repodata.json (re-indexed at collect time). Empty string when conda-enabled is
+          false.
+        value: ${{ jobs.collect.outputs.conda-artifact-name }}
+      dist-sha256sums:
+        description:
+          Base64-encoded sha256sum-format lines (one "<hex>  <filename>" line per published
+          distribution file). This is the subjects format expected by slsa-github-generator's generic
+          provenance workflow.
+        value: ${{ jobs.collect.outputs.dist-sha256sums }}
+      dist-manifest:
+        description: >-
+          Versioned JSON manifest with a schema field (1), a files array of objects (name, sha256,
+          size, kind where kind is sdist, wheel, or conda), and an artifacts object mapping sdist,
+          wheels, and conda-channel to their published artifact names. Machine-readable contract for
+          pypi-publish/anaconda-publish chaining and provenance subject lists.
+        value: ${{ jobs.collect.outputs.dist-manifest }}
+      package-version:
+        description:
+          Package version parsed from the built distribution filenames. Collect fails loudly if the
+          produced distributions disagree on version.
+        value: ${{ jobs.collect.outputs.package-version }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          BUILD_TOOL: ${{ inputs.build-tool }}
+          BUILD_SDIST_ENABLED: ${{ inputs.build-sdist-enabled }}
+          BUILD_WHEEL_ENABLED: ${{ inputs.build-wheel-enabled }}
+          CIBW_ENABLED: ${{ inputs.cibw-enabled }}
+          CIBW_MATRIX: ${{ inputs.cibw-matrix }}
+          CONDA_ENABLED: ${{ inputs.conda-enabled }}
+          CONDA_RECIPE_PATH: ${{ inputs.conda-recipe-path }}
+          CONDA_MATRIX: ${{ inputs.conda-matrix }}
+          DIST_ARTIFACT_PREFIX: ${{ inputs.dist-artifact-prefix }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-build/validate-inputs.py"
+
+  dist:
+    name: Build sdist and wheel
+    needs: validate
+    if: inputs.build-sdist-enabled || inputs.build-wheel-enabled
+    runs-on: ${{ inputs.build-runner }}
+    timeout-minutes: ${{ inputs.build-timeout-minutes }}
+    steps:
+      - name: Set up uv
+        if: inputs.build-tool == 'uv'
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: ${{ inputs.build-tool-version }}
+          python-version: ${{ inputs.build-python-version }}
+
+      - name: Set up Python
+        if: inputs.build-tool == 'python-build' && inputs.build-python-version != ''
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ inputs.build-python-version }}
+
+      - name: Build distributions
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          BUILD_TOOL: ${{ inputs.build-tool }}
+          BUILD_SDIST_ENABLED: ${{ inputs.build-sdist-enabled }}
+          BUILD_WHEEL_ENABLED: ${{ inputs.build-wheel-enabled }}
+          BUILD_PACKAGE_PATH: ${{ inputs.build-package-path }}
+          BUILD_TOOL_ARGUMENTS: ${{ inputs.build-tool-arguments }}
+          BUILD_TOOL_VERSION: ${{ inputs.build-tool-version }}
+          OUT_DIR: ${{ runner.temp }}/devflows-dist
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-build/build-dist.py"
+
+      - name: Upload internal dist artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.dist-artifact-prefix }}-internal-dist
+          path: ${{ runner.temp }}/devflows-dist
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  cibw:
+    name: Build native wheels (leg ${{ strategy.job-index }})
+    needs: validate
+    if: inputs.cibw-enabled
+    strategy:
+      fail-fast: ${{ inputs.cibw-fail-fast }}
+      matrix:
+        include: ${{ fromJSON(inputs.cibw-matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ inputs.cibw-timeout-minutes }}
+    steps:
+      - name: Prepare cibuildwheel environment
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          MATRIX_BUILD: ${{ matrix.build }}
+          MATRIX_ARCHS: ${{ matrix.archs }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-build/prepare-cibw-env.py"
+
+      - name: Build native wheels
+        uses: pypa/cibuildwheel@294735312765b09d24a2fbec22660ce817587d55 # v4.1.0
+        with:
+          package-dir: ${{ inputs.build-package-path }}
+          output-dir: ${{ runner.temp }}/devflows-cibw
+          config-file: ${{ inputs.cibw-config-file }}
+          only: ${{ matrix.only }}
+
+      - name: Upload internal cibw artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.dist-artifact-prefix }}-internal-cibw-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/devflows-cibw
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  conda:
+    name: Build conda packages (leg ${{ strategy.job-index }})
+    needs: validate
+    if: inputs.conda-enabled
+    strategy:
+      fail-fast: ${{ inputs.conda-fail-fast }}
+      matrix:
+        include: ${{ fromJSON(inputs.conda-matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ inputs.conda-timeout-minutes }}
+    steps:
+      - name: Set up rattler-build
+        uses: prefix-dev/rattler-build-action@1ca5f45832f419a46d1326ccc5861d7e14d67c44 # v0.2.39
+        with:
+          setup-only: "true"
+          rattler-build-version: v0.68.0
+
+      - name: Build conda packages
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          CONDA_RECIPE_PATH: ${{ inputs.conda-recipe-path }}
+          CONDA_CHANNELS: ${{ inputs.conda-channels }}
+          CONDA_BUILD_ARGUMENTS: ${{ inputs.conda-build-arguments }}
+          MATRIX_TARGET_PLATFORM: ${{ matrix['target-platform'] }}
+          OUT_DIR: ${{ runner.temp }}/devflows-conda
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-build/build-conda.py"
+
+      - name: Upload internal conda artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.dist-artifact-prefix }}-internal-conda-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/devflows-conda
+          if-no-files-found: error
+          retention-days: 1
+          include-hidden-files: true
+          overwrite: true
+
+  collect:
+    name: Collect distributions
+    needs:
+      - dist
+      - cibw
+      - conda
+    # Publish only when no producer failed and at least one succeeded. Every
+    # producer must be success-or-skipped (a failed enabled producer skips collect
+    # and the failed job keeps the run red); at least one must have succeeded
+    # (validate rejects nothing-to-build, so an all-skipped run cannot happen).
+    # Never a bare !cancelled() aggregation.
+    if: >-
+      !cancelled()
+      && (needs.dist.result == 'success' || needs.dist.result == 'skipped')
+      && (needs.cibw.result == 'success' || needs.cibw.result == 'skipped')
+      && (needs.conda.result == 'success' || needs.conda.result == 'skipped')
+      && (needs.dist.result == 'success' || needs.cibw.result == 'success' || needs.conda.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sdist-artifact-name: ${{ steps.collect.outputs.sdist-artifact-name }}
+      wheels-artifact-name: ${{ steps.collect.outputs.wheels-artifact-name }}
+      conda-artifact-name: ${{ steps.collect.outputs.conda-artifact-name }}
+      dist-sha256sums: ${{ steps.collect.outputs.dist-sha256sums }}
+      dist-manifest: ${{ steps.collect.outputs.dist-manifest }}
+      package-version: ${{ steps.collect.outputs.package-version }}
+    steps:
+      - name: Set up uv
+        if: inputs.conda-enabled
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Download internal dist artifact
+        if: needs.dist.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ${{ inputs.dist-artifact-prefix }}-internal-dist
+          path: ${{ runner.temp }}/collect/dist
+          merge-multiple: true
+
+      - name: Download internal cibw artifacts
+        if: needs.cibw.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ${{ inputs.dist-artifact-prefix }}-internal-cibw-*
+          path: ${{ runner.temp }}/collect/cibw
+          merge-multiple: true
+
+      - name: Download internal conda artifacts
+        if: needs.conda.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: ${{ inputs.dist-artifact-prefix }}-internal-conda-*
+          path: ${{ runner.temp }}/collect/conda
+          merge-multiple: true
+
+      - name: Aggregate distributions
+        id: collect
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DIST_ARTIFACT_PREFIX: ${{ inputs.dist-artifact-prefix }}
+          DIST_STAGING: ${{ runner.temp }}/collect/dist
+          CIBW_STAGING: ${{ runner.temp }}/collect/cibw
+          CONDA_STAGING: ${{ runner.temp }}/collect/conda
+          SDIST_OUT: ${{ runner.temp }}/collect/out/sdist
+          WHEELS_OUT: ${{ runner.temp }}/collect/out/wheels
+          CONDA_OUT: ${{ runner.temp }}/collect/out/conda-channel
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-build/collect.py"
+
+      - name: Upload sdist artifact
+        if: steps.collect.outputs.sdist-artifact-name != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.collect.outputs.sdist-artifact-name }}
+          path: ${{ runner.temp }}/collect/out/sdist
+          if-no-files-found: error
+          retention-days: ${{ inputs.dist-artifact-retention-days }}
+          overwrite: true
+
+      - name: Upload wheels artifact
+        if: steps.collect.outputs.wheels-artifact-name != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.collect.outputs.wheels-artifact-name }}
+          path: ${{ runner.temp }}/collect/out/wheels
+          if-no-files-found: error
+          retention-days: ${{ inputs.dist-artifact-retention-days }}
+          overwrite: true
+
+      - name: Upload conda channel artifact
+        if: steps.collect.outputs.conda-artifact-name != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.collect.outputs.conda-artifact-name }}
+          path: ${{ runner.temp }}/collect/out/conda-channel
+          if-no-files-found: error
+          retention-days: ${{ inputs.dist-artifact-retention-days }}
+          overwrite: true

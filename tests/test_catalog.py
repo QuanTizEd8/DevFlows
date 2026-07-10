@@ -11,6 +11,7 @@ def test_catalog_loads_active_workflows() -> None:
         "build-devcontainer",
         "pandoc",
         "python-lint",
+        "python-build",
         "writeback",
     ]
     assert (

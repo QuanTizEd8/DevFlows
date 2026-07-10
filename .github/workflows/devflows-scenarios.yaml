@@ -235,23 +235,19 @@ jobs:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/artifact-download-html/example.html
           ASSERT_TEXT: Pandoc Artifact Input
         run: python harness/scenarios/assert-file-contains.py
-  python_lint_clean_report_hosted_call:
-    name: 'Python Lint: Clean project reports success and uploads the report artifact'
-    uses: ./.github/workflows/python-lint.yaml
+  python_build_pure_wheelhouse_call:
+    name: 'Python Build: Pure uv build produces a wheelhouse and sdist'
+    uses: ./.github/workflows/python-build.yaml
     with:
-      lint-working-directory: tests/scenarios/python-lint/clean
-      lint-report-directory: .devflows-test/python-lint/clean-report
-      artifact-upload-enabled: true
-      artifact-upload-name: python-lint-clean-report
-      artifact-upload-path: .devflows-test/python-lint/clean-report
-      artifact-upload-if-no-files-found: error
+      build-package-path: tests/scenarios/python-build/pure-package
+      dist-artifact-prefix: python-build-pure
     permissions:
       actions: read
       contents: read
-  python_lint_clean_report_hosted_assert:
-    name: 'Python Lint: Clean project reports success and uploads the report artifact assertions'
+  python_build_pure_wheelhouse_assert:
+    name: 'Python Build: Pure uv build produces a wheelhouse and sdist assertions'
     runs-on: ubuntu-latest
-    needs: python_lint_clean_report_hosted_call
+    needs: python_build_pure_wheelhouse_call
     if: always()
     steps:
       - name: Checkout repository
@@ -261,66 +257,54 @@ jobs:
       - name: Assert scenario succeeded
         shell: bash
         env:
-          ACTUAL_RESULT: ${{ needs.python_lint_clean_report_hosted_call.result }}
+          ACTUAL_RESULT: ${{ needs.python_build_pure_wheelhouse_call.result }}
         run: python harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: python-lint-clean-report
-          path: .devflows-test-artifacts/python-lint/clean-report
-      - name: Assert output lint-outcome
+          name: python-build-pure-wheels
+          path: .devflows-test-artifacts/python-build/pure
+      - name: 'Assert file exists: python_build_fixture-0.1.0-py3-none-any.whl'
         shell: bash
         env:
-          ASSERT_NAME: lint-outcome
-          EXPECTED: success
-          ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.lint-outcome }}
-        run: python harness/scenarios/assert-equals.py
-      - name: Assert output ruff-check-outcome
-        shell: bash
-        env:
-          ASSERT_NAME: ruff-check-outcome
-          EXPECTED: success
-          ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.ruff-check-outcome }}
-        run: python harness/scenarios/assert-equals.py
-      - name: Assert output ruff-format-outcome
-        shell: bash
-        env:
-          ASSERT_NAME: ruff-format-outcome
-          EXPECTED: success
-          ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.ruff-format-outcome }}
-        run: python harness/scenarios/assert-equals.py
-      - name: Assert output typecheck-outcome
-        shell: bash
-        env:
-          ASSERT_NAME: typecheck-outcome
-          EXPECTED: success
-          ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.typecheck-outcome }}
-        run: python harness/scenarios/assert-equals.py
-      - name: 'Assert file exists: results.json'
-        shell: bash
-        env:
-          ASSERT_PATH: .devflows-test-artifacts/python-lint/clean-report/results.json
+          ASSERT_PATH: .devflows-test-artifacts/python-build/pure/python_build_fixture-0.1.0-py3-none-any.whl
         run: python harness/scenarios/assert-file-exists.py
-      - name: 'Assert file contains: results.json'
+      - name: Assert output package-version
         shell: bash
         env:
-          ASSERT_PATH: .devflows-test-artifacts/python-lint/clean-report/results.json
-          ASSERT_TEXT: '"version": 1'
-        run: python harness/scenarios/assert-file-contains.py
-  python_lint_violations_advisory_hosted_call:
-    name: 'Python Lint: Advisory mode reports failure but keeps the run green'
-    uses: ./.github/workflows/python-lint.yaml
+          ASSERT_NAME: package-version
+          EXPECTED: 0.1.0
+          ACTUAL: ${{ needs.python_build_pure_wheelhouse_call.outputs.package-version }}
+        run: python harness/scenarios/assert-equals.py
+      - name: Assert output wheels-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: wheels-artifact-name
+          EXPECTED: python-build-pure-wheels
+          ACTUAL: ${{ needs.python_build_pure_wheelhouse_call.outputs.wheels-artifact-name }}
+        run: python harness/scenarios/assert-equals.py
+      - name: Assert output conda-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: conda-artifact-name
+          EXPECTED: ''
+          ACTUAL: ${{ needs.python_build_pure_wheelhouse_call.outputs.conda-artifact-name }}
+        run: python harness/scenarios/assert-equals.py
+  python_build_python_build_tool_call:
+    name: 'Python Build: python -m build tool parity'
+    uses: ./.github/workflows/python-build.yaml
     with:
-      lint-working-directory: tests/scenarios/python-lint/violations
-      lint-enforce: false
-      typecheck-enabled: false
+      build-tool: python-build
+      build-python-version: '3.12'
+      build-package-path: tests/scenarios/python-build/pure-package
+      dist-artifact-prefix: python-build-pybuild
     permissions:
       actions: read
       contents: read
-  python_lint_violations_advisory_hosted_assert:
-    name: 'Python Lint: Advisory mode reports failure but keeps the run green assertions'
+  python_build_python_build_tool_assert:
+    name: 'Python Build: python -m build tool parity assertions'
     runs-on: ubuntu-latest
-    needs: python_lint_violations_advisory_hosted_call
+    needs: python_build_python_build_tool_call
     if: always()
     steps:
       - name: Checkout repository
@@ -330,35 +314,111 @@ jobs:
       - name: Assert scenario succeeded
         shell: bash
         env:
-          ACTUAL_RESULT: ${{ needs.python_lint_violations_advisory_hosted_call.result }}
+          ACTUAL_RESULT: ${{ needs.python_build_python_build_tool_call.result }}
         run: python harness/scenarios/assert-result.py
-      - name: Assert output lint-outcome
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: python-build-pybuild-sdist
+          path: .devflows-test-artifacts/python-build/pybuild
+      - name: 'Assert file exists: python_build_fixture-0.1.0.tar.gz'
         shell: bash
         env:
-          ASSERT_NAME: lint-outcome
-          EXPECTED: failure
-          ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.lint-outcome }}
+          ASSERT_PATH: .devflows-test-artifacts/python-build/pybuild/python_build_fixture-0.1.0.tar.gz
+        run: python harness/scenarios/assert-file-exists.py
+      - name: Assert output sdist-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: sdist-artifact-name
+          EXPECTED: python-build-pybuild-sdist
+          ACTUAL: ${{ needs.python_build_python_build_tool_call.outputs.sdist-artifact-name }}
         run: python harness/scenarios/assert-equals.py
-      - name: Assert output ruff-check-outcome
+  python_build_sdist_only_call:
+    name: 'Python Build: sdist-only build leaves the wheelhouse empty'
+    uses: ./.github/workflows/python-build.yaml
+    with:
+      build-wheel-enabled: false
+      build-package-path: tests/scenarios/python-build/pure-package
+      dist-artifact-prefix: python-build-sdist
+    permissions:
+      actions: read
+      contents: read
+  python_build_sdist_only_assert:
+    name: 'Python Build: sdist-only build leaves the wheelhouse empty assertions'
+    runs-on: ubuntu-latest
+    needs: python_build_sdist_only_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
         shell: bash
         env:
-          ASSERT_NAME: ruff-check-outcome
-          EXPECTED: failure
-          ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.ruff-check-outcome }}
+          ACTUAL_RESULT: ${{ needs.python_build_sdist_only_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: python-build-sdist-sdist
+          path: .devflows-test-artifacts/python-build/sdist
+      - name: 'Assert file exists: python_build_fixture-0.1.0.tar.gz'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-build/sdist/python_build_fixture-0.1.0.tar.gz
+        run: python harness/scenarios/assert-file-exists.py
+      - name: Assert output wheels-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: wheels-artifact-name
+          EXPECTED: ''
+          ACTUAL: ${{ needs.python_build_sdist_only_call.outputs.wheels-artifact-name }}
         run: python harness/scenarios/assert-equals.py
-      - name: Assert output ruff-format-outcome
+  python_build_conda_noarch_call:
+    name: 'Python Build: rattler-build noarch package with a re-indexed channel'
+    uses: ./.github/workflows/python-build.yaml
+    with:
+      build-sdist-enabled: false
+      build-wheel-enabled: false
+      conda-enabled: true
+      conda-recipe-path: tests/scenarios/python-build/conda-recipe/recipe.yaml
+      dist-artifact-prefix: python-build-conda
+    permissions:
+      actions: read
+      contents: read
+  python_build_conda_noarch_assert:
+    name: 'Python Build: rattler-build noarch package with a re-indexed channel assertions'
+    runs-on: ubuntu-latest
+    needs: python_build_conda_noarch_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
         shell: bash
         env:
-          ASSERT_NAME: ruff-format-outcome
-          EXPECTED: failure
-          ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.ruff-format-outcome }}
-        run: python harness/scenarios/assert-equals.py
-      - name: Assert output typecheck-outcome
+          ACTUAL_RESULT: ${{ needs.python_build_conda_noarch_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: python-build-conda-conda-channel
+          path: .devflows-test-artifacts/python-build/conda
+      - name: 'Assert file contains: noarch/repodata.json'
         shell: bash
         env:
-          ASSERT_NAME: typecheck-outcome
-          EXPECTED: skipped
-          ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.typecheck-outcome }}
+          ASSERT_PATH: .devflows-test-artifacts/python-build/conda/noarch/repodata.json
+          ASSERT_TEXT: python-build-conda-fixture
+        run: python harness/scenarios/assert-file-contains.py
+      - name: Assert output conda-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: conda-artifact-name
+          EXPECTED: python-build-conda-conda-channel
+          ACTUAL: ${{ needs.python_build_conda_noarch_call.outputs.conda-artifact-name }}
         run: python harness/scenarios/assert-equals.py
   writeback_ephemeral_branch_writeback_setup:
     name: 'Writeback: Writeback to ephemeral branch setup'
