@@ -8,49 +8,57 @@
       "component": "build-devcontainer",
       "release-type": "simple",
       "package-name": "build-devcontainer",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/deploy-pages": {
       "component": "deploy-pages",
       "release-type": "simple",
       "package-name": "deploy-pages",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/docs-build": {
       "component": "docs-build",
       "release-type": "simple",
       "package-name": "docs-build",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/pandoc": {
       "component": "pandoc",
       "release-type": "simple",
       "package-name": "pandoc",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/python-build": {
       "component": "python-build",
       "release-type": "simple",
       "package-name": "python-build",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/python-lint": {
       "component": "python-lint",
       "release-type": "simple",
       "package-name": "python-lint",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/python-test": {
       "component": "python-test",
       "release-type": "simple",
       "package-name": "python-test",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     },
     "workflows/writeback": {
       "component": "writeback",
       "release-type": "simple",
       "package-name": "writeback",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
     }
   }
 }
