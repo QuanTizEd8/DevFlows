@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devflows-cext-fixture"
+version = "0.1.0"
+description = "Minimal C-extension fixture for the python-build cibuildwheel scenario."
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.cibuildwheel]
+# Pin the manylinux image so the repaired wheel's platform tag is deterministic
+# (manylinux_2_17_x86_64.manylinux2014_x86_64) and the scenario's exact-path
+# file-exists assertion does not depend on cibuildwheel's default image choice.
+manylinux-x86_64-image = "manylinux2014"

@@ -19,12 +19,19 @@ _ARTIFACT_PREFIX = re.compile(r"^[A-Za-z0-9._-]+$")
 
 _CIBW_LEG_KEYS = {"runner", "only", "build", "archs"}
 _CONDA_LEG_KEYS = {"runner", "target-platform"}
+_UV_CACHE_MODES = {"auto", "true", "false"}
 
 
 def main() -> int:
     build_tool = _required("BUILD_TOOL")
     if build_tool not in {"uv", "python-build"}:
         raise SystemExit(f"build-tool must be 'uv' or 'python-build', got {build_tool!r}.")
+
+    uv_cache_mode = os.environ.get("UV_CACHE_MODE", "auto").strip() or "auto"
+    if uv_cache_mode not in _UV_CACHE_MODES:
+        raise SystemExit(
+            f"uv-cache-mode must be one of {sorted(_UV_CACHE_MODES)}, got {uv_cache_mode!r}."
+        )
 
     prefix = _required("DIST_ARTIFACT_PREFIX")
     if not _ARTIFACT_PREFIX.match(prefix):
@@ -66,6 +73,18 @@ def main() -> int:
             "Nothing to build: enable at least one of build-sdist-enabled, "
             "build-wheel-enabled, cibw-enabled, or conda-enabled. This workflow "
             "never silently no-ops."
+        )
+
+    # The caller-facing artifact-download channel lives on the dist job, which is
+    # skipped when both host-build flavors are off. A cibw-/conda-only call that
+    # also enables artifact-download would silently drop the download, so reject it.
+    if _bool("ARTIFACT_DOWNLOAD_ENABLED") and not (build_sdist or build_wheel):
+        raise SystemExit(
+            "artifact-download-enabled is true but both build-sdist-enabled and "
+            "build-wheel-enabled are false; the dist job hosts the artifact-download "
+            "channel and is skipped, so the download would silently no-op. Enable a "
+            "host build (build-sdist-enabled or build-wheel-enabled) or disable "
+            "artifact-download-enabled."
         )
     return 0
 

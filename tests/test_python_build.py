@@ -55,6 +55,8 @@ _VALIDATE_BASE = {
     "BUILD_TOOL": "uv",
     "BUILD_SDIST_ENABLED": "true",
     "BUILD_WHEEL_ENABLED": "true",
+    "UV_CACHE_MODE": "auto",
+    "ARTIFACT_DOWNLOAD_ENABLED": "false",
     "CIBW_ENABLED": "false",
     "CIBW_MATRIX": "[]",
     "CONDA_ENABLED": "false",
@@ -117,6 +119,30 @@ def test_validate_accepts_conda(monkeypatch) -> None:
 
 def test_validate_rejects_unknown_build_tool(monkeypatch) -> None:
     _expect_validate_failure(monkeypatch, "build-tool must be", BUILD_TOOL="poetry")
+
+
+def test_validate_rejects_bad_uv_cache_mode(monkeypatch) -> None:
+    _expect_validate_failure(monkeypatch, "uv-cache-mode must be one of", UV_CACHE_MODE="sometimes")
+
+
+def test_validate_accepts_artifact_download_with_host_build(monkeypatch) -> None:
+    # The dist job (which hosts the artifact-download channel) runs here, so enabling
+    # the download is valid.
+    _run_validate(monkeypatch, ARTIFACT_DOWNLOAD_ENABLED="true")
+
+
+def test_validate_rejects_artifact_download_without_host_build(monkeypatch) -> None:
+    # cibw-only build: the dist job is skipped, so the artifact-download channel would
+    # silently no-op. Must be rejected (not swallowed by "Nothing to build").
+    _expect_validate_failure(
+        monkeypatch,
+        "artifact-download-enabled is true",
+        BUILD_SDIST_ENABLED="false",
+        BUILD_WHEEL_ENABLED="false",
+        CIBW_ENABLED="true",
+        CIBW_MATRIX=json.dumps([{"runner": "ubuntu-latest", "only": "cp313-manylinux_x86_64"}]),
+        ARTIFACT_DOWNLOAD_ENABLED="true",
+    )
 
 
 def test_validate_rejects_nothing_to_build(monkeypatch) -> None:
@@ -693,10 +719,15 @@ def test_interface_inputs_match_design() -> None:
         "conda-build-arguments",
         "conda-fail-fast",
         "conda-timeout-minutes",
+        "uv-cache-mode",
         "dist-artifact-prefix",
         "dist-artifact-retention-days",
     }
     assert workflow_specific <= inputs
+    # uv-cache-mode is the shared string enum defaulting to auto (convention parity).
+    cache_mode = published["on"]["workflow_call"]["inputs"]["uv-cache-mode"]
+    assert cache_mode["type"] == "string"
+    assert cache_mode["default"] == "auto"
     # Generator injects the checkout + artifact-download channel inputs.
     assert {"checkout-enabled", "artifact-download-enabled"} <= inputs
     # artifact-upload and writeback channels are intentionally NOT declared.
@@ -742,6 +773,17 @@ def test_collect_gate_expression_is_explicit() -> None:
         "needs.dist.result == 'success' || needs.cibw.result == 'success' "
         "|| needs.conda.result == 'success'" in gate
     )
+
+
+def test_uv_cache_mode_wired_into_both_setup_uv_steps() -> None:
+    jobs = _published()["jobs"]
+    for job_id in ("dist", "collect"):
+        setup = next(
+            step
+            for step in jobs[job_id]["steps"]
+            if str(step.get("uses", "")).startswith("astral-sh/setup-uv@")
+        )
+        assert setup["with"]["enable-cache"] == "${{ inputs.uv-cache-mode }}"
 
 
 def test_matrix_jobs_receive_checkout_and_runtime() -> None:

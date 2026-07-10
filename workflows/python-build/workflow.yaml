@@ -63,6 +63,14 @@ on:
         type: number
         required: false
         default: 30
+      uv-cache-mode:
+        description:
+          setup-uv enable-cache passthrough; one of auto, true, or false. auto (default) enables
+          the uv cache only on GitHub-hosted runners. Applies to the uv build tool (dist job) and
+          the collect job's uv (conda re-index); validated in the validate job.
+        type: string
+        required: false
+        default: auto
       cibw-enabled:
         description:
           Whether to build native wheels with cibuildwheel across cibw-matrix. When true, cibw-matrix
@@ -212,6 +220,8 @@ jobs:
           BUILD_TOOL: ${{ inputs.build-tool }}
           BUILD_SDIST_ENABLED: ${{ inputs.build-sdist-enabled }}
           BUILD_WHEEL_ENABLED: ${{ inputs.build-wheel-enabled }}
+          UV_CACHE_MODE: ${{ inputs.uv-cache-mode }}
+          ARTIFACT_DOWNLOAD_ENABLED: ${{ inputs.artifact-download-enabled }}
           CIBW_ENABLED: ${{ inputs.cibw-enabled }}
           CIBW_MATRIX: ${{ inputs.cibw-matrix }}
           CONDA_ENABLED: ${{ inputs.conda-enabled }}
@@ -233,6 +243,7 @@ jobs:
         with:
           version: ${{ inputs.build-tool-version }}
           python-version: ${{ inputs.build-python-version }}
+          enable-cache: ${{ inputs.uv-cache-mode }}
 
       - name: Set up Python
         if: inputs.build-tool == 'python-build' && inputs.build-python-version != ''
@@ -368,6 +379,8 @@ jobs:
       - name: Set up uv
         if: inputs.conda-enabled
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: ${{ inputs.uv-cache-mode }}
 
       - name: Download internal dist artifact
         if: needs.dist.result == 'success'

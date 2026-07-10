@@ -48,6 +48,11 @@ name: '[Reusable]: Python Build'
         type: number
         required: false
         default: 30
+      uv-cache-mode:
+        description: setup-uv enable-cache passthrough; one of auto, true, or false. auto (default) enables the uv cache only on GitHub-hosted runners. Applies to the uv build tool (dist job) and the collect job's uv (conda re-index); validated in the validate job.
+        type: string
+        required: false
+        default: auto
       cibw-enabled:
         description: Whether to build native wheels with cibuildwheel across cibw-matrix. When true, cibw-matrix must be a non-empty valid matrix or validation fails.
         type: boolean
@@ -332,12 +337,19 @@ jobs:
 
           _CIBW_LEG_KEYS = {"runner", "only", "build", "archs"}
           _CONDA_LEG_KEYS = {"runner", "target-platform"}
+          _UV_CACHE_MODES = {"auto", "true", "false"}
 
 
           def main() -> int:
               build_tool = _required("BUILD_TOOL")
               if build_tool not in {"uv", "python-build"}:
                   raise SystemExit(f"build-tool must be 'uv' or 'python-build', got {build_tool!r}.")
+
+              uv_cache_mode = os.environ.get("UV_CACHE_MODE", "auto").strip() or "auto"
+              if uv_cache_mode not in _UV_CACHE_MODES:
+                  raise SystemExit(
+                      f"uv-cache-mode must be one of {sorted(_UV_CACHE_MODES)}, got {uv_cache_mode!r}."
+                  )
 
               prefix = _required("DIST_ARTIFACT_PREFIX")
               if not _ARTIFACT_PREFIX.match(prefix):
@@ -379,6 +391,18 @@ jobs:
                       "Nothing to build: enable at least one of build-sdist-enabled, "
                       "build-wheel-enabled, cibw-enabled, or conda-enabled. This workflow "
                       "never silently no-ops."
+                  )
+
+              # The caller-facing artifact-download channel lives on the dist job, which is
+              # skipped when both host-build flavors are off. A cibw-/conda-only call that
+              # also enables artifact-download would silently drop the download, so reject it.
+              if _bool("ARTIFACT_DOWNLOAD_ENABLED") and not (build_sdist or build_wheel):
+                  raise SystemExit(
+                      "artifact-download-enabled is true but both build-sdist-enabled and "
+                      "build-wheel-enabled are false; the dist job hosts the artifact-download "
+                      "channel and is skipped, so the download would silently no-op. Enable a "
+                      "host build (build-sdist-enabled or build-wheel-enabled) or disable "
+                      "artifact-download-enabled."
                   )
               return 0
 
@@ -481,6 +505,8 @@ jobs:
           BUILD_TOOL: ${{ inputs.build-tool }}
           BUILD_SDIST_ENABLED: ${{ inputs.build-sdist-enabled }}
           BUILD_WHEEL_ENABLED: ${{ inputs.build-wheel-enabled }}
+          UV_CACHE_MODE: ${{ inputs.uv-cache-mode }}
+          ARTIFACT_DOWNLOAD_ENABLED: ${{ inputs.artifact-download-enabled }}
           CIBW_ENABLED: ${{ inputs.cibw-enabled }}
           CIBW_MATRIX: ${{ inputs.cibw-matrix }}
           CONDA_ENABLED: ${{ inputs.conda-enabled }}
@@ -652,6 +678,7 @@ jobs:
         with:
           version: ${{ inputs.build-tool-version }}
           python-version: ${{ inputs.build-python-version }}
+          enable-cache: ${{ inputs.uv-cache-mode }}
       - name: Set up Python
         if: inputs.build-tool == 'python-build' && inputs.build-python-version != ''
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
@@ -957,6 +984,8 @@ jobs:
       - name: Set up uv
         if: inputs.conda-enabled
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        with:
+          enable-cache: ${{ inputs.uv-cache-mode }}
       - name: Download internal dist artifact
         if: needs.dist.result == 'success'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1

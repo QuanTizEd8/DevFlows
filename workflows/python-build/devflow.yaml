@@ -85,6 +85,18 @@ notes:
   - >-
     The collect job runs on ubuntu-latest (no collect-runner input in v1). Adding
     a <group>-runner input later is a backward-compatible minor change.
+  - >-
+    The caller-facing artifact-download channel is hosted on the dist job, which is
+    skipped whenever both build-sdist-enabled and build-wheel-enabled are false. A
+    cibw-only or conda-only call that also sets artifact-download-enabled: true is
+    therefore rejected by the validate job, because the download would silently
+    no-op. Enable a host build or leave artifact-download-enabled false in those
+    calls.
+  - >-
+    uv-cache-mode (auto, true, or false) is the setup-uv enable-cache passthrough
+    shared with the sibling workflows and is validated in the validate job. It
+    applies to the uv build tool on the dist job and to the collect job's uv
+    (used to re-index conda channels).
 examples:
   - name: Pure sdist and wheel build
     path: tests/fixtures/python-build/pure-build.yaml
@@ -154,6 +166,36 @@ tests:
         - type: workflow-output-equals
           name: wheels-artifact-name
           value: ""
+    - id: cibw-manylinux
+      # One cheap native leg (cp313-manylinux_x86_64 on ubuntu-latest) that builds
+      # the minimal C-extension fixture end to end: prepare-cibw-env -> the pinned
+      # cibuildwheel action -> collect's flat wheelhouse. The manylinux image is
+      # pinned in the fixture's pyproject [tool.cibuildwheel] so the repaired wheel's
+      # platform tag is deterministic for the exact-path assertion. Expected duration
+      # ~2-4 min (a manylinux2014 container build of a trivial extension); it is the
+      # only hosted cibw leg, so the per-PR cost is bounded.
+      name: cibuildwheel builds a manylinux wheel into the wheelhouse
+      runs:
+        - hosted
+      inputs:
+        build-sdist-enabled: false
+        build-wheel-enabled: false
+        cibw-enabled: true
+        cibw-matrix: '[{"runner": "ubuntu-latest", "only": "cp313-manylinux_x86_64"}]'
+        build-package-path: tests/scenarios/python-build/native-package
+        dist-artifact-prefix: python-build-cibw
+      artifact:
+        name: python-build-cibw-wheels
+        path: .devflows-test-artifacts/python-build/cibw
+      assertions:
+        - type: file-exists
+          path: devflows_cext_fixture-0.1.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+        - type: workflow-output-equals
+          name: wheels-artifact-name
+          value: python-build-cibw-wheels
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
     - id: conda-noarch
       name: rattler-build noarch package with a re-indexed channel
       runs:
