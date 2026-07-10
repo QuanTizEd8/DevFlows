@@ -1,6 +1,31 @@
-.codex/
+# --- Prettier scope policy (DevFlows) ---
+# The devflows generator (`devflows sync` / `devflows test-generate`) is the sole
+# formatting authority for GitHub Actions workflow YAML. Prettier must never
+# reformat generator-owned files, or it would fight `devflows sync --check`:
+#   * generated public + scenario workflows and their support files under
+#     .github/workflows/** (the generator emits its own YAML style, e.g. quoted
+#     'on': keys, which prettier would rewrite)
+#   * catalog sources under workflows/** (workflow.yaml is re-emitted by the
+#     generator; devflow.yaml metadata is authored to match those outputs)
+# Hand-written operational workflows also live under .github/workflows/ and are
+# linted by actionlint + zizmor + yamllint, so workflow YAML formatting as a whole
+# stays out of prettier's scope. Prettier still owns docs (*.md) and standalone
+# config (*.json, non-workflow *.yml/*.yaml such as .prettierrc.yaml and the
+# release-please config).
+
+# Generator-owned / actionlint-owned GitHub Actions workflows (see policy above)
+.github/workflows/
+workflows/
+
+# Environments, caches, and local agent scratch directories
 .pixi/
+.codex/
+.claude/
 .devcontainer/
+
+# Generated documentation output
 docs/_build/
 docs/reference/
-workflows/_drafts/
+
+# Generated lock files (owned by their tooling, not prettier)
+pixi.lock

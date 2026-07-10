@@ -25,5 +25,5 @@ jobs:
           configFile: .devcontainer/devcontainer.json
           runCmd: |
             pixi install
-            pixi run lint
-            pixi run test
+            task lint
+            task test

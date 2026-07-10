@@ -15,7 +15,7 @@ pixi run devflows test-generate
 Then rerun:
 
 ```bash
-pixi run lint
+task lint
 ```
 
 ## `actionlint` Fails Generated Workflows
@@ -63,7 +63,7 @@ The reusable workflow inputs must upload the same artifact name, usually with
 Run:
 
 ```bash
-pixi run release-dry-run
+task release-check
 ```
 
 Then compare active workflow IDs with the package entries in:

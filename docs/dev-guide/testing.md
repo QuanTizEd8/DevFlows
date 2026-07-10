@@ -5,13 +5,13 @@ security, and behavior problems before a workflow is released.
 
 ## Test Layers
 
-Static checks : `pixi run lint` validates metadata, generated-file drift, GitHub
+Static checks : `task lint` validates metadata, generated-file drift, GitHub
 Actions syntax, formatting, shell scripts, and security findings.
 
-Unit tests : `pixi run test` runs Python tests for catalog loading, docs
-generation, release checks, YAML handling, and scenario generation.
+Unit tests : `task test` runs Python tests for catalog loading, docs generation,
+release checks, YAML handling, and scenario generation.
 
-Local scenario tests : `pixi run test-local` generates local scenario workflows
+Local scenario tests : `task scenarios-local` generates local scenario workflows
 and runs them with `act`.
 
 Hosted scenario tests : `.github/workflows/devflows-scenarios.yaml` runs
@@ -161,5 +161,5 @@ pixi run devflows test-generate --check
 3. Include at least one assertion.
 4. Use `local` for fast paths and `hosted` for GitHub service paths.
 5. Run `pixi run devflows test-generate`.
-6. Run `pixi run test-local` for local scenarios.
+6. Run `task scenarios-local` for local scenarios.
 7. Let hosted CI run hosted scenarios after the branch is pushed.

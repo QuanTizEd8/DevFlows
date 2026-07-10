@@ -41,8 +41,8 @@ Prefer explicit, consistent input names. Use a stable prefix when passing
 through options to another tool or action, such as `checkout-`,
 `artifact-download-`, `artifact-upload-`, or `commit-`.
 
-Promoted domain workflows should support the common IO channels unless a
-channel is irrelevant to the workflow:
+Promoted domain workflows should support the common IO channels unless a channel
+is irrelevant to the workflow:
 
 - checkout input through `checkout-*` inputs and `checkout-*` secrets
 - artifact input through `artifact-download-*` inputs
@@ -93,4 +93,4 @@ pixi run devflows docs
 pixi run devflows test-generate
 ```
 
-`pixi run lint` verifies these generated files are current.
+`task lint` verifies these generated files are current.

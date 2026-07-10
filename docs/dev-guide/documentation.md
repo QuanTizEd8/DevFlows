@@ -17,7 +17,7 @@ reference pages render these examples inline.
 ## Build Docs
 
 ```bash
-pixi run docs
+task docs
 ```
 
 This runs:
@@ -30,7 +30,7 @@ sphinx-build -b html docs docs/_build/html
 For live preview:
 
 ```bash
-pixi run docs-serve
+task docs-serve
 ```
 
 ## Generated Reference Pages
@@ -63,7 +63,7 @@ Keep guide pages practical:
 
 ## Keeping Docs In Sync
 
-`pixi run lint` verifies reference documentation generation with:
+`task lint` verifies reference documentation generation with:
 
 ```bash
 devflows docs --check
