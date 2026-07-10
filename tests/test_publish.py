@@ -14,6 +14,7 @@ def test_pandoc_source_workflow_only_declares_domain_inputs() -> None:
         "pandoc-arguments",
         "pandoc-image",
         "pandoc-working-directory",
+        "pandoc-timeout-minutes",
     ]
     assert "checkout-enabled" not in source_inputs
     assert "artifact-upload-enabled" not in source_inputs

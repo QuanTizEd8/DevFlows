@@ -20,23 +20,43 @@ io:
   job: build-devcontainer
   runtime: true
   runtime-jobs:
+    - validate
     - merge-devcontainer
   checkout: true
   artifact-download: true
 notes:
   - The only structured JSON input is build-matrix, because GitHub reusable
     workflow inputs do not support arrays or objects for matrix expansion.
+  - >-
+    The build-matrix is validated in a dedicated validate job before any image
+    is built or pushed, so a malformed matrix entry fails fast instead of
+    pushing partial per-platform tags.
   - The workflow intentionally does not expose devcontainers/ci runCmd, env,
     inheritEnv, or skipContainerUserIdUpdate because this workflow builds and
     publishes images rather than running commands inside the built container.
   - The workflow intentionally does not expose docker/login-action registry-auth
     because this workflow authenticates to one target registry per call.
+  - >-
+    The github.token docker-login fallback is restricted to ghcr.io. Any other
+    registry (including Docker Hub) must supply an explicit docker-password
+    secret or the run fails in the validate job.
   - The workflow intentionally does not expose actions/cache save-always because
     upstream marks it as deprecated.
+  - >-
+    When devcontainer-cache-from/to are empty and
+    devcontainer-cache-registry-enabled is true, the build reads and writes a
+    registry build cache tagged image-name:cache-key-prefix-platform_tag, which
+    requires packages write on the registry. Set
+    devcontainer-cache-registry-enabled to false, or the cache inputs to none,
+    to opt out. Cache-to is disabled automatically when devcontainer-push is
+    never.
   - Set devcontainer-push to never and merge-enabled to false for build-only
     validation jobs.
-  - If merge-enabled is true, platform-specific image tags must be pushed before
-    the merge job runs.
+  - >-
+    The multi-arch manifest is merged from the immutable image digests captured
+    by each build job (handed to the merge job as per-platform artifacts), not
+    from the mutable per-platform tags, so concurrent runs cannot publish
+    mixed-commit or stale manifests.
   - prepare-command is a trusted caller-controlled command and runs on the host
     runner after checkout and artifact download.
 examples:

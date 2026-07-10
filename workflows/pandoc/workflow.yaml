@@ -4,12 +4,14 @@ on:
   workflow_call:
     inputs:
       pandoc-arguments:
-        description: Arguments passed to the pandoc command.
+        description: Arguments passed to the pandoc command. Required; a bare call must not silently do nothing.
         type: string
-        required: false
-        default: --help
+        required: true
       pandoc-image:
-        description: Pandoc Docker image reference to run.
+        description:
+          Pandoc Docker image reference to run, as [registry/]name[:tag][@digest]. Any syntactically valid
+          reference is accepted (official images, GHCR mirrors, or derived pandoc-filter images), so the
+          caller is trusted to supply an image whose contents they trust; it runs with the workspace mounted.
         type: string
         required: false
         default: pandoc/latex:3-ubuntu
@@ -18,6 +20,11 @@ on:
         type: string
         required: false
         default: "."
+      pandoc-timeout-minutes:
+        description: Maximum minutes the Pandoc conversion job may run before it is cancelled.
+        type: number
+        required: false
+        default: 15
 
 permissions:
   contents: read
@@ -26,6 +33,7 @@ jobs:
   pandoc:
     name: Convert with Pandoc
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.pandoc-timeout-minutes }}
     permissions:
       contents: read
     steps:

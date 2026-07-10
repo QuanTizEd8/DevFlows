@@ -37,6 +37,12 @@ notes:
   - >-
     Commit writeback is opt-in, requires explicit commit paths, and runs in a
     separate job with contents: write so Pandoc execution remains read-only.
+  - >-
+    The internal writeback payload artifact defaults to a single fixed name
+    (devflows-pandoc-writeback). If a caller invokes this workflow more than
+    once with commit-enabled in the same run, pass a distinct
+    commit-internal-artifact-name per invocation so the payload artifacts do
+    not collide and overwrite one another.
 examples:
   - name: Markdown to HTML
     path: test/fixtures/pandoc/markdown-to-html.yaml
