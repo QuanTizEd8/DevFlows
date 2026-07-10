@@ -8,7 +8,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from devflows.catalog import CATALOG_DIR, PUBLISHED_DIR, load_catalog, validate_workflow
+from devflows.catalog import (
+    CATALOG_DIR,
+    PUBLISHED_DIR,
+    RESERVED_ID_PREFIX,
+    load_catalog,
+    validate_workflow,
+)
 from devflows.docs import write_generated_docs
 from devflows.errors import DevflowsError
 from devflows.project import find_root, load_project
@@ -21,7 +27,7 @@ from devflows.scenarios import (
 )
 from devflows.schema import schema_errors
 
-INTERNAL_PREFIX = "devflows-"
+INTERNAL_PREFIX = RESERVED_ID_PREFIX
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -175,8 +181,8 @@ def _orphans(workflows: list) -> list[Path]:
     """Published entries with no owning workflow (stale YAML or leftover script dirs).
 
     Published workflows no longer carry a `.github/workflows/<id>/` script tree, so
-    any non-internal directory there is orphaned, as is any `<name>.yaml` that no
-    active workflow produces. Internal `devflows-*` files/dirs are left alone.
+    any non-internal directory there is orphaned, as is any `<name>.yaml`/`<name>.yml`
+    that no active workflow produces. Internal `devflows-*` files/dirs are left alone.
     """
     expected = {item.published_path for item in workflows}
     orphans: list[Path] = []
@@ -185,7 +191,7 @@ def _orphans(workflows: list) -> list[Path]:
             continue
         if entry.is_dir():
             orphans.append(entry)
-        elif entry.suffix == ".yaml" and entry not in expected:
+        elif entry.suffix in {".yaml", ".yml"} and entry not in expected:
             orphans.append(entry)
     return orphans
 

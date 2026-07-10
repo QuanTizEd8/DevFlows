@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from devflows.catalog import Workflow, validate_workflow
 from devflows.cli import main
 
 
@@ -73,6 +74,41 @@ def test_sync_prunes_orphans(make_catalog) -> None:
 
     assert main(["sync", "--root", str(root)]) == 0
     assert not (published_dir / "gone.yaml").exists()
+
+
+def test_sync_check_detects_yml_orphans(make_catalog, capsys) -> None:
+    root = make_catalog()
+    assert main(["sync", "--root", str(root)]) == 0
+
+    (root / ".github/workflows/legacy.yml").write_text("name: legacy\n", encoding="utf-8")
+
+    assert main(["sync", "--check", "--root", str(root)]) == 1
+    assert "legacy.yml" in capsys.readouterr().err
+
+
+def test_sync_leaves_internal_devflows_files_alone(make_catalog) -> None:
+    root = make_catalog()
+    assert main(["sync", "--root", str(root)]) == 0
+    internal = root / ".github/workflows/devflows-ci.yml"
+    internal.write_text("name: internal\n", encoding="utf-8")
+
+    assert main(["sync", "--root", str(root)]) == 0
+    assert internal.exists()  # reserved namespace is never pruned
+
+
+def test_validate_workflow_rejects_reserved_id_prefix() -> None:
+    item = Workflow(
+        id="devflows-thing",
+        path=Path("workflows/devflows-thing"),
+        workflow_path=Path("workflows/devflows-thing/workflow.yaml"),
+        metadata_path=Path("workflows/devflows-thing/devflow.yaml"),
+        metadata={"id": "devflows-thing", "status": "active", "release": {}},
+        workflow={"name": "Thing", "on": {"workflow_call": {}}},
+    )
+
+    errors = validate_workflow(item)
+
+    assert any("must not start with 'devflows-'" in error for error in errors)
 
 
 def test_release_check_flags_manifest_major_mismatch(make_catalog, capsys) -> None:
