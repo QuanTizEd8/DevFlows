@@ -26,12 +26,14 @@ def main() -> int:
     stage_paths: set[str] = set()
     for item in manifest.get("replace_paths", []):
         relative = _validated_relative_path(str(item["path"]))
-        _remove(workspace / relative)
+        target = _contained_target(workspace, relative)
+        _remove(target)
         stage_paths.add(relative.as_posix())
 
     for item in manifest.get("deletions", []):
         relative = _validated_relative_path(str(item["path"]))
-        _remove(workspace / relative)
+        target = _contained_target(workspace, relative)
+        _remove(target)
         stage_paths.add(relative.as_posix())
 
     for item in manifest.get("files", []):
@@ -47,7 +49,9 @@ def main() -> int:
                 f"expected {expected_sha}, got {actual_sha}."
             )
 
-        target = workspace / relative
+        target = _contained_target(workspace, relative)
+        if target.is_symlink():
+            raise SystemExit(f"refusing to write through a symlink target: {relative.as_posix()}")
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         mode = 0o755 if item.get("executable") else 0o644
@@ -59,7 +63,7 @@ def main() -> int:
 
     _git("config", "user.name", os.environ["COMMIT_AUTHOR_NAME"])
     _git("config", "user.email", os.environ["COMMIT_AUTHOR_EMAIL"])
-    _git("add", "-A", "--", *sorted(stage_paths))
+    _stage(workspace, stage_paths)
 
     if _git_quiet("diff", "--cached", "--quiet"):
         print("No changes to commit.")
@@ -94,6 +98,51 @@ def _validated_relative_path(raw_path: str) -> Path:
     if any(part in INTERNAL_PATH_NAMES for part in path.parts):
         raise SystemExit(f"path must not include internal workflow paths: {raw_path}")
     return path
+
+
+def _contained_target(workspace: Path, relative: Path) -> Path:
+    """Return the absolute target for a lexically-validated relative path.
+
+    Lexical validation (``_validated_relative_path``) already rejects absolute
+    paths, ``..`` traversal, and internal names, but it cannot see symlinks in
+    the target checkout. A symlinked parent directory (or a symlinked leaf) can
+    still redirect a write or delete outside GITHUB_WORKSPACE. Resolve the real
+    parent chain and refuse to traverse any symlinked component before touching
+    the filesystem.
+    """
+    target = workspace / relative
+    current = workspace
+    for part in relative.parts[:-1]:
+        current = current / part
+        if current.is_symlink():
+            raise SystemExit(
+                f"refusing to traverse a symlinked parent directory: {relative.as_posix()}"
+            )
+    real_parent = target.parent.resolve()
+    if real_parent != workspace and workspace not in real_parent.parents:
+        raise SystemExit(
+            f"path escapes GITHUB_WORKSPACE after resolving symlinks: {relative.as_posix()}"
+        )
+    return target
+
+
+def _stage(workspace: Path, stage_paths: set[str]) -> None:
+    """Stage writes and deletions idempotently.
+
+    Paths that exist on disk (new/updated files, replacement directories) are
+    staged with ``git add -A``, which also records deletions of tracked files
+    that vanished from a replaced directory. Paths that no longer exist
+    (explicit deletions, or replacement directories that became empty) are
+    unstaged with ``git rm --cached --ignore-unmatch`` so that deleting a
+    path already absent from the target branch is a no-op rather than a fatal
+    ``pathspec did not match`` error.
+    """
+    existing = sorted(p for p in stage_paths if (workspace / p).exists())
+    missing = sorted(p for p in stage_paths if not (workspace / p).exists())
+    if existing:
+        _git("add", "-A", "--", *existing)
+    for relative in missing:
+        _git("rm", "-r", "--cached", "--ignore-unmatch", "-q", "--", relative)
 
 
 def _remove(path: Path) -> None:
