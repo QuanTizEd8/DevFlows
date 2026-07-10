@@ -6,7 +6,7 @@ nothing itself (the generated artifact-download channel does) but recomputes the
 sha256 AND size of every ``.conda`` file and matches them bidirectionally against
 the caller-supplied dist manifest. It then derives the staged/promote/remove
 plans and emits them as outputs plus a job summary of the exact argv each
-credentialed job would run — the whole publish plan, produced without a token, so
+credentialed job would run -- the whole publish plan, produced without a token, so
 a dry-run proves the wiring while every environment-bound job stays skipped.
 
 Imports the sibling ``specs.py`` (a ``${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/

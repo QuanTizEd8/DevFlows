@@ -565,6 +565,23 @@ def _materialize_step(item: Workflow, steps: list[dict[str, Any]]) -> dict[str, 
                 f"{source}: script contains the heredoc delimiter "
                 f"{RUNTIME_SCRIPT_DELIMITER!r}, so it cannot be inlined safely."
             )
+        # Inlined scripts must be ASCII. A single non-ASCII byte makes the YAML
+        # dumper render the whole materialize `run:` block as one escaped
+        # double-quoted scalar instead of a block literal; GitHub's workflow
+        # parser rejects that collapsed form with a startup failure even though
+        # actionlint's parser accepts it, so the drift is invisible to `task
+        # lint` and only surfaces on a hosted run. Fail loudly at sync time
+        # instead, pointing at the offending line.
+        try:
+            content.encode("ascii")
+        except UnicodeEncodeError as error:
+            line_number = content[: error.start].count("\n") + 1
+            raise DevflowsError(
+                f"{source}:{line_number}: inlined runtime script contains a "
+                f"non-ASCII character ({content[error.start]!r}). Inlined scripts "
+                "must be ASCII so they render as YAML block literals; replace it "
+                "(e.g. an em-dash with '--')."
+            ) from error
         target = f"{RUNTIME_SCRIPT_ROOT}/{relpath}"
         directory = PurePosixPath(target).parent.as_posix()
         lines.append(f'mkdir -p "{directory}"')

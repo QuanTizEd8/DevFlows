@@ -51,6 +51,16 @@ def test_sync_fails_on_delimiter_collision(make_catalog, capsys) -> None:
     assert "delimiter" in capsys.readouterr().err
 
 
+def test_sync_fails_on_non_ascii_inlined_script(make_catalog, capsys) -> None:
+    # A non-ASCII byte forces the YAML dumper to emit the materialize run block
+    # as one escaped double-quoted scalar, which GitHub rejects at startup even
+    # though actionlint accepts it. Sync must catch it locally instead.
+    root = make_catalog(script_body="# blast-radius control — owner only\n")
+
+    assert main(["sync", "--root", str(root)]) == 1
+    assert "non-ASCII" in capsys.readouterr().err
+
+
 def test_sync_check_detects_orphans(make_catalog, capsys) -> None:
     root = make_catalog()
     assert main(["sync", "--root", str(root)]) == 0

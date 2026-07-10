@@ -5,7 +5,7 @@ single channel. Per-leg repodata only covers that leg's packages, so the merged
 channel needs a fresh, authoritative index across every subdir.
 
 Historically this shelled out to the conda organization's ``conda-index``, but
-that package imports ``conda.models.version`` at import time — a hard runtime
+that package imports ``conda.models.version`` at import time -- a hard runtime
 dependency on the full ``conda`` package, which is *yanked* on PyPI (its newest
 release, 4.3.16, predates Python 3.10 and no longer installs) and is not
 distributed there at all in its modern form. Rather than drag conda into an

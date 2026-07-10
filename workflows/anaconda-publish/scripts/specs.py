@@ -27,7 +27,7 @@ from pathlib import Path
 ANACONDA_CLIENT_VERSION = "1.13.0"
 
 # anaconda.org owners (users/orgs): a leading alphanumeric then alphanumerics,
-# hyphen, underscore. The single blast-radius control — no spec ever carries an
+# hyphen, underscore. The single blast-radius control -- no spec ever carries an
 # owner, so this is the only value that selects a namespace.
 _OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 # Channel labels (anaconda upload --label / move --to-label). Conservative safe
