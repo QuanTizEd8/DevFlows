@@ -552,6 +552,16 @@ def _ephemeral_branch_setup_job(scenario: Scenario) -> dict[str, Any]:
                 "run": f"python {_script('setup-ephemeral-writeback.py')}",
             },
             {
+                # include-hidden-files is REQUIRED, not cosmetic. create-payload.py
+                # copies every selected file under .devflows-writeback/payload/files/
+                # preserving its repo-relative path, so the payload legitimately holds
+                # dotfiles and dot-directories (e.g. this fixture writes under
+                # .devflows-e2e/, and real callers write back .github/**). Since
+                # upload-artifact v4+, hidden paths are EXCLUDED by default, which
+                # would silently drop those files from the artifact while keeping the
+                # manifest that references them -- apply-payload.py then fails with
+                # "Payload file is missing or invalid". Any uploader of a writeback
+                # payload must opt in (publish.py's internal channel does the same).
                 "name": "Upload writeback payload",
                 "uses": UPLOAD_ARTIFACT_REF,
                 "with": {
@@ -560,6 +570,7 @@ def _ephemeral_branch_setup_job(scenario: Scenario) -> dict[str, Any]:
                     "if-no-files-found": "error",
                     "retention-days": 1,
                     "overwrite": True,
+                    "include-hidden-files": True,
                 },
             },
         ],

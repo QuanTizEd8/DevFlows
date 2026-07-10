@@ -5,6 +5,7 @@ from devflows.scenarios import (
     _assert_job,
     _call_job,
     _ephemeral_branch_cleanup_job,
+    _ephemeral_branch_setup_job,
     _missing_mutation_inputs,
     _required_call_permissions,
     _requires_write,
@@ -184,6 +185,17 @@ def test_mutation_assert_job_checks_out_before_assert_result() -> None:
     assert steps[0]["name"] == "Checkout ephemeral branch"
     assert steps[1]["name"] == "Assert scenario succeeded"
     assert "harness/scenarios" not in steps[0].get("run", "")
+
+
+def test_writeback_payload_upload_includes_hidden_files() -> None:
+    """The writeback payload's files/ subtree holds dotfiles (e.g. .devflows-e2e/),
+    which upload-artifact v4+ drops by default -- apply-payload then fails with
+    "Payload file is missing or invalid". Regression guard for PR #5 run
+    29072401089: the setup upload must opt into hidden files."""
+    job = _ephemeral_branch_setup_job(_scenario("writeback", "ephemeral-branch-writeback"))
+    upload = next(step for step in job["steps"] if step["name"] == "Upload writeback payload")
+
+    assert upload["with"]["include-hidden-files"] is True
 
 
 # --- task 3/4: scripts come from harness/, not the removed generated copies ---

@@ -232,6 +232,91 @@ def test_apply_payload_refuses_symlink_target(tmp_path: Path) -> None:
     assert outside_file.read_text(encoding="utf-8") == "original\n"
 
 
+def _simulate_artifact_roundtrip(
+    payload_dir: Path, download_dir: Path, *, include_hidden: bool
+) -> None:
+    """Copy a payload as actions/upload-artifact + download-artifact would.
+
+    upload-artifact treats the uploaded directory as the artifact root and, since
+    v4, EXCLUDES any file with a hidden path component (a segment starting with
+    ".") unless include-hidden-files is set; download-artifact restores the
+    surviving tree under the download path. Modeling that flattening lets the
+    writeback round-trip be exercised end-to-end without a hosted runner.
+    """
+    download_dir.mkdir(parents=True, exist_ok=True)
+    for file_path in sorted(payload_dir.rglob("*")):
+        if not file_path.is_file():
+            continue
+        relative = file_path.relative_to(payload_dir)
+        if not include_hidden and any(part.startswith(".") for part in relative.parts):
+            continue
+        target = download_dir / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(file_path.read_bytes())
+
+
+def _create_hidden_payload(workspace: Path, payload: Path) -> None:
+    """create-payload for a writeback under a hidden directory (.devflows-e2e/)."""
+    generated = workspace / ".devflows-e2e/writeback/generated"
+    generated.mkdir(parents=True)
+    (generated / "index.html").write_text("<h1>Updated by writeback</h1>\n", encoding="utf-8")
+    _run_script(
+        CREATE_PAYLOAD,
+        cwd=Path.cwd(),
+        env={
+            "GITHUB_WORKSPACE": str(workspace),
+            "WRITEBACK_PAYLOAD_DIR": str(payload),
+            "WRITEBACK_PATHS": ".devflows-e2e/writeback/generated",
+            "WRITEBACK_DELETE_PATHS": "",
+        },
+    )
+
+
+def test_hidden_payload_dropped_by_default_upload_breaks_apply(tmp_path: Path) -> None:
+    """Reproduces PR #5 run 29072401089.
+
+    upload-artifact's default hidden-file exclusion drops
+    files/.devflows-e2e/** from the artifact while keeping the manifest that
+    references them, so apply-payload aborts. This is exactly the failure the
+    include-hidden-files: true fix prevents.
+    """
+    source = tmp_path / "source"
+    payload = source / ".devflows-writeback/payload"
+    _create_hidden_payload(source, payload)
+    assert (payload / "files/.devflows-e2e/writeback/generated/index.html").is_file()
+
+    download = tmp_path / "download"
+    _simulate_artifact_roundtrip(payload, download, include_hidden=False)
+    # The manifest survives (not hidden); the hidden file subtree is gone.
+    assert (download / "manifest.json").is_file()
+    assert not (download / "files/.devflows-e2e").exists()
+
+    target = _init_target(tmp_path)
+    _git(target, "commit", "--allow-empty", "-m", "initial")
+    result = _apply(target, download, check=False)
+    assert result.returncode != 0
+    assert "Payload file is missing or invalid" in result.stderr
+
+
+def test_hidden_payload_survives_when_hidden_files_included(tmp_path: Path) -> None:
+    """With include-hidden-files, the round-trip preserves files/.devflows-e2e/**
+    and apply-payload writes the file into the target checkout."""
+    source = tmp_path / "source"
+    payload = source / ".devflows-writeback/payload"
+    _create_hidden_payload(source, payload)
+
+    download = tmp_path / "download"
+    _simulate_artifact_roundtrip(payload, download, include_hidden=True)
+    assert (download / "files/.devflows-e2e/writeback/generated/index.html").is_file()
+
+    target = _init_target(tmp_path)
+    _git(target, "commit", "--allow-empty", "-m", "initial")
+    _apply(target, download)
+    assert (target / ".devflows-e2e/writeback/generated/index.html").read_text(
+        encoding="utf-8"
+    ) == "<h1>Updated by writeback</h1>\n"
+
+
 def _init_target(tmp_path: Path) -> Path:
     target = tmp_path / "target"
     target.mkdir()
