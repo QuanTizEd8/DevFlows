@@ -172,6 +172,14 @@ def _sync(*, check: bool = False) -> int:
     if changed:
         for path in sorted(set(changed)):
             print(path, file=sys.stderr)
+        if check:
+            print(
+                "error: published workflows are stale (drift from workflows/<id>/ sources). "
+                "This commonly follows a grouped action-pin bump that updated a source "
+                "workflow.yaml but not its generated copy. Run `task sync` "
+                "(or `pixi run -- devflows sync`) and commit the regenerated files above.",
+                file=sys.stderr,
+            )
         return 1 if check else 0
     print(f"synced {len(workflows)} workflows", file=sys.stderr)
     return 0

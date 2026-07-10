@@ -15,12 +15,27 @@
   labels: ["dependencies"],
   // ---------------------------------------------------------------- managers
   // github-actions:   uses: <action>@<sha> # <version> in .github/workflows/**
+  //                   AND in the catalog sources workflows/<id>/workflow.yaml
+  //                   (added below) so a `uses:` pin authored in a source
+  //                   workflow is bumped too, not just its generated copy.
   // dockerfile:       FROM ...@sha256:...  in .devcontainer/Dockerfile
   // devcontainer:     features + images in .devcontainer/devcontainer.json
   // pixi:             pixi.toml dependencies + pixi.lock refresh (experimental;
   //                   a manual `task pixi-lock` fallback is documented in
   //                   docs/dev-guide/environment.md).
   // custom (regex):   the ActionPin registry in src/devflows/actions.py.
+  //
+  // IMPORTANT: after any github-actions bump merges, `devflows sync` must run so
+  // the generated .github/workflows/<id>.yaml copies match the bumped source and
+  // registry. The grouping below lands the source workflow.yaml, its generated
+  // copy, and the actions.py registry in ONE PR so they move together; if the
+  // generated copy still drifts, `task lint` fails with a `task sync` hint (see
+  // devflows sync --check).
+  "github-actions": {
+    // Additive to the default .github/workflows/** patterns: also scan the
+    // catalog sources so their body `uses:` pins are kept current.
+    managerFilePatterns: ["/^workflows/[^/]+/workflow\\.yaml$/"]
+  },
   dockerfile: {
     managerFilePatterns: ["/^\\.devcontainer/Dockerfile$/"]
   },
@@ -50,8 +65,12 @@
   // ------------------------------------------------------------- packageRules
   packageRules: [
     {
-      // Group routine GitHub Action digest refreshes (both the workflow files
-      // and the actions.py registry) into one PR to cut review noise.
+      // Group routine GitHub Action digest refreshes into one PR to cut review
+      // noise: the generated .github/workflows/** copies, the catalog sources
+      // workflows/<id>/workflow.yaml, and the actions.py registry all move
+      // together, so the source, its generated copy, and the pin registry stay
+      // consistent. Run `devflows sync` (task sync) after merge if any generated
+      // copy still drifts.
       matchManagers: ["github-actions", "custom.regex"],
       matchUpdateTypes: ["digest", "pin", "pinDigest", "minor", "patch"],
       groupName: "github actions"
