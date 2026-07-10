@@ -1,0 +1,187 @@
+id: deploy-pages
+name: Deploy Pages
+summary:
+  Package a built static site into a GitHub Pages artifact and deploy it via
+  OIDC under a protected environment, with uniform checkout and artifact-download
+  channels. The composability keystone other builders chain into.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Pages
+  keywords:
+    - github-pages
+    - deploy
+    - static-site
+    - oidc
+io:
+  job: package
+  runtime: true
+  checkout: true
+  artifact-download: true
+notes:
+  - >-
+    Every caller must grant permissions: contents: read, actions: read, pages:
+    write, id-token: write - and must grant all four even when pages-deploy-enabled
+    or pages-artifact-enabled is false. The deploy job statically declares pages:
+    write and id-token: write and the package job uses the checkout (contents:
+    read) and artifact-download (actions: read) channels; GitHub validates these
+    nested permissions before the run starts, so a caller granting less fails at
+    startup before any job runs.
+  - >-
+    Two jobs by design: package (contents: read) checks out and/or downloads the
+    site and runs upload-pages-artifact; deploy (pages: write + id-token: write
+    only, no checkout, no scripts) runs configure-pages then deploy-pages. The
+    split keeps the elevated Pages token away from any checked-out code or
+    caller-influenced script.
+  - >-
+    Primary mode packages a site DIRECTORY: set pages-path to the built site and
+    keep pages-artifact-enabled true. Builders upload plain artifacts through
+    their generic artifact-upload channel; deploy-pages ingests them via its
+    artifact-download channel (checkout-enabled false, artifact-download-enabled
+    true) into pages-path. Secondary mode (pages-artifact-enabled false, pages-path
+    empty) deploys an already-Pages-format artifact produced by an earlier
+    upload-pages-artifact step in the SAME run, selected by pages-artifact-name.
+  - >-
+    The canonical DevFlows docs chain is docs-build uploads the Pages artifact and
+    deploy-pages deploys it by name (pages-artifact-enabled false); pages-path mode
+    is for non-DevFlows builders that hand deploy-pages a site directory.
+  - >-
+    GitHub Pages must be enabled with source "GitHub Actions" in repository
+    settings before the first deploy; configure-pages fails with a clear error
+    otherwise. The upstream configure-pages enablement input is intentionally not
+    exposed because it requires a token other than GITHUB_TOKEN (a PAT), which
+    this workflow deliberately never asks callers for - one-time Pages enablement
+    belongs in repository settings.
+  - >-
+    pages-url is the empty string when pages-deploy-enabled is false or the deploy
+    job is skipped (reusable-workflow outputs from a skipped job resolve to empty),
+    and pages-artifact-id is empty when pages-artifact-enabled is false. Downstream
+    consumers must guard on a non-empty value (if !cancelled() plus a non-empty
+    check).
+  - >-
+    The deploy job sets its own concurrency group deploy-pages-<environment> with
+    cancel-in-progress false, so a running deployment is never cancelled (GitHub's
+    latest-pending-wins semantics supersede an idle PENDING run). A reusable
+    workflow cannot impose caller-level concurrency, so callers that want to
+    serialize whole runs should additionally set a workflow-level concurrency group
+    such as "pages" (cancel-in-progress false) in the calling workflow.
+  - >-
+    Artifact names are unique per run and upload-pages-artifact cannot overwrite, so
+    a caller invoking this workflow more than once in a single run must pass a
+    distinct pages-artifact-name per invocation.
+  - >-
+    Upstream inputs are deliberately not exposed: configure-pages static-site-generator
+    and generator-config-file (build-time concerns; the site is already built),
+    configure-pages enablement (needs a PAT), and deploy-pages error_count,
+    reporting_interval, and preview (niche tuning). deploy-pages timeout is derived
+    from pages-timeout-minutes so the poll budget and the job budget agree.
+  - >-
+    Both jobs run on ubuntu-latest. Per the runner-exposure convention, a runner
+    input, when added later, would be named package-runner / deploy-runner (string,
+    default ubuntu-latest); adding it is a compatible minor change.
+  - >-
+    Real GitHub Pages deployment cannot run as an in-repo scenario because it would
+    overwrite the live DevFlows docs site, so every generated scenario stops at
+    packaging (pages-deploy-enabled false) or asserts an expected validation
+    failure. End-to-end deployment is dogfooded post-merge by the DevFlows docs
+    pipeline adopting this workflow.
+examples:
+  - name: Deploy a built site from a run artifact
+    path: tests/fixtures/deploy-pages/deploy-site.yaml
+  - name: Deploy a pre-packaged Pages artifact by name
+    path: tests/fixtures/deploy-pages/deploy-prebuilt-artifact.yaml
+tests:
+  scenarios:
+    - id: package-only
+      name: Package a site directory into a Pages artifact without deploying
+      runs:
+        - hosted
+      inputs:
+        pages-path: tests/scenarios/deploy-pages/site
+        pages-artifact-enabled: true
+        pages-deploy-enabled: false
+        pages-artifact-name: devflows-deploy-pages-package-only
+      artifact:
+        name: devflows-deploy-pages-package-only
+        path: .devflows-test-artifacts/deploy-pages/package-only
+      assertions:
+        - type: workflow-output-equals
+          name: pages-url
+          value: ""
+        - type: file-exists
+          path: artifact.tar
+    - id: package-from-artifact
+      name: Package a downloaded site artifact into a Pages artifact
+      runs:
+        - hosted
+      setup-artifact:
+        name: devflows-deploy-pages-input-site
+        path: .devflows-test/deploy-pages/from-artifact-input
+        files:
+          - path: .devflows-test/deploy-pages/from-artifact-input/index.html
+            content: |
+              <!doctype html>
+              <html lang="en">
+                <head>
+                  <meta charset="utf-8" />
+                  <title>DevFlows deploy-pages chained site</title>
+                </head>
+                <body>
+                  <h1>Chained from a downloaded artifact</h1>
+                </body>
+              </html>
+      artifact:
+        name: devflows-deploy-pages-from-artifact
+        path: .devflows-test-artifacts/deploy-pages/from-artifact
+      inputs:
+        checkout-enabled: false
+        artifact-download-enabled: true
+        artifact-download-name: devflows-deploy-pages-input-site
+        artifact-download-path: site-input
+        pages-path: site-input
+        pages-artifact-enabled: true
+        pages-deploy-enabled: false
+        pages-artifact-name: devflows-deploy-pages-from-artifact
+      assertions:
+        - type: file-exists
+          path: artifact.tar
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. They cover the mode matrix's meaningful rejections and
+    # never touch the filesystem (each fails before pages-path is resolved).
+    # Exhaustive script coverage still lives in tests/test_deploy_pages.py.
+    - id: pages-path-missing
+      name: Packaging enabled without a pages-path fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "pages-path is required when pages-artifact-enabled is true"
+      inputs:
+        pages-artifact-enabled: true
+        pages-path: ""
+    - id: nothing-to-do
+      name: Neither packaging nor deploying fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "Nothing to do"
+      inputs:
+        pages-artifact-enabled: false
+        pages-deploy-enabled: false
+    - id: deploy-only-with-path
+      name: Deploy-only mode with a pages-path fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "pages-path must be empty when pages-artifact-enabled is false"
+      inputs:
+        pages-artifact-enabled: false
+        pages-deploy-enabled: true
+        pages-path: site

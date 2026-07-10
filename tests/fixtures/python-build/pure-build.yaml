@@ -1,0 +1,22 @@
+name: Build distributions
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# python-build is contents: read at the workflow level and its collect/dist jobs
+# additionally require actions: read to move run-internal build intermediates.
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    # Replace python-build/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    with:
+      build-tool: uv
+      build-sdist-enabled: true
+      build-wheel-enabled: true
+      dist-artifact-prefix: my-package

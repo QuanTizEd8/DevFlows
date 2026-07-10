@@ -10,10 +10,40 @@
       "package-name": "build-devcontainer",
       "changelog-path": "CHANGELOG.md"
     },
+    "workflows/deploy-pages": {
+      "component": "deploy-pages",
+      "release-type": "simple",
+      "package-name": "deploy-pages",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "workflows/docs-build": {
+      "component": "docs-build",
+      "release-type": "simple",
+      "package-name": "docs-build",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/pandoc": {
       "component": "pandoc",
       "release-type": "simple",
       "package-name": "pandoc",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "workflows/python-build": {
+      "component": "python-build",
+      "release-type": "simple",
+      "package-name": "python-build",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "workflows/python-lint": {
+      "component": "python-lint",
+      "release-type": "simple",
+      "package-name": "python-lint",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "workflows/python-test": {
+      "component": "python-test",
+      "release-type": "simple",
+      "package-name": "python-test",
       "changelog-path": "CHANGELOG.md"
     },
     "workflows/writeback": {

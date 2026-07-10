@@ -1,0 +1,156 @@
+name: "[Reusable]: Deploy Pages"
+
+on:
+  workflow_call:
+    inputs:
+      pages-path:
+        description:
+          Directory containing the built static site, relative to the workspace root (after
+          checkout and/or artifact download). Required when pages-artifact-enabled is true and
+          must be empty when it is false. Validated before packaging - it must exist, be a
+          directory inside the workspace, and contain at least one file. There is no default on
+          purpose - an explicit path prevents accidentally deploying the wrong directory.
+        type: string
+        required: false
+        default: ""
+      pages-artifact-enabled:
+        description:
+          Whether to package pages-path into a GitHub Pages artifact (actions/upload-pages-artifact)
+          in this workflow. Set to false only when an earlier job in the SAME run already produced a
+          Pages-format artifact via upload-pages-artifact under pages-artifact-name; plain
+          upload-artifact artifacts are NOT Pages-deployable - chain those through the
+          artifact-download channel plus pages-path instead. This is the shared Pages-chain toggle
+          name (docs-build uses the same name).
+        type: boolean
+        required: false
+        default: true
+      pages-deploy-enabled:
+        description:
+          Whether to run the deployment job. Set to false to validate and package the Pages artifact
+          without deploying (for example as a pull-request check); the deploy job is skipped, no
+          deployment or environment record is created, and pages-url is empty. A call with both
+          pages-artifact-enabled and pages-deploy-enabled false fails validation as a no-op.
+        type: boolean
+        required: false
+        default: true
+      pages-artifact-name:
+        description:
+          Name of the Pages artifact to create (upload-pages-artifact name) and/or deploy
+          (deploy-pages artifact_name). Artifact names are unique per run and upload-pages-artifact
+          cannot overwrite, so callers invoking this workflow more than once in one run must pass
+          distinct values.
+        type: string
+        required: false
+        default: github-pages
+      pages-artifact-retention-days:
+        description:
+          Retention in days for the Pages artifact (upload-pages-artifact retention-days). Deployment
+          artifacts are transient; 1 matches the upstream default. Only used when
+          pages-artifact-enabled is true.
+        type: number
+        required: false
+        default: 1
+      pages-artifact-include-hidden-files:
+        description:
+          Whether dotfiles and dot-directories under pages-path are included in the Pages artifact
+          (upload-pages-artifact include-hidden-files); .git and .github are always excluded upstream.
+          Enable for sites that ship hidden paths such as .well-known/.
+        type: boolean
+        required: false
+        default: false
+      pages-environment-name:
+        description:
+          GitHub environment the deploy job binds to. github-pages is the environment GitHub
+          provisions automatically for Actions-based Pages, with a default protection rule limiting
+          deploys to the default branch; deployment protection rules and required reviewers configured
+          on this environment gate the deploy job. The environment URL is set from the actual
+          deployment's page_url.
+        type: string
+        required: false
+        default: github-pages
+      pages-timeout-minutes:
+        description:
+          Maximum minutes for each job (applied as timeout-minutes on both the package and deploy
+          jobs). Also mapped to deploy-pages' internal timeout (converted to milliseconds) so the
+          deployment status poll and the job budget agree; the upstream default is likewise 10
+          minutes.
+        type: number
+        required: false
+        default: 10
+    outputs:
+      pages-url:
+        description:
+          URL of the deployed GitHub Pages site (deploy-pages page_url output, also used as the
+          environment URL). Empty string when pages-deploy-enabled is false or the deploy job did not
+          run, so downstream consumers must guard on a non-empty value.
+        value: ${{ jobs.deploy.outputs.pages-url }}
+      pages-artifact-id:
+        description:
+          Numeric ID of the uploaded Pages artifact (upload-pages-artifact artifact_id output), for
+          API-based inspection or cross-workflow reference. Empty when pages-artifact-enabled is false.
+        value: ${{ jobs.package.outputs.pages-artifact-id }}
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package Pages artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.pages-timeout-minutes }}
+    permissions:
+      contents: read
+    outputs:
+      pages-artifact-id: ${{ steps.upload.outputs.artifact_id }}
+      # Minutes->ms for the deploy job's timeout, computed here because GitHub
+      # Actions expressions have no arithmetic operator; keeps the deploy job
+      # script-free.
+      deploy-timeout-ms: ${{ steps.validate.outputs.deploy-timeout-ms }}
+    steps:
+      - name: Validate inputs
+        id: validate
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          PAGES_PATH: ${{ inputs.pages-path }}
+          PAGES_ARTIFACT_ENABLED: ${{ inputs.pages-artifact-enabled }}
+          PAGES_DEPLOY_ENABLED: ${{ inputs.pages-deploy-enabled }}
+          PAGES_ARTIFACT_NAME: ${{ inputs.pages-artifact-name }}
+          PAGES_TIMEOUT_MINUTES: ${{ inputs.pages-timeout-minutes }}
+        shell: bash
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/deploy-pages/validate-inputs.py"
+      - name: Upload Pages artifact
+        if: inputs.pages-artifact-enabled
+        id: upload
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          name: ${{ inputs.pages-artifact-name }}
+          path: ${{ inputs.pages-path }}
+          retention-days: ${{ inputs.pages-artifact-retention-days }}
+          include-hidden-files: ${{ inputs.pages-artifact-include-hidden-files }}
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: package
+    if: inputs.pages-deploy-enabled
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.pages-timeout-minutes }}
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: ${{ inputs.pages-environment-name }}
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: deploy-pages-${{ inputs.pages-environment-name }}
+      cancel-in-progress: false
+    outputs:
+      pages-url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+        with:
+          artifact_name: ${{ inputs.pages-artifact-name }}
+          timeout: ${{ needs.package.outputs.deploy-timeout-ms }}

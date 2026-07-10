@@ -6,7 +6,7 @@ from typing import Any
 from devflows.catalog import Workflow
 from devflows.errors import DevflowsError
 from devflows.project import Project, load_project
-from devflows.publish import build_published_workflow
+from devflows.publish import build_published_workflow, caller_required_permissions
 
 GENERATED_DIR = Path("docs/reference")
 
@@ -40,7 +40,10 @@ def render_workflow(item: Workflow, project: Project | None = None) -> str:
     inputs = _mapping(workflow_call.get("inputs"))
     secrets = _mapping(workflow_call.get("secrets"))
     outputs = _mapping(workflow_call.get("outputs"))
-    permissions = published_workflow.get("permissions") or {}
+    # The union of workflow-level and every job-level permission block: the exact
+    # superset a caller must grant, because GitHub validates a reusable-workflow
+    # call against that union at startup (job-level blocks replace the top level).
+    required_permissions = caller_required_permissions(published_workflow)
     examples = item.metadata.get("examples") or []
     release = item.metadata.get("release") or {}
     notes = item.metadata.get("notes") or []
@@ -99,7 +102,7 @@ def render_workflow(item: Workflow, project: Project | None = None) -> str:
         "",
         "## Permissions",
         "",
-        _render_permissions(permissions),
+        _render_permissions(required_permissions),
         "",
         "## Examples",
         "",
@@ -190,11 +193,17 @@ def _render_table(items: dict[str, dict[str, Any]], columns: list[str]) -> str:
 
 def _render_permissions(permissions: Any) -> str:
     if not permissions:
-        return "No explicit top-level permissions declared."
+        return "No caller permissions required."
     if isinstance(permissions, str):
         return f"`{permissions}`"
     if isinstance(permissions, dict):
-        return "\n".join(f"- `{name}`: `{value}`" for name, value in sorted(permissions.items()))
+        lines = [
+            "Required caller permissions (the union of this workflow's top-level and "
+            "per-job permission blocks; a calling job must grant at least these):",
+            "",
+        ]
+        lines.extend(f"- `{name}`: `{value}`" for name, value in sorted(permissions.items()))
+        return "\n".join(lines)
     return str(permissions)
 
 

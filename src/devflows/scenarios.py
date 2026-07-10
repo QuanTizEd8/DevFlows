@@ -11,7 +11,11 @@ from typing import Any
 
 from devflows.actions import ref as action_ref
 from devflows.catalog import Workflow
-from devflows.publish import build_published_workflow, published_workflow_call
+from devflows.publish import (
+    build_published_workflow,
+    caller_required_permissions,
+    published_workflow_call,
+)
 from devflows.yaml import dump_yaml
 
 GENERATED_HOSTED_PATH = Path(".github/workflows/devflows-scenarios.yaml")
@@ -29,9 +33,6 @@ UPLOAD_ARTIFACT_REF = action_ref("upload-artifact")
 CHECKOUT_REF = action_ref("checkout")
 ACT_PLATFORM = "ubuntu-latest=catthehacker/ubuntu:act-latest"
 SCENARIO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-# Levels a caller can grant a nested reusable-workflow call, ranked so the
-# required permissions are the maximum requested anywhere in the called tree.
-_PERMISSION_RANK = {"none": 0, "read": 1, "write": 2}
 # A job guarded by this expression runs on same-repo pull requests, pushes, and
 # manual dispatches, but is skipped on fork pull requests. GitHub caps a fork
 # PR's token to read, so a call job that declares any write permission would fail
@@ -79,27 +80,146 @@ def _required_call_permissions(workflow: Workflow) -> dict[str, str]:
     workflow declares (top level plus each job) guarantees the caller is a
     superset, so no call startup-fails and writeback jobs can push at runtime.
     """
-    published = build_published_workflow(workflow)
-    merged: dict[str, str] = {}
-    sources: list[Any] = [published.get("permissions")]
-    for job in (published.get("jobs") or {}).values():
-        if isinstance(job, dict):
-            sources.append(job.get("permissions"))
-    for perms in sources:
-        if not isinstance(perms, dict):
-            continue
-        for name, level in perms.items():
-            level_str = str(level)
-            current = merged.get(name, "none")
-            if _PERMISSION_RANK.get(level_str, 0) > _PERMISSION_RANK.get(current, 0):
-                merged[name] = level_str
-    return {name: level for name, level in sorted(merged.items()) if level != "none"}
+    return caller_required_permissions(build_published_workflow(workflow))
 
 
 def _missing_mutation_inputs(workflow: Workflow) -> list[str]:
     """Mutation-harness inputs the target workflow does not expose (empty = OK)."""
     call_inputs = set(published_workflow_call(workflow).get("inputs") or {})
     return [name for name in MUTATION_REQUIRED_INPUTS if name not in call_inputs]
+
+
+# --- validation-failure scenario support -----------------------------------
+#
+# A validation-failure scenario does NOT call the reusable workflow. Instead the
+# generated job checks the repo out and runs the target workflow's
+# `validate-inputs.py` directly, with the env the workflow's own validate step
+# would set, so the *input-validation script layer* is exercised honestly in CI.
+# (A full reusable-call failure e2e is a future sandbox-repo capability.)
+
+VALIDATE_SCRIPT_NAME = "validate-inputs.py"
+# The runtime script-root the published workflow uses to LOCATE the validate
+# script (steps.devflows-runtime.outputs.script-root, materialized by the
+# injected io.runtime step). The harness invokes the script by its checkout path
+# instead, so an env entry bound to this expression is dropped, not reconstructed.
+_RUNTIME_SCRIPT_ROOT_EXPR = "steps.devflows-runtime.outputs.script-root"
+# Matches a ${{ ... }} expression and captures its inner text.
+_EXPRESSION = re.compile(r"\$\{\{\s*(?P<expr>.+?)\s*\}\}")
+# A bare reusable-workflow input reference, e.g. `inputs.docker-login-enabled`.
+_INPUT_REF = re.compile(r"^inputs\.(?P<name>[A-Za-z0-9][A-Za-z0-9_-]*)$")
+
+
+def _validate_step_run(workflow: Workflow) -> str:
+    """The `run` string a discoverable validate step must invoke for ``workflow``."""
+    return f"{workflow.id}/{VALIDATE_SCRIPT_NAME}"
+
+
+def _find_validate_step(workflow: Workflow) -> dict[str, Any] | None:
+    """Locate the source validate step, or None if the workflow has no such step.
+
+    Discovery matches the step whose ``run`` invokes
+    ``${DEVFLOWS_SCRIPT_ROOT}/<id>/validate-inputs.py`` (preferring a job keyed
+    ``validate``), which is the promotion-time contract for input validation.
+    """
+    needle = _validate_step_run(workflow)
+    jobs = workflow.workflow.get("jobs")
+    if not isinstance(jobs, dict):
+        return None
+
+    def _step_from(job: Any) -> dict[str, Any] | None:
+        if not isinstance(job, dict):
+            return None
+        for step in job.get("steps") or []:
+            if isinstance(step, dict) and needle in str(step.get("run") or ""):
+                return step
+        return None
+
+    # Prefer the conventional `validate` job, then fall back to any job.
+    ordered = list(jobs.items())
+    ordered.sort(key=lambda item: item[0] != "validate")
+    for _job_id, job in ordered:
+        step = _step_from(job)
+        if step is not None:
+            return step
+    return None
+
+
+def _serialize_input_value(value: Any) -> str:
+    """Render an input value the way GitHub presents it to a ${{ inputs.x }} ref.
+
+    GitHub hands booleans to expressions as the strings ``true``/``false`` and
+    numbers as their canonical decimal string; strings pass through. The
+    generated env values are plain strings, so the dumper quotes ``'true'`` /
+    ``'3'`` to keep them from reloading as bool/int — consistent with how the
+    call-job ``with:`` block feeds the same typed inputs to GitHub.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _workflow_input_defaults(workflow: Workflow) -> dict[str, Any]:
+    """Declared defaults for each ``on.workflow_call`` input (missing => absent)."""
+    inputs = workflow.workflow_call.get("inputs")
+    if not isinstance(inputs, dict):
+        return {}
+    return {
+        name: spec.get("default")
+        for name, spec in inputs.items()
+        if isinstance(spec, dict) and "default" in spec
+    }
+
+
+def _validate_env_errors(scenario: Scenario, step: dict[str, Any]) -> list[str]:
+    """Reasons the validate step's env cannot be reconstructed from inputs alone."""
+    errors: list[str] = []
+    env = step.get("env")
+    if env is not None and not isinstance(env, dict):
+        return ["validate step env must be a mapping."]
+    for key, raw in (env or {}).items():
+        value = str(raw)
+        if value.strip() == f"${{{{ {_RUNTIME_SCRIPT_ROOT_EXPR} }}}}":
+            continue  # DevFlows runtime script-root; supplied by checkout path.
+        for match in _EXPRESSION.finditer(value):
+            expr = match.group("expr")
+            if not _INPUT_REF.match(expr):
+                errors.append(
+                    f"validate step env {key!r} references {expr!r}; validation-failure "
+                    "scenarios can only reconstruct inputs.<name> expressions "
+                    "(github.*, steps.*, secrets.*, matrix.*, needs.* and compound "
+                    "expressions are unsupported so substitution stays total)."
+                )
+    return errors
+
+
+def _validation_failure_env(scenario: Scenario) -> dict[str, str]:
+    """Reconstruct the validate step's env from the scenario inputs and defaults.
+
+    Caller must have confirmed the step is discoverable and inputs-only via
+    ``_find_validate_step``/``_validate_env_errors``.
+    """
+    step = _find_validate_step(scenario.workflow) or {}
+    defaults = _workflow_input_defaults(scenario.workflow)
+    env: dict[str, str] = {}
+    for key, raw in (step.get("env") or {}).items():
+        value = str(raw)
+        if value.strip() == f"${{{{ {_RUNTIME_SCRIPT_ROOT_EXPR} }}}}":
+            continue
+
+        def _replace(match: re.Match[str]) -> str:
+            ref = _INPUT_REF.match(match.group("expr"))
+            # Guaranteed by _validate_env_errors, which runs before generation.
+            assert ref is not None, match.group("expr")
+            name = ref.group("name")
+            resolved = scenario.inputs[name] if name in scenario.inputs else defaults.get(name)
+            return _serialize_input_value(resolved)
+
+        env[key] = _EXPRESSION.sub(_replace, value)
+    return env
 
 
 @dataclass(frozen=True)
@@ -115,10 +235,16 @@ class Scenario:
     setup_artifact: dict[str, Any]
     mutation: dict[str, Any]
     writeback_payload: dict[str, Any]
+    expect: str
+    failure_message_contains: str
 
     @property
     def job_prefix(self) -> str:
         return f"{self.workflow.id}-{self.id}".replace("-", "_")
+
+    @property
+    def is_validation_failure(self) -> bool:
+        return self.expect == "validation-failure"
 
 
 def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
@@ -142,6 +268,10 @@ def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
                     setup_artifact=dict(raw_scenario.get("setup-artifact") or {}),
                     mutation=dict(raw_scenario.get("mutation") or {}),
                     writeback_payload=dict(raw_scenario.get("writeback-payload") or {}),
+                    expect=str(raw_scenario.get("expect") or "success"),
+                    failure_message_contains=str(
+                        raw_scenario.get("failure-message-contains") or ""
+                    ),
                 )
             )
     return scenarios
@@ -177,18 +307,59 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 errors.append(f"{prefix}: unsupported runner {runner!r}.")
         if not isinstance(scenario.inputs, dict):
             errors.append(f"{prefix}: inputs must be a mapping.")
-        if not scenario.assertions:
+        if scenario.expect not in {"success", "validation-failure"}:
+            errors.append(f"{prefix}: expect must be 'success' or 'validation-failure'.")
+        if scenario.failure_message_contains and not scenario.is_validation_failure:
+            errors.append(
+                f"{prefix}: failure-message-contains is only valid with expect: validation-failure."
+            )
+        if scenario.is_validation_failure:
+            # This scenario runs the target workflow's validate-inputs.py directly
+            # (no reusable-workflow call), so it must NOT carry any of the machinery
+            # that only makes sense for a real call.
+            for field_name, present in (
+                ("assertions", bool(scenario.assertions)),
+                ("artifact", bool(scenario.artifact)),
+                ("setup-artifact", bool(scenario.setup_artifact)),
+                ("mutation", bool(scenario.mutation)),
+                ("writeback-payload", bool(scenario.writeback_payload)),
+                ("cleanup", bool(scenario.cleanup)),
+            ):
+                if present:
+                    errors.append(
+                        f"{prefix}: validation-failure scenarios test the validate script "
+                        f"only and cannot declare {field_name}."
+                    )
+            # The target must expose a discoverable validate step whose env can be
+            # rebuilt from inputs alone (else substitution would be incomplete).
+            step = _find_validate_step(scenario.workflow)
+            if step is None:
+                errors.append(
+                    f"{prefix}: expect: validation-failure requires {scenario.workflow.id} to "
+                    f"have a validate step running ${{DEVFLOWS_SCRIPT_ROOT}}/"
+                    f"{scenario.workflow.id}/{VALIDATE_SCRIPT_NAME}; none was found."
+                )
+            else:
+                errors.extend(
+                    f"{prefix}: {message}" for message in _validate_env_errors(scenario, step)
+                )
+        if not scenario.assertions and not scenario.is_validation_failure:
             errors.append(f"{prefix}: assertions must not be empty.")
         if not scenario.mutation:
             for assertion in scenario.assertions:
                 assertion_type = assertion.get("type")
                 if assertion_type not in {
                     "file-exists",
+                    "file-glob-exists",
                     "file-contains",
                     "workflow-output-equals",
                 }:
                     errors.append(f"{prefix}: unsupported assertion type {assertion_type!r}.")
-                if assertion_type in {"file-exists", "file-contains"} and not assertion.get("path"):
+                if assertion_type in {
+                    "file-exists",
+                    "file-glob-exists",
+                    "file-contains",
+                } and not assertion.get("path"):
                     errors.append(f"{prefix}: {assertion_type} assertions require path.")
                 if assertion_type == "file-contains" and "text" not in assertion:
                     errors.append(f"{prefix}: file-contains assertions require text.")
@@ -215,6 +386,29 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 for index, file_item in enumerate(files):
                     if not isinstance(file_item, dict) or not file_item.get("path"):
                         errors.append(f"{prefix}: setup-artifact.files[{index}] requires path.")
+                        continue
+                    # Exactly one payload source; mirrors the schema oneOf and the
+                    # create-setup-files.py runtime guard.
+                    modes = [
+                        key
+                        for key in ("content", "source-path", "content-base64")
+                        if key in file_item
+                    ]
+                    if len(modes) != 1:
+                        errors.append(
+                            f"{prefix}: setup-artifact.files[{index}] must set exactly one of "
+                            "content, source-path, content-base64."
+                        )
+                    source_path = file_item.get("source-path")
+                    if (
+                        isinstance(source_path, str)
+                        and source_path
+                        and (Path(source_path).is_absolute() or ".." in Path(source_path).parts)
+                    ):
+                        errors.append(
+                            f"{prefix}: setup-artifact.files[{index}] source-path must be a "
+                            "workspace-relative path without '..'."
+                        )
         if scenario.mutation:
             if "hosted" not in scenario.runs:
                 errors.append(f"{prefix}: mutation is supported for hosted scenarios.")
@@ -335,6 +529,13 @@ def render_test_workflow(scenarios: list[Scenario], *, runner: str, name: str) -
         workflow["permissions"]["actions"] = "read"
     jobs = workflow["jobs"]
     for scenario in selected:
+        if scenario.is_validation_failure:
+            # A plain checkout + run-the-validate-script job; no reusable call, no
+            # write permission, so it needs no fork guard and runs under act too.
+            jobs[f"{scenario.job_prefix}_validate"] = _validation_failure_job(
+                scenario, runner=runner
+            )
+            continue
         # On hosted runners a write-requiring call cannot start on a fork PR, so
         # gate the whole scenario chain; read-only scenarios stay ungated and run
         # on every pull request. (Local runs never see fork PRs.)
@@ -603,6 +804,55 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     return job
 
 
+def _validation_failure_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
+    """A plain job that runs the target validate script and asserts it rejects.
+
+    No reusable-workflow call is made: the job runs
+    ``workflows/<id>/scripts/validate-inputs.py`` with the env the workflow's
+    validate step would set, reconstructed from the scenario inputs and the
+    workflow input defaults. The job stays green when the script rejects the
+    inputs (nonzero exit) and fails if it unexpectedly accepts them, or if the
+    required failure message is absent.
+
+    Hosted runs check the repository out first (a fresh runner has no content);
+    local (act) runs rely on the bind-mounted workspace, so a checkout is omitted
+    there exactly as the local assert job does.
+    """
+    script_path = (scenario.workflow.support_path / VALIDATE_SCRIPT_NAME).as_posix()
+    env: dict[str, str] = {
+        "DEVFLOWS_VALIDATE_SCRIPT": script_path,
+        **_validation_failure_env(scenario),
+    }
+    if scenario.failure_message_contains:
+        env["DEVFLOWS_FAILURE_MESSAGE_CONTAINS"] = scenario.failure_message_contains
+    steps: list[dict[str, Any]] = []
+    if runner == "hosted":
+        steps.append(_hosted_checkout_step())
+    steps.append(
+        {
+            "name": "Assert validation rejects the inputs",
+            "shell": "bash",
+            "env": env,
+            "run": f"python {_script('assert-validation-failure.py')}",
+        }
+    )
+    return {
+        "name": f"{scenario.workflow.name}: {scenario.name}",
+        "runs-on": "ubuntu-latest",
+        "steps": steps,
+    }
+
+
+def _assert_result_step(scenario: Scenario, call_job_id: str) -> dict[str, Any]:
+    """Step asserting the call job reached the scenario's expected conclusion."""
+    return {
+        "name": "Assert scenario succeeded",
+        "shell": "bash",
+        "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
+        "run": f"python {_script('assert-result.py')}",
+    }
+
+
 def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     call_job_id = f"{scenario.job_prefix}_call"
     if runner == "hosted" and scenario.mutation:
@@ -615,12 +865,7 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
                 name="Checkout ephemeral branch",
                 ref=f"${{{{ needs.{setup_job_id}.outputs.branch }}}}",
             ),
-            {
-                "name": "Assert scenario succeeded",
-                "shell": "bash",
-                "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
-                "run": f"python {_script('assert-result.py')}",
-            },
+            _assert_result_step(scenario, call_job_id),
             {
                 "name": "Assert ephemeral branch",
                 "shell": "bash",
@@ -643,14 +888,7 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     if runner == "hosted":
         # Fresh runner without repository content; check out before any script.
         steps.append(_hosted_checkout_step())
-    steps.append(
-        {
-            "name": "Assert scenario succeeded",
-            "shell": "bash",
-            "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
-            "run": f"python {_script('assert-result.py')}",
-        }
-    )
+    steps.append(_assert_result_step(scenario, call_job_id))
     if runner == "hosted" and scenario.artifact:
         download_path = str(
             scenario.artifact.get("path") or f".devflows-test-artifacts/{scenario.id}"
@@ -726,12 +964,19 @@ def _assertion_steps(
             }
         ]
     path = _assertion_path(scenario, assertion, runner=runner)
-    if assertion_type == "file-exists":
+    if assertion_type in {"file-exists", "file-glob-exists"}:
+        is_glob = assertion_type == "file-glob-exists"
+        env = {"ASSERT_PATH": path}
+        if is_glob:
+            # assert-file-exists.py treats ASSERT_PATH as a glob requiring >=1
+            # match when ASSERT_GLOB is set.
+            env["ASSERT_GLOB"] = "1"
+        label = "matches glob" if is_glob else "exists"
         return [
             {
-                "name": f"Assert file exists: {assertion['path']}",
+                "name": f"Assert file {label}: {assertion['path']}",
                 "shell": "bash",
-                "env": {"ASSERT_PATH": path},
+                "env": env,
                 "run": f"python {_script('assert-file-exists.py')}",
             }
         ]
@@ -769,6 +1014,6 @@ def _cleanup_local_outputs(scenarios: list[Scenario]) -> None:
 
 def _has_file_assertions(scenario: Scenario) -> bool:
     return any(
-        assertion.get("type") in {"file-exists", "file-contains"}
+        assertion.get("type") in {"file-exists", "file-glob-exists", "file-contains"}
         for assertion in scenario.assertions
     )

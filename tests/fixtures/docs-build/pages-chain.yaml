@@ -1,0 +1,49 @@
+name: Build docs and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+# docs-build itself stays read-only. The Pages DEPLOY (pages: write, id-token:
+# write) lives entirely in the separate deploy-pages workflow, which consumes the
+# pages-artifact-name output below.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-docs:
+    # Replace docs-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/v0.1.0
+    with:
+      docs-tool: sphinx
+      docs-environment: pip
+      pip-install-targets: |
+        sphinx
+        furo
+      sphinx-source-directory: docs
+      docs-output-directory: _site
+      # Upload the built site as a GitHub Pages artifact for the deploy-pages chain.
+      pages-artifact-enabled: true
+
+  # deploy-pages consumes the Pages artifact by name. It — not docs-build — holds
+  # pages: write and id-token: write, keeping every docs build on a PR read-only.
+  # Job-level permissions REPLACE (not merge with) the workflow-level block, so the
+  # deploy job must grant the full union deploy-pages' job tree declares:
+  # contents: read + actions: read (package job) plus pages: write + id-token: write
+  # (deploy job), or GitHub fails the nested-permission check at startup.
+  deploy-docs:
+    needs: build-docs
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    # Replace deploy-pages/v0.1.0 with the latest released tag once it is released.
+    uses: QuanTizEd8/DevFlows/.github/workflows/deploy-pages.yaml@deploy-pages/v0.1.0
+    with:
+      pages-artifact-name: ${{ needs.build-docs.outputs.pages-artifact-name }}
+      # Deploy-only mode: the site was already packaged into the Pages artifact by
+      # build-docs, so deploy-pages must not try to package (and must not check out).
+      pages-artifact-enabled: false
+      checkout-enabled: false

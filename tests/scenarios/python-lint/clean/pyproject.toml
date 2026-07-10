@@ -1,0 +1,5 @@
+# Minimal standalone project for the python-lint clean scenario fixture.
+[project]
+name = "devflows-python-lint-clean-fixture"
+version = "0.0.0"
+requires-python = ">=3.11"

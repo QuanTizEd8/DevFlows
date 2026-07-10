@@ -1,0 +1,282 @@
+id: python-build
+name: Python Build
+summary:
+  Build Python distribution artifacts (sdist, pure wheel, native cibuildwheel
+  wheels, and conda packages) and aggregate them into canonical named artifacts
+  with sha256 digests and a JSON manifest for downstream publishing.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Python
+  keywords:
+    - python
+    - build
+    - wheel
+    - sdist
+    - cibuildwheel
+    - conda
+    - packaging
+    - artifacts
+io:
+  job: dist
+  runtime: true
+  checkout: true
+  artifact-download: true
+  checkout-jobs:
+    - cibw
+    - conda
+  runtime-jobs:
+    - validate
+    - cibw
+    - conda
+    - collect
+notes:
+  - >-
+    Callers must grant permissions: contents: read AND actions: read on the
+    calling job. actions: read is statically required even when cibw/conda are
+    disabled: the collect job always downloads the run-internal build
+    intermediates, and the dist job hosts the caller-facing artifact-download
+    channel. No write permission (contents, packages, id-token, attestations) is
+    ever required or requested; the build is a pure source-to-artifact transform.
+    Provenance and publishing permissions belong to downstream consumers of the
+    dist-sha256sums and dist-manifest outputs (pypi-publish, anaconda-publish,
+    slsa-github-generator).
+  - >-
+    Every build flavor is off unless enabled, but a call that would build nothing
+    (all of build-sdist-enabled, build-wheel-enabled, cibw-enabled, conda-enabled
+    false) fails in the validate job. This workflow never silently no-ops.
+  - >-
+    The published artifact names are outputs (sdist-artifact-name,
+    wheels-artifact-name, conda-artifact-name); each is the empty string when its
+    flavor produced nothing. Downstream consumers must guard on `if: !cancelled()`
+    plus a non-empty check, the documented cross-workflow chaining mechanism.
+  - >-
+    dist-manifest is the machine-readable chaining contract:
+    {"schema": 1, "files": [{"name", "sha256", "size", "kind":
+    "sdist"|"wheel"|"conda"}], "artifacts": {"sdist", "wheels", "conda-channel"}}.
+    dist-sha256sums is the base64 of sha256sum-format lines and is directly the
+    subjects format slsa-github-generator's generic provenance workflow expects.
+    Reusable-workflow outputs share a 1 MB combined limit; both outputs are
+    KB-scale for realistic matrices.
+  - >-
+    All cibuildwheel configuration except the matrix legs lives in the caller's
+    pyproject.toml [tool.cibuildwheel]. cibw-matrix carries only
+    runner/only/build/archs per leg; only and build are mutually exclusive. Matrix
+    values reach cibuildwheel through with:/env: only, never run: interpolation.
+  - >-
+    The conda flavor builds recipe.yaml (v1 recipe format) packages with
+    rattler-build in setup-only mode; legacy conda-build meta.yaml recipes are not
+    supported (port the recipe to recipe.yaml v1). The merged channel is
+    re-indexed at collect time by a self-contained pure-Python generator (no conda
+    dependency) so repodata.json is authoritative across matrix legs.
+  - >-
+    collect cross-checks that every produced distribution (sdist, wheels, conda
+    packages) agrees on version and fails loudly otherwise. A conda recipe whose
+    version diverges from the sdist/wheel version fails the build; keep them in
+    lockstep for a coherent release.
+  - >-
+    Callers that invoke this workflow more than once in the same run MUST pass
+    distinct dist-artifact-prefix values, or the published and run-internal
+    artifact names collide (same caveat as pandoc's per-invocation artifact name).
+  - >-
+    The collect job runs on ubuntu-latest (no collect-runner input in v1). Adding
+    a <group>-runner input later is a backward-compatible minor change.
+  - >-
+    The caller-facing artifact-download channel is hosted on the dist job, which is
+    skipped whenever both build-sdist-enabled and build-wheel-enabled are false. A
+    cibw-only or conda-only call that also sets artifact-download-enabled: true is
+    therefore rejected by the validate job, because the download would silently
+    no-op. Enable a host build or leave artifact-download-enabled false in those
+    calls.
+  - >-
+    uv-cache-mode (auto, true, or false) is the setup-uv enable-cache passthrough
+    shared with the sibling workflows and is validated in the validate job. It
+    applies to the uv build tool on the dist job and to the collect job's uv
+    (used to re-index conda channels).
+examples:
+  - name: Pure sdist and wheel build
+    path: tests/fixtures/python-build/pure-build.yaml
+  - name: Native wheels and conda packages
+    path: tests/fixtures/python-build/native-and-conda.yaml
+tests:
+  scenarios:
+    # All scenarios are hosted-only. The dist -> collect handoff moves build
+    # outputs between jobs as run-internal artifacts, a GitHub service `act` cannot
+    # emulate without an artifact server the local harness does not configure; the
+    # scripts' behavior (validate, build, aggregate, digest, version-consistency)
+    # is covered exhaustively by tests/test_python_build.py instead.
+    - id: pure-wheelhouse
+      name: Pure uv build produces a wheelhouse and sdist
+      runs:
+        - hosted
+      inputs:
+        build-package-path: tests/scenarios/python-build/pure-package
+        dist-artifact-prefix: python-build-pure
+      artifact:
+        name: python-build-pure-wheels
+        path: .devflows-test-artifacts/python-build/pure
+      assertions:
+        - type: file-exists
+          path: python_build_fixture-0.1.0-py3-none-any.whl
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
+        - type: workflow-output-equals
+          name: wheels-artifact-name
+          value: python-build-pure-wheels
+        - type: workflow-output-equals
+          name: conda-artifact-name
+          value: ""
+    - id: python-build-tool
+      name: python -m build tool parity
+      runs:
+        - hosted
+      inputs:
+        build-tool: python-build
+        build-python-version: "3.12"
+        build-package-path: tests/scenarios/python-build/pure-package
+        dist-artifact-prefix: python-build-pybuild
+      artifact:
+        name: python-build-pybuild-sdist
+        path: .devflows-test-artifacts/python-build/pybuild
+      assertions:
+        - type: file-exists
+          path: python_build_fixture-0.1.0.tar.gz
+        - type: workflow-output-equals
+          name: sdist-artifact-name
+          value: python-build-pybuild-sdist
+    - id: sdist-only
+      name: sdist-only build leaves the wheelhouse empty
+      runs:
+        - hosted
+      inputs:
+        build-wheel-enabled: false
+        build-package-path: tests/scenarios/python-build/pure-package
+        dist-artifact-prefix: python-build-sdist
+      artifact:
+        name: python-build-sdist-sdist
+        path: .devflows-test-artifacts/python-build/sdist
+      assertions:
+        - type: file-exists
+          path: python_build_fixture-0.1.0.tar.gz
+        - type: workflow-output-equals
+          name: wheels-artifact-name
+          value: ""
+    - id: cibw-manylinux
+      # One cheap native leg (cp313-manylinux_x86_64 on ubuntu-latest) that builds
+      # the minimal C-extension fixture end to end: prepare-cibw-env -> the pinned
+      # cibuildwheel action -> collect's flat wheelhouse. auditwheel stamps every
+      # manylinux compatibility tag the repaired wheel satisfies, so the exact
+      # filename is inherently non-deterministic; the assertion uses a *manylinux*
+      # glob (file-glob-exists) instead of an exact name. Expected duration ~2-4 min
+      # (a manylinux container build of a trivial extension); it is the only hosted
+      # cibw leg, so the per-PR cost is bounded.
+      name: cibuildwheel builds a manylinux wheel into the wheelhouse
+      runs:
+        - hosted
+      inputs:
+        build-sdist-enabled: false
+        build-wheel-enabled: false
+        cibw-enabled: true
+        cibw-matrix: '[{"runner": "ubuntu-latest", "only": "cp313-manylinux_x86_64"}]'
+        build-package-path: tests/scenarios/python-build/native-package
+        dist-artifact-prefix: python-build-cibw
+      artifact:
+        name: python-build-cibw-wheels
+        path: .devflows-test-artifacts/python-build/cibw
+      assertions:
+        - type: file-glob-exists
+          path: devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl
+        - type: workflow-output-equals
+          name: wheels-artifact-name
+          value: python-build-cibw-wheels
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
+    - id: conda-noarch
+      name: rattler-build noarch package with a re-indexed channel
+      runs:
+        - hosted
+      inputs:
+        build-sdist-enabled: false
+        build-wheel-enabled: false
+        conda-enabled: true
+        conda-recipe-path: tests/scenarios/python-build/conda-recipe/recipe.yaml
+        dist-artifact-prefix: python-build-conda
+      artifact:
+        name: python-build-conda-conda-channel
+        path: .devflows-test-artifacts/python-build/conda
+      assertions:
+        - type: file-contains
+          path: noarch/repodata.json
+          text: python-build-conda-fixture
+        - type: workflow-output-equals
+          name: conda-artifact-name
+          value: python-build-conda-conda-channel
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. Each pins a stable substring of the rejection it targets;
+    # the exhaustive script coverage still lives in tests/test_python_build.py.
+    - id: nothing-to-build
+      name: All build flavors disabled fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "Nothing to build"
+      inputs:
+        build-sdist-enabled: false
+        build-wheel-enabled: false
+        cibw-enabled: false
+        conda-enabled: false
+    - id: cibw-empty-matrix
+      name: cibw enabled with an empty matrix fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cibw-enabled is true but cibw-matrix is empty"
+      inputs:
+        cibw-enabled: true
+        cibw-matrix: "[]"
+    - id: conda-missing-recipe
+      name: conda enabled without a recipe path fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "conda-recipe-path is empty"
+      inputs:
+        conda-enabled: true
+        conda-recipe-path: ""
+    - id: unknown-build-tool
+      name: Unknown build tool fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "build-tool must be 'uv' or 'python-build'"
+      inputs:
+        build-tool: cargo
+    - id: malformed-matrix-json
+      name: Malformed cibw-matrix JSON fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cibw-matrix is not valid JSON"
+      inputs:
+        cibw-matrix: "{not json"
+    - id: unsafe-artifact-prefix
+      name: Unsafe dist-artifact-prefix fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "dist-artifact-prefix must be a non-empty artifact-name-safe string"
+      inputs:
+        dist-artifact-prefix: "has space"

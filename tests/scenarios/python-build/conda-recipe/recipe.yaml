@@ -1,0 +1,22 @@
+# rattler-build v1 recipe format (recipe.yaml). Legacy conda-build meta.yaml is
+# intentionally not supported by the python-build workflow.
+schema_version: 1
+
+package:
+  name: python-build-conda-fixture
+  version: "0.1.0"
+
+build:
+  # noarch: generic keeps the fixture platform-independent, so a single
+  # ubuntu-latest leg produces a noarch/ subdir the collect job re-indexes.
+  noarch: generic
+  number: 0
+  script:
+    - mkdir -p $PREFIX/share/python-build-conda-fixture
+    - echo "python-build conda fixture package" >
+      $PREFIX/share/python-build-conda-fixture/marker.txt
+
+about:
+  summary:
+    Trivial noarch fixture package for the DevFlows python-build conda scenario.
+  license: MIT

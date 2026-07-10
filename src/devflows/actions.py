@@ -71,6 +71,61 @@ ACTION_PINS: dict[str, ActionPin] = {
         "513af61f4de4f75d37e4438f184ba4358f0fc1ca",
         "v0.3.1900000450",
     ),
+    # Python toolchain (python-* and docs-build workflows). setup-uv, setup-python,
+    # setup-micromamba, and setup-pixi are generic across the Python workflow family;
+    # cibuildwheel and rattler-build-action are python-build-specific but registered
+    # here so the generator annotates their version comments in the dumped output and
+    # the adapter contract test (test_contract.py) verifies their emitted with: keys
+    # on pin bumps.
+    "cibuildwheel": ActionPin(
+        "pypa/cibuildwheel",
+        "294735312765b09d24a2fbec22660ce817587d55",
+        "v4.1.0",
+    ),
+    "rattler-build": ActionPin(
+        "prefix-dev/rattler-build-action",
+        "1ca5f45832f419a46d1326ccc5861d7e14d67c44",
+        "v0.2.39",
+    ),
+    "setup-micromamba": ActionPin(
+        "mamba-org/setup-micromamba",
+        "d7c9bd84e824b79d2af72a2d4196c7f4300d3476",
+        "v3.0.0",
+    ),
+    "setup-pixi": ActionPin(
+        "prefix-dev/setup-pixi",
+        "a09b6247153796b190642a2b53fac4241043cf6f",
+        "v0.10.0",
+    ),
+    "setup-python": ActionPin(
+        "actions/setup-python",
+        "ece7cb06caefa5fff74198d8649806c4678c61a1",
+        "v6.3.0",
+    ),
+    "setup-uv": ActionPin(
+        "astral-sh/setup-uv",
+        "11f9893b081a58869d3b5fccaea48c9e9e46f990",
+        "v8.3.2",
+    ),
+    # GitHub Pages chain (docs-build packages the artifact; deploy-pages
+    # configures, packages, and deploys). Pinned together so the three actions
+    # stay on a coherent generation: upload-pages-artifact v5 adds the
+    # include-hidden-files input that v4 lacked (v4 always excluded dotfiles).
+    "upload-pages-artifact": ActionPin(
+        "actions/upload-pages-artifact",
+        "fc324d3547104276b827a68afc52ff2a11cc49c9",
+        "v5.0.0",
+    ),
+    "configure-pages": ActionPin(
+        "actions/configure-pages",
+        "45bfe0192ca1faeb007ade9deae92b16b8254a0d",
+        "v6.0.0",
+    ),
+    "deploy-pages": ActionPin(
+        "actions/deploy-pages",
+        "cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
+        "v5.0.0",
+    ),
 }
 
 PINS_BY_REF: dict[str, ActionPin] = {pin.ref: pin for pin in ACTION_PINS.values()}

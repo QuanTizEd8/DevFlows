@@ -48,6 +48,10 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The python-lint scenario fixtures are standalone projects that the workflow
+# lints under their own nested ruff config; the violations fixture is broken on
+# purpose, so exclude the tree from the repository's own ruff run.
+extend-exclude = ["tests/scenarios/python-lint"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "N", "UP", "W"]

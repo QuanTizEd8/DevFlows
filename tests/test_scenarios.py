@@ -1,4 +1,6 @@
 import dataclasses
+import json
+from pathlib import Path
 
 from devflows.catalog import Workflow, load_catalog
 from devflows.scenarios import (
@@ -6,14 +8,26 @@ from devflows.scenarios import (
     _call_job,
     _ephemeral_branch_cleanup_job,
     _ephemeral_branch_setup_job,
+    _find_validate_step,
     _missing_mutation_inputs,
     _required_call_permissions,
     _requires_write,
+    _serialize_input_value,
     _setup_artifact_job,
+    _validation_failure_env,
+    _validation_failure_job,
     load_scenarios,
     render_test_workflow,
     validate_scenarios,
 )
+
+
+def _with_scenarios(workflow_id: str, scenarios: list[dict]) -> Workflow:
+    """A copy of a real catalog workflow whose scenarios are replaced for testing."""
+    workflow = {item.id: item for item in load_catalog()}[workflow_id]
+    metadata = dict(workflow.metadata)
+    metadata["tests"] = {"scenarios": scenarios}
+    return dataclasses.replace(workflow, metadata=metadata)
 
 
 def _writeback_mutation_scenario(scenario_id: str, branch_prefix: str, runs=("hosted",)) -> dict:
@@ -403,6 +417,400 @@ def test_local_workflow_has_act_guard() -> None:
     assert "require_act:" in rendered
     assert "task scenarios-local" in rendered
     assert '"${ACT:-}" != "true"' in rendered
+
+
+def test_success_scenario_assert_job_uses_always_and_success_result() -> None:
+    # Success path: assert-result.py checks for the default "success" result and
+    # the assert job stays on always() (no EXPECTED_RESULT env of the removed
+    # continue-on-error mechanism).
+    scenario = _scenario("pandoc", "markdown-html-artifact")
+
+    assert_job = _assert_job(scenario, runner="hosted")
+
+    assert assert_job["if"] == "always()"
+    result_step = next(
+        step for step in assert_job["steps"] if "assert-result.py" in step.get("run", "")
+    )
+    assert "EXPECTED_RESULT" not in result_step["env"]
+
+
+# --- file-glob-exists assertion ---
+
+
+def test_file_glob_exists_assert_step_sets_glob_flag() -> None:
+    # The real python-build cibw scenario asserts a *manylinux* wheel with a glob,
+    # because auditwheel makes the exact filename non-deterministic.
+    scenario = _scenario("python-build", "cibw-manylinux")
+
+    assert_job = _assert_job(scenario, runner="hosted")
+    glob_step = next(step for step in assert_job["steps"] if "matches glob" in step["name"])
+
+    assert glob_step["env"]["ASSERT_GLOB"] == "1"
+    # The glob is joined under the downloaded-artifact path, and the wildcard is
+    # preserved for the harness to expand.
+    assert glob_step["env"]["ASSERT_PATH"].endswith(
+        "devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl"
+    )
+    assert "assert-file-exists.py" in glob_step["run"]
+
+
+def test_file_glob_exists_is_accepted_and_requires_path() -> None:
+    ok = _with_scenarios(
+        "pandoc",
+        [
+            {
+                "id": "glob-ok",
+                "runs": ["hosted"],
+                "inputs": {},
+                "artifact": {"name": "a"},
+                "assertions": [{"type": "file-glob-exists", "path": "out/*.whl"}],
+            }
+        ],
+    )
+    assert validate_scenarios([ok]) == []
+
+    missing_path = _with_scenarios(
+        "pandoc",
+        [
+            {
+                "id": "glob-nopath",
+                "runs": ["hosted"],
+                "inputs": {},
+                "artifact": {"name": "a"},
+                "assertions": [{"type": "file-glob-exists"}],
+            }
+        ],
+    )
+    errors = validate_scenarios([missing_path])
+    assert any("file-glob-exists assertions require path" in error for error in errors)
+
+
+def test_hosted_file_glob_assertion_requires_artifact_metadata() -> None:
+    # file-glob-exists is a file assertion, so a hosted scenario using it must
+    # declare artifact metadata (the assert job downloads it before globbing).
+    workflow = _with_scenarios(
+        "pandoc",
+        [
+            {
+                "id": "glob-noartifact",
+                "runs": ["hosted"],
+                "inputs": {},
+                "assertions": [{"type": "file-glob-exists", "path": "out/*.whl"}],
+            }
+        ],
+    )
+    errors = validate_scenarios([workflow])
+    assert any("hosted file assertions require artifact metadata" in error for error in errors)
+
+
+# --- expect: validation-failure scenarios (validate-script harness) ---
+#
+# Promoted catalog workflows do not (yet) expose an inputs-only validate step:
+# build-devcontainer's validate env references secrets.* and writeback has no
+# validate step, so both are correctly rejected by the harness (see the
+# rejection tests below). The mechanism is therefore exercised against this
+# synthetic fixture; the five incoming Python workflows adopt the same shape at
+# integration.
+
+_INPUTS_ONLY_VALIDATE_ENV = {
+    "MODE": "${{ inputs.mode }}",
+    "COUNT": "${{ inputs.count }}",
+    "STRICT": "${{ inputs.strict }}",
+    # Dropped by the harness (it runs the script by its checkout path).
+    "DEVFLOWS_SCRIPT_ROOT": "${{ steps.devflows-runtime.outputs.script-root }}",
+}
+
+
+def _validation_fixture(
+    scenarios: list[dict], *, validate_env=None, with_validate=True
+) -> Workflow:
+    """A synthetic reusable workflow with an inputs-only validate step."""
+    env = _INPUTS_ONLY_VALIDATE_ENV if validate_env is None else validate_env
+    if with_validate:
+        jobs = {
+            "validate": {
+                "name": "Validate inputs",
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {
+                        "name": "Validate inputs",
+                        "shell": "bash",
+                        "env": env,
+                        "run": 'python "${DEVFLOWS_SCRIPT_ROOT}/vf-demo/validate-inputs.py"',
+                    }
+                ],
+            }
+        }
+    else:
+        jobs = {"run": {"name": "Run", "runs-on": "ubuntu-latest", "steps": [{"run": "echo hi"}]}}
+    workflow = {
+        "name": "[Reusable]: VF Demo",
+        "on": {
+            "workflow_call": {
+                "inputs": {
+                    "mode": {"type": "string", "required": True},
+                    "count": {"type": "number", "required": False, "default": 3},
+                    "strict": {"type": "boolean", "required": False, "default": False},
+                }
+            }
+        },
+        "jobs": jobs,
+    }
+    metadata = {
+        "id": "vf-demo",
+        "name": "VF Demo",
+        "status": "active",
+        "release": {"type": "simple", "major": 0},
+        "tests": {"scenarios": scenarios},
+    }
+    return Workflow(
+        id="vf-demo",
+        path=Path("tests/fixtures/vf-demo"),
+        workflow_path=Path("tests/fixtures/vf-demo/workflow.yaml"),
+        metadata_path=Path("tests/fixtures/vf-demo/devflow.yaml"),
+        metadata=metadata,
+        workflow=workflow,
+    )
+
+
+def _vf_scenario(scenario_id: str = "bad-mode", *, message: str | None = None, **overrides) -> dict:
+    scenario = {
+        "id": scenario_id,
+        "runs": ["local", "hosted"],
+        "expect": "validation-failure",
+        "inputs": {"mode": "nope"},
+    }
+    if message is not None:
+        scenario["failure-message-contains"] = message
+    scenario.update(overrides)
+    return scenario
+
+
+def test_serialize_input_value_matches_github_presentation() -> None:
+    assert _serialize_input_value(True) == "true"
+    assert _serialize_input_value(False) == "false"
+    assert _serialize_input_value(3) == "3"
+    assert _serialize_input_value(2.0) == "2"
+    assert _serialize_input_value(1.5) == "1.5"
+    assert _serialize_input_value(None) == ""
+    assert _serialize_input_value("pandoc/core:3.8") == "pandoc/core:3.8"
+
+
+def test_validation_failure_env_fills_from_inputs_and_defaults() -> None:
+    workflow = _validation_fixture([_vf_scenario(inputs={"mode": "nope"})])
+    scenario = load_scenarios([workflow])[0]
+
+    env = _validation_failure_env(scenario)
+
+    # Scenario input wins; unset inputs fall back to the workflow defaults, all
+    # serialized as GitHub presents them to ${{ inputs.* }} (booleans/numbers as
+    # strings). The runtime script-root entry is dropped, not reconstructed.
+    assert env == {"MODE": "nope", "COUNT": "3", "STRICT": "false"}
+
+
+def test_validation_failure_env_serializes_bool_and_number_overrides() -> None:
+    scenario_dict = _vf_scenario(inputs={"mode": "full", "count": 5, "strict": True})
+    workflow = _validation_fixture([scenario_dict])
+    scenario = load_scenarios([workflow])[0]
+
+    env = _validation_failure_env(scenario)
+
+    assert env == {"MODE": "full", "COUNT": "5", "STRICT": "true"}
+
+
+def test_validation_failure_job_runs_validate_script_and_no_call() -> None:
+    workflow = _validation_fixture([_vf_scenario(message="mode must be one of")])
+    scenario = load_scenarios([workflow])[0]
+
+    hosted = _validation_failure_job(scenario, runner="hosted")
+
+    # A plain job: no reusable-workflow `uses:`, no continue-on-error.
+    assert "uses" not in hosted
+    assert "continue-on-error" not in hosted
+    steps = hosted["steps"]
+    assert steps[0]["uses"].startswith("actions/checkout@")
+    assert steps[0]["with"]["persist-credentials"] is False
+    run_step = steps[-1]
+    assert "assert-validation-failure.py" in run_step["run"]
+    assert (
+        run_step["env"]["DEVFLOWS_VALIDATE_SCRIPT"]
+        == "tests/fixtures/vf-demo/scripts/validate-inputs.py"
+    )
+    assert run_step["env"]["DEVFLOWS_FAILURE_MESSAGE_CONTAINS"] == "mode must be one of"
+    assert run_step["env"]["MODE"] == "nope"
+
+
+def test_validation_failure_local_job_has_no_checkout() -> None:
+    workflow = _validation_fixture([_vf_scenario()])
+    scenario = load_scenarios([workflow])[0]
+
+    local = _validation_failure_job(scenario, runner="local")
+
+    # Local relies on act's bind mount; a checkout would clobber the workspace.
+    assert all(not step.get("uses", "").startswith("actions/checkout@") for step in local["steps"])
+
+
+def test_validation_failure_renders_for_both_runners_without_call_shape() -> None:
+    workflow = _validation_fixture([_vf_scenario()])
+    scenarios = load_scenarios([workflow])
+
+    hosted = render_test_workflow(scenarios, runner="hosted", name="H")
+    local = render_test_workflow(scenarios, runner="local", name="L")
+
+    for rendered in (hosted, local):
+        assert "vf_demo_bad_mode_validate:" in rendered
+        # The broken continue-on-error-on-call shape must be gone everywhere.
+        assert "continue-on-error" not in rendered
+        assert "uses: ./.github/workflows/vf-demo.yaml" not in rendered
+
+
+def test_no_shipped_scenario_emits_continue_on_error() -> None:
+    scenarios = load_scenarios(load_catalog())
+
+    for runner in ("hosted", "local"):
+        rendered = render_test_workflow(scenarios, runner=runner, name="X")
+        assert "continue-on-error" not in rendered
+
+
+def test_validation_failure_scenario_is_valid() -> None:
+    workflow = _validation_fixture([_vf_scenario()])
+
+    assert validate_scenarios([workflow]) == []
+
+
+def test_validation_failure_requires_discoverable_validate_step() -> None:
+    workflow = _validation_fixture([_vf_scenario()], with_validate=False)
+
+    assert _find_validate_step(workflow) is None
+    errors = validate_scenarios([workflow])
+    assert any("none was found" in error for error in errors)
+
+
+def test_validation_failure_rejects_non_input_env_reference() -> None:
+    env = {
+        "MODE": "${{ inputs.mode }}",
+        "TOKEN_SET": "${{ secrets.some-token != '' }}",
+    }
+    workflow = _validation_fixture([_vf_scenario()], validate_env=env)
+
+    errors = validate_scenarios([workflow])
+
+    assert any("secrets" in error and "TOKEN_SET" in error for error in errors)
+
+
+def test_validation_failure_rejects_call_only_fields() -> None:
+    scenario = _vf_scenario(
+        assertions=[{"type": "file-exists", "path": "x"}],
+        artifact={"name": "a"},
+        cleanup=["x"],
+    )
+    workflow = _validation_fixture([scenario])
+
+    errors = validate_scenarios([workflow])
+
+    assert any("cannot declare assertions" in error for error in errors)
+    assert any("cannot declare artifact" in error for error in errors)
+    assert any("cannot declare cleanup" in error for error in errors)
+
+
+def test_failure_message_contains_only_valid_with_validation_failure() -> None:
+    scenario = {
+        "id": "sc",
+        "runs": ["hosted"],
+        "inputs": {},
+        "failure-message-contains": "boom",
+        "assertions": [{"type": "workflow-output-equals", "name": "o", "value": "v"}],
+    }
+    workflow = _with_scenarios("pandoc", [scenario])
+
+    errors = validate_scenarios([workflow])
+
+    assert any("failure-message-contains is only valid" in error for error in errors)
+
+
+def test_promoted_workflows_without_inputs_only_validate_are_rejected() -> None:
+    # build-devcontainer has a validate step but its env references secrets.*;
+    # writeback has no validate step. Both must be rejected so the mechanism
+    # never silently generates an incomplete env.
+    catalog = {item.id: item for item in load_catalog()}
+
+    bdc = _with_scenarios(
+        "build-devcontainer",
+        [{"id": "nb", "runs": ["hosted"], "expect": "validation-failure", "inputs": {}}],
+    )
+    assert _find_validate_step(catalog["build-devcontainer"]) is not None
+    assert any("references" in error for error in validate_scenarios([bdc]))
+
+    wb = _with_scenarios(
+        "writeback",
+        [{"id": "nv", "runs": ["hosted"], "expect": "validation-failure", "inputs": {}}],
+    )
+    assert _find_validate_step(catalog["writeback"]) is None
+    assert any("none was found" in error for error in validate_scenarios([wb]))
+
+
+# --- setup-artifact binary payloads (source-path / content-base64) ---
+
+
+def _setup_scenario(files: list[dict]) -> dict:
+    return {
+        "id": "setup-bin",
+        "runs": ["hosted"],
+        "inputs": {"artifact-download-enabled": True},
+        "setup-artifact": {"name": "n", "path": "p", "files": files},
+        "assertions": [{"type": "workflow-output-equals", "name": "o", "value": "v"}],
+    }
+
+
+def test_setup_artifact_job_passes_source_path_and_base64_verbatim() -> None:
+    files = [
+        {"path": "wheelhouse/pkg.whl", "source-path": "tests/scenarios/x/pkg.whl"},
+        {"path": "wheelhouse/data.bin", "content-base64": "AAECAw=="},
+    ]
+    workflow = _with_scenarios("pandoc", [_setup_scenario(files)])
+    scenario = load_scenarios([workflow])[0]
+
+    job = _setup_artifact_job(scenario)
+    create_step = next(
+        step for step in job["steps"] if "create-setup-files.py" in step.get("run", "")
+    )
+    passed = json.loads(create_step["env"]["DEVFLOWS_SETUP_FILES"])
+
+    assert passed[0]["source-path"] == "tests/scenarios/x/pkg.whl"
+    assert passed[1]["content-base64"] == "AAECAw=="
+
+
+def test_setup_artifact_file_requires_exactly_one_source() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_setup_scenario([{"path": "a", "content": "x", "source-path": "b"}])],
+    )
+
+    errors = validate_scenarios([workflow])
+
+    assert any(
+        "must set exactly one of content, source-path, content-base64" in error for error in errors
+    )
+
+
+def test_setup_artifact_source_path_rejects_traversal() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_setup_scenario([{"path": "a", "source-path": "../escape.whl"}])],
+    )
+
+    errors = validate_scenarios([workflow])
+
+    assert any("source-path must be a workspace-relative path" in error for error in errors)
+
+
+def test_setup_artifact_source_path_scenario_is_valid() -> None:
+    workflow = _with_scenarios(
+        "pandoc",
+        [_setup_scenario([{"path": "a/pkg.whl", "source-path": "tests/scenarios/x/pkg.whl"}])],
+    )
+
+    assert validate_scenarios([workflow]) == []
 
 
 def test_every_local_job_depends_on_require_act() -> None:

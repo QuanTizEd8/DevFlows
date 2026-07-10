@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devflows-cext-fixture"
+version = "0.1.0"
+description = "Minimal C-extension fixture for the python-build cibuildwheel scenario."
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# No [tool.cibuildwheel] block is needed: the scenario selects the manylinux
+# build via the workflow's cibw-matrix (only: cp313-manylinux_x86_64) and asserts
+# the wheel with a *manylinux* glob, so it tolerates whatever manylinux image
+# cibuildwheel defaults to (auditwheel stamps every satisfied tag, making the
+# exact filename non-deterministic regardless of the image).

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "python-build-fixture"
+version = "0.1.0"
+description = "Tiny pure-Python fixture package for the DevFlows python-build scenarios."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "DevFlows maintainers" }]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/python_build_fixture"]

@@ -1,0 +1,233 @@
+id: python-test
+name: Python Test
+summary:
+  Install a Python package from source or a built distribution and run the
+  caller's test command across a schema-validated matrix of runners and Python
+  versions, collecting per-leg reports into a merged artifact.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Python
+  keywords:
+    - python
+    - pytest
+    - testing
+    - matrix
+    - uv
+    - micromamba
+    - coverage
+io:
+  job: test
+  runtime: true
+  runtime-jobs:
+    - validate
+  checkout: true
+  artifact-download: true
+notes:
+  - >-
+    The test job statically declares actions: read for the generated
+    artifact-download channel, so every caller must grant permissions: contents:
+    read AND actions: read even when artifact-download-enabled is false - GitHub
+    validates a nested workflow's permissions before the run starts.
+  - >-
+    This workflow does not upload coverage (v1). To publish coverage, have the
+    test command emit coverage files (for example pytest --cov
+    --cov-report=xml:coverage.xml), add them to report-path (set
+    report-artifact-include-hidden-files: true to include a dotfile like
+    .coverage), and run a caller-side job holding id-token: write that downloads
+    the report artifact and calls codecov/codecov-action with use_oidc: true. The
+    test job therefore stays at contents: read. See the artifact-chain example.
+  - >-
+    test-env-manager selects one environment manager for the whole call: uv
+    (default) provisions the interpreter and an activated venv on every runner OS;
+    micromamba builds a conda-forge environment for packages with non-PyPI native
+    dependencies. Mixed-manager matrices are out of scope - call the workflow
+    twice. pixi-for-test is a recorded post-v1 candidate (a lockfile pins one
+    Python, which conflicts with a matrix over python-versions).
+  - >-
+    test-matrix is the only structured input and is schema-validated in a
+    dedicated validate job before any leg schedules; leg keys are kebab-case and
+    runner is required. The validate job re-emits the normalized matrix (derived
+    unique leg names, resolved per-leg environment file, precomputed micromamba
+    create-args) as a job output the test job consumes, so schema errors surface
+    before any leg runs.
+  - >-
+    Artifact installs (test-install-source: artifact) resolve against
+    test-dist-path with uv/pip --no-index --find-links, so the resolver picks the
+    Python- and platform-compatible wheel from a multi-wheel wheelhouse - this is
+    how python-build's flat wheelhouse artifact chains in. A test-dist-path with
+    no distributions is a hard error. Because the install is offline (--no-index),
+    runtime dependencies must already be in the wheelhouse or supplied through
+    test-dependencies.
+  - >-
+    When report-artifact-enabled is true, each leg uploads report-path as
+    <report-artifact-name>--leg-<leg-name> and the merge-reports job combines them
+    into one artifact named report-artifact-name (separate-directories,
+    delete-merged) with pattern <report-artifact-name>--leg-*. The '--leg-'
+    delimiter keeps the merge glob collision-proof when two same-run invocations use
+    distinct names where one is a hyphen-prefix of the other. The
+    report-artifact-name output is the empty string when the feature is off or the
+    merge job did not run, so downstream consumers must guard on a non-empty value.
+    Invoking this workflow more than once in the same run requires distinct
+    report-artifact-name values, because upload-artifact names are immutable.
+  - >-
+    A nonzero test-command exit fails the leg, so pytest exit 5 (no tests
+    collected) fails too - a misconfigured call cannot silently pass.
+  - >-
+    PEP 735 dependency groups (test-dependency-groups) are uv-only and installed
+    from test-source-directory's pyproject.toml; validation rejects them with
+    micromamba.
+  - >-
+    The validate and merge-reports jobs run on ubuntu-latest; test legs run on
+    matrix.runner. A <group>-runner input for the fixed jobs can be added later as
+    a compatible change.
+examples:
+  - name: Run tests from source across a matrix
+    path: tests/fixtures/python-test/source-uv.yaml
+  - name: Chain from python-build and upload coverage from the caller
+    path: tests/fixtures/python-test/artifact-chain.yaml
+tests:
+  scenarios:
+    - id: source-uv-local
+      name: Install from source with uv and run pytest
+      runs:
+        - local
+      cleanup:
+        - .devflows-test/python-test/source-uv
+      inputs:
+        checkout-enabled: false
+        test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "local-uv"}]'
+        test-install-source: source
+        test-source-directory: tests/scenarios/python-test/pkg
+        test-dependencies: pytest
+        test-command: >-
+          pytest -c tests/scenarios/python-test/pkg/pyproject.toml
+          --junitxml=.devflows-test/python-test/source-uv/report.xml
+          tests/scenarios/python-test/pkg/tests
+      assertions:
+        - type: file-exists
+          path: .devflows-test/python-test/source-uv/report.xml
+        - type: file-contains
+          path: .devflows-test/python-test/source-uv/report.xml
+          text: "<testsuite"
+    - id: reports-merge-hosted
+      name: Multi-leg matrix with merged report artifact
+      runs:
+        - hosted
+      inputs:
+        test-matrix: >-
+          [{"runner": "ubuntu-latest", "python-version": "3.11", "name": "leg-a"},
+          {"runner": "ubuntu-latest", "python-version": "3.13", "name": "leg-b"}]
+        test-install-source: source
+        test-source-directory: tests/scenarios/python-test/pkg
+        test-dependencies: pytest
+        test-command: >-
+          pytest -c tests/scenarios/python-test/pkg/pyproject.toml
+          --junitxml=.devflows-test/python-test/reports/report.xml
+          tests/scenarios/python-test/pkg/tests
+        report-artifact-enabled: true
+        report-merge-enabled: true
+        report-artifact-name: python-test-scn-reports
+        report-path: .devflows-test/python-test/reports/report.xml
+      artifact:
+        name: python-test-scn-reports
+        path: .devflows-test-artifacts/python-test/reports
+      assertions:
+        - type: file-exists
+          path: python-test-scn-reports--leg-leg-a/report.xml
+        - type: file-exists
+          path: python-test-scn-reports--leg-leg-b/report.xml
+        - type: workflow-output-equals
+          name: report-artifact-name
+          value: python-test-scn-reports
+    - id: artifact-install-hosted
+      name: Install a staged wheel and run pytest
+      runs:
+        - hosted
+      setup-artifact:
+        name: python-test-wheelhouse
+        path: .devflows-test/python-test/wheelhouse
+        files:
+          - path: .devflows-test/python-test/wheelhouse/devflows_test_fixture-0.1.0-py3-none-any.whl
+            source-path: tests/scenarios/python-test/dist/devflows_test_fixture-0.1.0-py3-none-any.whl
+      inputs:
+        artifact-download-enabled: true
+        artifact-download-name: python-test-wheelhouse
+        artifact-download-path: dist
+        test-install-source: artifact
+        test-dist-path: dist
+        test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "artifact"}]'
+        test-dependencies: pytest
+        test-command: >-
+          pytest -c tests/scenarios/python-test/pkg/pyproject.toml
+          --junitxml=.devflows-test/python-test/artifact/report.xml
+          tests/scenarios/python-test/pkg/tests
+        report-artifact-enabled: true
+        report-merge-enabled: false
+        report-artifact-name: python-test-artifact-report
+        report-path: .devflows-test/python-test/artifact/report.xml
+      artifact:
+        name: python-test-artifact-report--leg-artifact
+        path: .devflows-test-artifacts/python-test/artifact
+      assertions:
+        - type: file-exists
+          path: report.xml
+        - type: file-contains
+          path: report.xml
+          text: "<testsuite"
+    - id: micromamba-source-hosted
+      name: Install from source in a micromamba environment
+      runs:
+        - hosted
+      inputs:
+        test-env-manager: micromamba
+        test-environment-file: tests/scenarios/python-test/environment.yml
+        test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.12", "name": "mamba"}]'
+        test-install-source: source
+        test-source-directory: tests/scenarios/python-test/pkg
+        test-command: >-
+          pytest -c tests/scenarios/python-test/pkg/pyproject.toml
+          --junitxml=.devflows-test/python-test/micromamba/report.xml
+          tests/scenarios/python-test/pkg/tests
+        report-artifact-enabled: true
+        report-merge-enabled: false
+        report-artifact-name: python-test-micromamba-report
+        report-path: .devflows-test/python-test/micromamba/report.xml
+      artifact:
+        name: python-test-micromamba-report--leg-mamba
+        path: .devflows-test-artifacts/python-test/micromamba
+      assertions:
+        - type: file-exists
+          path: report.xml
+        - type: file-contains
+          path: report.xml
+          text: "<testsuite"
+    # invalid-matrix-json exercises validate-inputs.py directly (no reusable call)
+    # via the expect: validation-failure harness, so it runs under act and hosted
+    # CI. The other intended negative path -- artifact install mode with no dists
+    # -- is NOT expressible here: it fails in the install-package step, not the
+    # validate job, so validate-inputs.py legitimately accepts those inputs. It
+    # stays covered by unit tests of install-package.py in tests/test_python_test.py.
+    - id: invalid-matrix-json
+      name: Non-JSON test-matrix fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "test-matrix must be valid JSON"
+      inputs:
+        test-matrix: "{not json"
+    - id: invalid-uv-cache-mode
+      name: Invalid uv-cache-mode fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "uv-cache-mode must be one of"
+      inputs:
+        test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "leg"}]'
+        uv-cache-mode: sometimes

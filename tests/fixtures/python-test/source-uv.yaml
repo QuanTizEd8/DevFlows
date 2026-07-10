@@ -1,0 +1,34 @@
+name: Python tests from source
+
+on:
+  push:
+  pull_request:
+
+# python-test's test job statically declares actions: read for the
+# artifact-download channel, so grant it here even though this caller installs
+# from source.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    # Replace python-test/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-test.yaml@python-test/v0.1.0
+    permissions:
+      contents: read
+      actions: read
+    with:
+      test-matrix: |
+        [
+          { "runner": "ubuntu-latest", "python-version": "3.11" },
+          { "runner": "ubuntu-latest", "python-version": "3.13" },
+          { "runner": "macos-latest", "python-version": "3.13" }
+        ]
+      test-install-extras: |
+        test
+      test-command: pytest --junitxml=reports/junit.xml
+      report-artifact-enabled: true
+      report-artifact-name: python-test-reports
+      report-path: |
+        reports/junit.xml

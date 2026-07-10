@@ -256,6 +256,210 @@ def test_validate_accepts_script_reference_in_runtime_job() -> None:
 # ------------------------------------------------- item 11: inlined script integrity
 
 
+# ------------------------------------------------- multi-job channel injection
+
+
+def _multi_job_workflow(
+    io_overrides: dict | None = None,
+    *,
+    workflow_permissions: dict | None = None,
+) -> Workflow:
+    """A python-build-shaped fixture: a dist io.job plus cibw/conda sibling jobs."""
+    io = {
+        "job": "dist",
+        "checkout": True,
+        "artifact-download": True,
+        "checkout-jobs": ["cibw", "conda"],
+        "artifact-download-jobs": ["conda"],
+    }
+    if io_overrides:
+        io.update(io_overrides)
+
+    def _job(step_name: str) -> dict:
+        return {"runs-on": "ubuntu-latest", "steps": [{"name": step_name, "run": "true"}]}
+
+    workflow = {
+        "on": {"workflow_call": {}},
+        "permissions": (
+            workflow_permissions if workflow_permissions is not None else {"contents": "read"}
+        ),
+        "jobs": {
+            "dist": _job("Build sdist"),
+            "cibw": _job("Build wheels"),
+            "conda": _job("Build conda"),
+        },
+    }
+    return _make_workflow({"id": "python-build", "io": io}, workflow)
+
+
+def test_multi_job_injects_channel_steps_into_matrix_jobs() -> None:
+    jobs = build_published_workflow(_multi_job_workflow())["jobs"]
+
+    assert [step["name"] for step in jobs["dist"]["steps"]] == [
+        "Checkout repository",
+        "Download artifacts",
+        "Build sdist",
+    ]
+    # cibw is a checkout-only sibling.
+    assert [step["name"] for step in jobs["cibw"]["steps"]] == [
+        "Checkout repository",
+        "Build wheels",
+    ]
+    # conda receives both channels, in the same relative order as io.job.
+    assert [step["name"] for step in jobs["conda"]["steps"]] == [
+        "Checkout repository",
+        "Download artifacts",
+        "Build conda",
+    ]
+
+
+def test_multi_job_injected_steps_use_registry_pins_and_shared_inputs() -> None:
+    jobs = build_published_workflow(_multi_job_workflow())["jobs"]
+    cibw_checkout = jobs["cibw"]["steps"][0]
+    conda_download = jobs["conda"]["steps"][1]
+
+    assert cibw_checkout["uses"] == action_ref("checkout")
+    assert conda_download["uses"] == action_ref("download-artifact")
+    # Same rendered inputs as the io.job's own channel step (one source of truth).
+    assert cibw_checkout["with"] == jobs["dist"]["steps"][0]["with"]
+    assert conda_download["with"] == jobs["dist"]["steps"][1]["with"]
+
+
+def test_multi_job_runtime_materialize_follows_checkout_and_download() -> None:
+    workflow = build_published_workflow(
+        _multi_job_workflow({"runtime": True, "runtime-jobs": ["cibw", "conda"]})
+    )
+    jobs = workflow["jobs"]
+
+    # A checkout+runtime job: materialize lands after checkout, before user steps.
+    assert [step["name"] for step in jobs["cibw"]["steps"]] == [
+        "Checkout repository",
+        "Materialize DevFlows runtime scripts",
+        "Build wheels",
+    ]
+    # A checkout+download+runtime job keeps channel order, then materialize.
+    assert [step["name"] for step in jobs["conda"]["steps"]] == [
+        "Checkout repository",
+        "Download artifacts",
+        "Materialize DevFlows runtime scripts",
+        "Build conda",
+    ]
+
+
+def test_multi_job_permission_seeding_preserves_workflow_grant() -> None:
+    # Workflow-level grants only packages: write. Introducing a job-level block for a
+    # channel scope must carry that grant along (the fixed seeding semantics).
+    jobs = build_published_workflow(
+        _multi_job_workflow(workflow_permissions={"packages": "write"})
+    )["jobs"]
+
+    assert jobs["cibw"]["permissions"] == {"packages": "write", "contents": "read"}
+    assert jobs["conda"]["permissions"] == {
+        "packages": "write",
+        "contents": "read",
+        "actions": "read",
+    }
+
+
+def test_multi_job_checkout_only_inherits_when_workflow_grants_contents() -> None:
+    jobs = build_published_workflow(_multi_job_workflow())["jobs"]
+
+    # Workflow-level already grants contents: read, so a checkout-only job keeps
+    # inheriting it (no job-level block introduced).
+    assert "permissions" not in jobs["cibw"]
+    # conda still needs actions: read, which the workflow level lacks -> seeded block.
+    assert jobs["conda"]["permissions"] == {"contents": "read", "actions": "read"}
+
+
+def test_validate_rejects_unknown_checkout_job() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "dist", "checkout": True, "checkout-jobs": ["ghost"]}},
+        {"jobs": {"dist": {"steps": []}}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("io.checkout-jobs item 'ghost' must be a runner job" in error for error in errors)
+
+
+def test_validate_rejects_checkout_job_duplicate_of_io_job() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "dist", "checkout": True, "checkout-jobs": ["dist"]}},
+        {"jobs": {"dist": {"steps": []}}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("must not also appear in io.checkout-jobs" in error for error in errors)
+
+
+def test_validate_rejects_download_jobs_without_channel_enabled() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "dist", "artifact-download-jobs": ["helper"]}},
+        {"jobs": {"dist": {"steps": []}, "helper": {"steps": []}}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any(
+        "io.artifact-download-jobs requires io.artifact-download" in error for error in errors
+    )
+
+
+def test_validate_accepts_valid_multi_job_config() -> None:
+    item = _make_workflow(
+        {
+            "id": "demo",
+            "io": {
+                "job": "dist",
+                "checkout": True,
+                "artifact-download": True,
+                "checkout-jobs": ["cibw"],
+                "artifact-download-jobs": ["cibw"],
+            },
+        },
+        {"jobs": {"dist": {"steps": []}, "cibw": {"steps": []}}},
+    )
+
+    assert validate_publish_config(item) == []
+
+
+def test_multi_job_generated_output_snapshot() -> None:
+    workflow = build_published_workflow(
+        _multi_job_workflow(
+            {
+                "runtime": True,
+                "artifact-upload": True,
+                "runtime-jobs": ["cibw", "conda"],
+            }
+        )
+    )
+    step_names = {
+        job_id: [step["name"] for step in job["steps"]] for job_id, job in workflow["jobs"].items()
+    }
+
+    assert step_names == {
+        "dist": [
+            "Checkout repository",
+            "Download artifacts",
+            "Materialize DevFlows runtime scripts",
+            "Build sdist",
+            "Upload artifact",
+        ],
+        "cibw": [
+            "Checkout repository",
+            "Materialize DevFlows runtime scripts",
+            "Build wheels",
+        ],
+        "conda": [
+            "Checkout repository",
+            "Download artifacts",
+            "Materialize DevFlows runtime scripts",
+            "Build conda",
+        ],
+    }
+
+
 def test_render_leaves_uses_line_inside_inlined_script_untouched(make_catalog) -> None:
     from devflows.catalog import load_workflow
 
