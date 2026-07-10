@@ -1,0 +1,273 @@
+id: pypi-publish
+name: PyPI Publish
+summary:
+  Publish a digest-verified sdist and wheel set from python-build to PyPI or
+  TestPyPI via OIDC trusted publishing only, under a GitHub-environment-protected,
+  script-isolated publish job with PEP 740 attestations, an explicit dry-run that
+  never touches the protected environment, and an optional post-publish
+  install-and-import smoke check.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Python
+  keywords:
+    - python
+    - pypi
+    - publish
+    - oidc
+    - trusted-publishing
+    - attestations
+    - release
+io:
+  job: verify
+  runtime: true
+  artifact-download: true
+  artifact-download-jobs:
+    - publish
+  runtime-jobs:
+    - validate
+    - publish
+    - install-check
+notes:
+  - >-
+    Every caller must grant permissions: contents: read, actions: read, and
+    id-token: write on the calling job - and all three even for a dry-run call.
+    GitHub validates nested job-level permission declarations at startup, before
+    any if: is evaluated, so the publish job's id-token: write and the verify
+    job's channel permissions must all be granted or the run fails at startup. The
+    contents: read is the generator's uniform grant to the artifact-download host
+    job (verify); pypi-publish never checks out, and the credentialed publish job
+    itself is granted only actions: read and id-token: write, so caller repository
+    code never coexists with the OIDC credential.
+  - >-
+    Four jobs by design. validate (no permissions) rejects misconfiguration.
+    verify (actions: read) is credential-free - it hosts the artifact-download
+    channel, digest-verifies the distributions against the manifest, and is the
+    terminal job in dry-run mode, so the whole ingestion and verification chain is
+    testable in pull-request CI without any credential. publish (actions: read +
+    id-token: write, no checkout, no caller-influenced script) re-downloads,
+    re-verifies atomically, then uploads via SHA-pinned pypa/gh-action-pypi-publish.
+    install-check (no permissions) is an optional post-publish index smoke check.
+  - >-
+    OIDC trusted publishing ONLY - there is deliberately no long-lived pypi-token
+    fallback. A token secret would put a long-lived credential in the elevated
+    job, invite the weaker mode by mere availability, and forfeit PEP 740
+    attestations (which upload only via trusted publishing). The action's
+    user/password inputs are never set. Private-index/token publishing is out of
+    v1 scope; adding a token mode later is a compatible minor change, whereas
+    shipping tokens now and removing them later would be breaking.
+  - >-
+    Trusted-publisher setup - on PyPI or TestPyPI, add a publisher to the project
+    for owner/repo, YOUR OWN calling workflow's filename, and the environment name
+    you pass as publish-environment-name. Reusable-workflow claim caveat (verified
+    2026-07) - PyPI validates the caller's top-level workflow_ref, not
+    job_workflow_ref (pypi/warehouse#11096 open), and gh-action-pypi-publish
+    >= v1.13.0 prints an "unsupported reusable workflow configurations" warning.
+    Register the trusted publisher against your calling workflow filename plus the
+    environment; the log warning is expected and publishing works today. When
+    job_workflow_ref support ships, adopting it is a strengthening consumers opt
+    into.
+  - >-
+    Manifest chaining contract - publish-dist-manifest is python-build's
+    dist-manifest output, schema 1 - {"schema": 1, "files": [{"name", "sha256",
+    "size", "kind": "sdist"|"wheel"|"conda"}], "artifacts": {"sdist", "wheels",
+    "conda-channel"}}. Only files listed with kind sdist or wheel, byte-for-byte
+    sha256 AND size matched bidirectionally against the staged files, are uploaded;
+    unlisted files, conda-kind files, digest/size mismatches, mixed name/version
+    sets, and publish-expected-version skew all fail loudly. The identical
+    verification runs in the credential-free verify job and again atomically inside
+    the credentialed publish job immediately before upload, because python-build
+    uploads with overwrite: true, so an artifact name is not immutable within a run
+    (a TOCTOU guard).
+  - >-
+    Two sequential calls, not a matrix - call once with publish-index: testpypi
+    (its own unprotected environment) and then with publish-index: pypi (its own
+    environment with required reviewers), chaining install-check as the promotion
+    gate. Each index gets its own typed inputs and protection rules. Callers
+    targeting TestPyPI should pass a distinct publish-environment-name so each
+    index's trusted-publisher and protection configuration stays separate.
+  - >-
+    The publish job sets its own concurrency group pypi-publish-<environment> with
+    cancel-in-progress false, so a running upload is never cancelled. A reusable
+    workflow cannot impose caller-level concurrency; callers that want to serialize
+    whole runs should additionally set a workflow-level concurrency group in the
+    calling workflow.
+  - >-
+    published-url is the empty string when publish-dry-run-enabled is true or the
+    publish job did not run (reusable-workflow outputs from a skipped job resolve
+    to empty). package-version and package-name are set even in dry-run - they are
+    what was, or would have been, published. Downstream consumers must guard on a
+    non-empty published-url (if !cancelled() plus a non-empty check).
+  - >-
+    uv-cache-mode is deliberately NOT exposed - the only setup-uv use is the
+    install-check job's one-shot tool install on a post-publish job, which passes
+    enable-cache: false and resolves no caller project environment. The
+    uv-cache-mode convention applies to jobs that resolve caller project
+    environments; this workflow has none.
+  - >-
+    Upstream inputs deliberately not exposed - user/password (no token mode),
+    packages-dir (internal staging directory), repository-url (derived in validate
+    from publish-index), and verbose/print-hash (left at the upstream true so the
+    uploaded-digest audit trail stays in the log). gh-action-pypi-publish is a
+    composite action that runs an inner Docker container whose entrypoint globs
+    packages-dir/* inside the /github/workspace mount, so verify-dist.py stages the
+    verified subset into a workspace-relative directory (an out-of-workspace path
+    would be invisible to the container); only that verified subset is uploaded.
+  - >-
+    Honesty statement - no in-repo scenario can prove the OIDC token exchange,
+    trusted-publisher claim matching, PEP 740 attestation generation and upload,
+    server-side metadata acceptance, or install-check against a live index. Those
+    are proven by (a) the built-in staging path - publish to TestPyPI
+    (publish-index: testpypi) before PyPI, the credential-real rehearsal the
+    two-call design exists for - and (b) a documented pre-release dogfood - a
+    workflow_dispatch canary in this repo publishing the devflows package itself to
+    TestPyPI once before this workflow's first release. Mid-run reusable-call
+    failures (digest mismatch, size mismatch, unlisted or missing file, wrong kind,
+    version skew) cannot be asserted green in CI - a uses: job cannot set
+    continue-on-error - so verify-dist.py's failure matrix is covered exhaustively
+    by the unit tests in tests/test_pypi_publish.py, stated here alongside the
+    scenarios.
+examples:
+  - name: Build then stage to TestPyPI and promote to PyPI
+    path: tests/fixtures/pypi-publish/testpypi-then-pypi.yaml
+  - name: Publish a downloaded distribution set to PyPI
+    path: tests/fixtures/pypi-publish/publish-pypi.yaml
+tests:
+  scenarios:
+    # The hosted dry-run scenario exercises the full credential-free chain -
+    # setup-artifact stages a committed fixture sdist and wheel as one artifact
+    # named like a python-build output; the call downloads it, verify-dist.py
+    # digest-matches it against a hand-built schema-1 manifest, and the publish
+    # job is SKIPPED (dry-run), so published-url is empty while package-version and
+    # package-name are still emitted. Zero credentials, real GitHub artifact infra.
+    - id: dry-run-verify-hosted
+      name: Dry-run verify a staged sdist and wheel against the manifest
+      runs:
+        - hosted
+      setup-artifact:
+        name: devflows-pypi-publish-dryrun
+        path: .devflows-test/pypi-publish/dist
+        files:
+          - path: .devflows-test/pypi-publish/dist/devflows_pypi_fixture-0.1.0.tar.gz
+            source-path: tests/scenarios/pypi-publish/dist/devflows_pypi_fixture-0.1.0.tar.gz
+          - path: .devflows-test/pypi-publish/dist/devflows_pypi_fixture-0.1.0-py3-none-any.whl
+            source-path: tests/scenarios/pypi-publish/dist/devflows_pypi_fixture-0.1.0-py3-none-any.whl
+      inputs:
+        artifact-download-enabled: true
+        artifact-download-name: devflows-pypi-publish-dryrun
+        artifact-download-path: dist
+        publish-dist-path: dist
+        publish-index: pypi
+        publish-environment-name: pypi
+        publish-dry-run-enabled: true
+        publish-expected-version: "0.1.0"
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"devflows_pypi_fixture-0.1.0.tar.gz","sha256":"c55584cecaba99e65551d759fd083f46edf24e623e915d354a56c3322b40c10c","size":243,"kind":"sdist"},{"name":"devflows_pypi_fixture-0.1.0-py3-none-any.whl","sha256":"db4ef80670002a7d16eb8bf5d5466460d4da2868416b2235ef270ba1119f1560","size":902,"kind":"wheel"}],"artifacts":{"sdist":"devflows-pypi-publish-dryrun","wheels":"devflows-pypi-publish-dryrun","conda-channel":""}}'
+      assertions:
+        - type: workflow-output-equals
+          name: package-version
+          value: "0.1.0"
+        - type: workflow-output-equals
+          name: package-name
+          value: devflows-pypi-fixture
+        - type: workflow-output-equals
+          name: published-url
+          value: ""
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. Each supplies valid values for every input checked before
+    # the one it targets, since manifest and dist-path are required-with-no-default.
+    - id: invalid-index
+      name: A non-pypi index value is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "publish-index must be 'pypi' or 'testpypi'"
+      inputs:
+        publish-index: https://my-devpi.example/simple
+    - id: missing-manifest
+      name: An empty dist-manifest is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "publish-dist-manifest is required"
+      inputs:
+        publish-dist-manifest: ""
+    - id: malformed-manifest-json
+      name: A non-JSON dist-manifest is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "publish-dist-manifest is not valid JSON"
+      inputs:
+        publish-dist-manifest: "{not json"
+    - id: unsupported-manifest-schema
+      name: A dist-manifest with an unknown schema is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "unsupported dist-manifest schema"
+      inputs:
+        publish-dist-manifest: '{"schema":2,"files":[],"artifacts":{}}'
+    - id: nothing-to-publish
+      name: A dist-manifest with only conda files is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "contains no sdist or wheel distributions"
+      inputs:
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0-h0.conda","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"conda"}],"artifacts":{"sdist":"","wheels":"","conda-channel":"pkg-conda"}}'
+    - id: channel-disabled
+      name: A call with the ingestion channel disabled is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "distributions can only arrive through the artifact-download channel"
+      inputs:
+        artifact-download-enabled: false
+        publish-dist-path: dist
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+    - id: unsafe-dist-path
+      name: A dist-path that escapes the workspace is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "publish-dist-path must be a workspace-relative path"
+      inputs:
+        publish-dist-path: ../outside
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+    - id: install-check-in-dry-run
+      name: install-check combined with dry-run is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "install-check-enabled requires a real publish"
+      inputs:
+        artifact-download-enabled: true
+        publish-dist-path: dist
+        publish-dry-run-enabled: true
+        install-check-enabled: true
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+    - id: install-check-index-flag
+      name: An index-selection flag smuggled into install-check-arguments is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "install-check-arguments must not select a package index"
+      inputs:
+        artifact-download-enabled: true
+        publish-dist-path: dist
+        install-check-arguments: --extra-index-url https://pypi.org/simple
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'

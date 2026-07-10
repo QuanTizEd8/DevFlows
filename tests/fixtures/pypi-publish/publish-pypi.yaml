@@ -1,0 +1,44 @@
+name: Publish distributions to PyPI
+
+on:
+  release:
+    types:
+      - published
+
+# The calling job must grant the union pypi-publish declares across its jobs:
+# contents: read + actions: read (verify hosts the artifact-download channel) and
+# id-token: write (the publish job's OIDC trusted publishing), all validated at
+# startup even though pypi-publish never checks out.
+permissions: {}
+
+jobs:
+  build:
+    name: Build distributions
+    # Replace python-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    permissions:
+      actions: read
+      contents: read
+    with:
+      build-sdist-enabled: true
+      build-wheel-enabled: true
+      dist-artifact-prefix: my-package
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    # Replace pypi-publish/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/pypi-publish.yaml@pypi-publish/v0.1.0
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    with:
+      publish-index: pypi
+      publish-environment-name: pypi
+      publish-dist-manifest: ${{ needs.build.outputs.dist-manifest }}
+      artifact-download-enabled: true
+      artifact-download-pattern: my-package-{sdist,wheels}
+      artifact-download-merge-multiple: true
+      artifact-download-path: dist
+      publish-dist-path: dist

@@ -126,6 +126,17 @@ ACTION_PINS: dict[str, ActionPin] = {
         "cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
         "v5.0.0",
     ),
+    # Python distribution publishing (pypi-publish). gh-action-pypi-publish is a
+    # composite action that runs an inner Docker container for the twine upload;
+    # pypi-publish invokes it OIDC-only (no user/password). The annotated tag
+    # v1.14.0 (6733eb7d741f0b11ec6a39b58540dab7590f9b7d) dereferences to this
+    # commit. Registered here so the generator annotates its version comment and
+    # the adapter contract test verifies the emitted with: keys on pin bumps.
+    "gh-action-pypi-publish": ActionPin(
+        "pypa/gh-action-pypi-publish",
+        "cef221092ed1bacb1cc03d23a2d87d1d172e277b",
+        "v1.14.0",
+    ),
 }
 
 PINS_BY_REF: dict[str, ActionPin] = {pin.ref: pin for pin in ACTION_PINS.values()}

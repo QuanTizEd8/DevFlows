@@ -264,6 +264,177 @@ jobs:
           ASSERT_PATH: tests/scenarios/pandoc/working-directory/output.html
           ASSERT_TEXT: Pandoc Working Directory
         run: python harness/scenarios/assert-file-contains.py
+  pypi_publish_invalid_index_validate:
+    name: 'PyPI Publish: A non-pypi index value is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: https://my-devpi.example/simple
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-index must be 'pypi' or 'testpypi'
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_missing_manifest_validate:
+    name: 'PyPI Publish: An empty dist-manifest is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: ''
+          PUBLISH_DIST_PATH: ''
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is required
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_malformed_manifest_json_validate:
+    name: 'PyPI Publish: A non-JSON dist-manifest is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{not json'
+          PUBLISH_DIST_PATH: ''
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is not valid JSON
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_unsupported_manifest_schema_validate:
+    name: 'PyPI Publish: A dist-manifest with an unknown schema is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{"schema":2,"files":[],"artifacts":{}}'
+          PUBLISH_DIST_PATH: ''
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: unsupported dist-manifest schema
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_nothing_to_publish_validate:
+    name: 'PyPI Publish: A dist-manifest with only conda files is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"pkg-1.0-h0.conda","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"conda"}],"artifacts":{"sdist":"","wheels":"","conda-channel":"pkg-conda"}}'
+          PUBLISH_DIST_PATH: ''
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: contains no sdist or wheel distributions
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_channel_disabled_validate:
+    name: 'PyPI Publish: A call with the ingestion channel disabled is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+          PUBLISH_DIST_PATH: dist
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'false'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: distributions can only arrive through the artifact-download channel
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_unsafe_dist_path_validate:
+    name: 'PyPI Publish: A dist-path that escapes the workspace is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+          PUBLISH_DIST_PATH: ../outside
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-path must be a workspace-relative path
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_install_check_in_dry_run_validate:
+    name: 'PyPI Publish: install-check combined with dry-run is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+          PUBLISH_DIST_PATH: dist
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          INSTALL_CHECK_ENABLED: 'true'
+          INSTALL_CHECK_ARGUMENTS: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: install-check-enabled requires a real publish
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  pypi_publish_install_check_index_flag_validate:
+    name: 'PyPI Publish: An index-selection flag smuggled into install-check-arguments is rejected'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/pypi-publish/scripts/validate-inputs.py
+          PUBLISH_INDEX: pypi
+          PUBLISH_DIST_MANIFEST: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+          PUBLISH_DIST_PATH: dist
+          PUBLISH_ENVIRONMENT_NAME: pypi
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          INSTALL_CHECK_ENABLED: 'false'
+          INSTALL_CHECK_ARGUMENTS: --extra-index-url https://pypi.org/simple
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: install-check-arguments must not select a package index
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
   python_build_nothing_to_build_validate:
     name: 'Python Build: All build flavors disabled fails validation'
     runs-on: ubuntu-latest
