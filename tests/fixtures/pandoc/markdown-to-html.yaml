@@ -3,9 +3,16 @@ name: Pandoc Markdown to HTML caller
 on:
   workflow_dispatch:
 
+# Pandoc's published form embeds a writeback commit job; GitHub validates the
+# nested permissions before the run starts, so grant the union even here.
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   convert:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Replace pandoc/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-

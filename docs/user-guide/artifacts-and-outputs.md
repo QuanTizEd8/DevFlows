@@ -29,9 +29,17 @@ with:
 A downstream job can download the artifact:
 
 ```yaml
+permissions:
+  # Pandoc's published form embeds a writeback commit job requiring these
+  # scopes; GitHub validates nested permissions before the run starts, so grant
+  # the union even for this read-only upload/download example.
+  contents: write
+  actions: read
+
 jobs:
   convert:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Replace pandoc/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -82,11 +90,14 @@ channel:
 
 ```yaml
 permissions:
+  # The nested writeback commit job requires both scopes; validated before the run.
   contents: write
+  actions: read
 
 jobs:
   convert:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Replace pandoc/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-

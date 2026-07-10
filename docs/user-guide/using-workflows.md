@@ -16,11 +16,17 @@ on:
       - main
 
 permissions:
-  contents: read
+  # Pandoc's published form embeds a writeback commit job requiring these
+  # scopes. GitHub validates nested permissions before the run starts, so the
+  # caller must grant the union even for a read-only conversion.
+  contents: write
+  actions: read
 
 jobs:
   pandoc:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Replace pandoc/v0.1.0 with the latest released tag; moving major tags
+    # (pandoc/v1) do not exist during the 0.x series.
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -82,9 +88,15 @@ Reusable workflow secrets are passed with `secrets`. If a workflow supports a
 custom checkout token or SSH key, pass only the secret needed for that caller:
 
 ```yaml
+permissions:
+  # Required by pandoc's nested writeback commit job; validated before the run.
+  contents: write
+  actions: read
+
 jobs:
   pandoc:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Replace pandoc/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     secrets:
       checkout-token: ${{ secrets.DEVFLOWS_CHECKOUT_TOKEN }}
 ```

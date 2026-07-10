@@ -6,9 +6,19 @@ generated reference page is {doc}`Pandoc </reference/workflows/pandoc>`.
 ## Minimal Example
 
 ```yaml
+permissions:
+  # Pandoc's published workflow embeds a commit job that statically requires
+  # contents: write and actions: read. GitHub validates nested permissions
+  # before the run starts, so every caller must grant this union even for a
+  # read-only conversion that never enables writeback.
+  contents: write
+  actions: read
+
 jobs:
   convert:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Pin an exact released tag; replace pandoc/v0.1.0 with the latest one.
+    # Moving major tags such as pandoc/v1 do not exist during the 0.x series.
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -97,11 +107,15 @@ the converted file should be written back to a repository branch:
 
 ```yaml
 permissions:
+  # The nested writeback commit job requires both scopes; GitHub validates them
+  # before the run starts.
   contents: write
+  actions: read
 
 jobs:
   convert:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
+    # Replace pandoc/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-

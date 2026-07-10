@@ -7,12 +7,18 @@ images and optionally merge them into a multi-arch image tag.
 
 ```yaml
 permissions:
+  # build-devcontainer declares actions: read, contents: read, and
+  # packages: write at the workflow level; GitHub validates these nested
+  # permissions before the run starts, so the caller must grant the full union.
+  actions: read
   contents: read
   packages: write
 
 jobs:
   build-devcontainer:
-    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1
+    # Replace build-devcontainer/v0.1.0 with the latest released tag; moving
+    # major tags (build-devcontainer/v1) do not exist during the 0.x series.
+    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v0.1.0
     with:
       image-name: ghcr.io/owner/project-devcontainer
       image-tag: latest

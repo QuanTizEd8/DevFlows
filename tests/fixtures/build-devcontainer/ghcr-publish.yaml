@@ -3,13 +3,17 @@ name: Build Devcontainer
 on:
   workflow_dispatch:
 
+# build-devcontainer declares actions: read, contents: read, and packages: write;
+# GitHub validates the nested permissions before the run starts.
 permissions:
+  actions: read
   contents: read
   packages: write
 
 jobs:
   build-devcontainer:
-    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1
+    # Replace build-devcontainer/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v0.1.0
     with:
       image-name: ghcr.io/owner/project-devcontainer
       image-tag: latest
