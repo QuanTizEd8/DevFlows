@@ -70,7 +70,7 @@
       // constant so the pin never silently stops updating.
       customType: "regex",
       managerFilePatterns: [
-        "/^workflows/anaconda-publish/scripts/specs\\.py$/"
+        "/^workflows/anaconda-publish/scripts/commands\\.py$/"
       ],
       matchStrings: [
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ANACONDA_CLIENT_VERSION = "(?<currentValue>[^"]+)"'

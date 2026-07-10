@@ -1,16 +1,12 @@
 """Credential-free supply-chain guard and dry-run plan computation.
 
 Runs in the ``verify`` job (and again, with EMIT_PLAN=false, as the tokenless
-re-verification step inside the ``upload`` job). When upload-enabled it downloads
-nothing itself (the generated artifact-download channel does) but recomputes the
-sha256 AND size of every ``.conda`` file and matches them bidirectionally against
-the caller-supplied dist manifest. It then derives the staged/promote/remove
-plans and emits them as outputs plus a job summary of the exact argv each
-credentialed job would run -- the whole publish plan, produced without a token, so
-a dry-run proves the wiring while every environment-bound job stays skipped.
-
-Imports the sibling ``specs.py`` (a ``${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/
-specs.py`` comment in the step run body makes the sync step inline it).
+re-verification step inside the ``upload`` job). Recomputes the sha256 AND size of
+every ``.conda`` file and matches them bidirectionally against the caller-supplied
+dist manifest, then derives the staged/promote/remove plans and emits them as
+outputs plus a job summary of the exact argv each credentialed job would run -- the
+whole publish plan, produced without a token. Imports the materialized sibling
+modules parsing / arguments / digest / commands (declared by ``# imports`` comments).
 """
 
 from __future__ import annotations
@@ -20,13 +16,16 @@ import os
 import secrets
 from pathlib import Path
 
-import specs
+import arguments
+import commands
+import digest
+import parsing
 
 
 def main() -> int:
     try:
         return _run()
-    except specs.SpecError as error:
+    except parsing.SpecError as error:
         raise SystemExit(str(error)) from error
 
 
@@ -34,8 +33,8 @@ def _run() -> int:
     owner = os.environ["PUBLISH_OWNER"].strip()
     server_url = os.environ.get("PUBLISH_SERVER_URL", "")
     # The plan's argv reflect the version each credentialed job resolves the same
-    # way (override or the specs.py pin), so the dry-run summary is faithful.
-    client_version = specs.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
+    # way (override or the pin), so the dry-run summary is faithful.
+    client_version = commands.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
     emit_plan = _bool("EMIT_PLAN", default=True)
 
     upload_enabled = _bool("UPLOAD_ENABLED")
@@ -43,10 +42,10 @@ def _run() -> int:
     maintain_enabled = _bool("MAINTAIN_ENABLED")
 
     version = ""
-    verified: list[specs.CondaFile] = []
+    verified: list[digest.CondaFile] = []
     if upload_enabled:
         verified = _verify(owner, server_url)
-        version = specs.resolve_version(
+        version = digest.resolve_version(
             verified, expected=os.environ.get("PUBLISH_EXPECTED_VERSION", "")
         )
 
@@ -61,17 +60,17 @@ def _run() -> int:
     if upload_enabled:
         uploaded_files = [item.name for item in verified]
         staged_specs = sorted(
-            {specs.owner_qualified(owner, f"{item.package}/{item.version}") for item in verified}
+            {parsing.owner_qualified(owner, f"{item.package}/{item.version}") for item in verified}
         )
-        mode = specs.validate_existing_mode(os.environ.get("UPLOAD_EXISTING_MODE", "fail"))
-        extra = specs.parse_extra_arguments(
+        mode = arguments.validate_existing_mode(os.environ.get("UPLOAD_EXISTING_MODE", "fail"))
+        extra = arguments.parse_extra_arguments(
             os.environ.get("UPLOAD_ARGUMENTS", ""), field="upload-arguments"
         )
-        upload_label = specs.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
+        upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
         upload_plan = [
-            specs.uvx_wrap(
+            commands.uvx_wrap(
                 client_version,
-                specs.build_upload_argv(
+                commands.build_upload_argv(
                     server_url=server_url,
                     owner=owner,
                     label=upload_label,
@@ -87,12 +86,12 @@ def _run() -> int:
     promote_plan: list[list[str]] = []
     if promote_enabled:
         promoted_specs = _promote_targets(owner, staged_specs)
-        upload_label = specs.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-        promote_label = specs.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
+        upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
+        promote_label = parsing.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
         promote_plan = [
-            specs.uvx_wrap(
+            commands.uvx_wrap(
                 client_version,
-                specs.build_move_argv(
+                commands.build_move_argv(
                     server_url=server_url,
                     from_label=upload_label,
                     to_label=promote_label,
@@ -106,14 +105,14 @@ def _run() -> int:
     remove_plan: list[list[str]] = []
     if maintain_enabled:
         removed_specs = [
-            specs.owner_qualified(owner, spec)
-            for spec in specs.validate_spec_list(
+            parsing.owner_qualified(owner, spec)
+            for spec in parsing.validate_spec_list(
                 os.environ.get("MAINTAIN_REMOVE_SPECS", ""), field="maintain-remove-specs"
             )
         ]
         remove_plan = [
-            specs.uvx_wrap(
-                client_version, specs.build_remove_argv(server_url=server_url, target=target)
+            commands.uvx_wrap(
+                client_version, commands.build_remove_argv(server_url=server_url, target=target)
             )
             for target in removed_specs
         ]
@@ -136,7 +135,7 @@ def _run() -> int:
     return 0
 
 
-def _verify(owner: str, server_url: str) -> list[specs.CondaFile]:
+def _verify(owner: str, server_url: str) -> list[digest.CondaFile]:
     dist_path = Path(os.environ["PUBLISH_DIST_PATH"]).resolve()
     workspace = Path(os.environ.get("GITHUB_WORKSPACE", ".")).resolve()
     if workspace != dist_path and workspace not in dist_path.parents:
@@ -149,21 +148,21 @@ def _verify(owner: str, server_url: str) -> list[specs.CondaFile]:
     if not isinstance(manifest, dict):
         raise SystemExit("publish-dist-manifest must be a JSON object.")
     try:
-        return specs.verify_files_against_manifest(dist_path, manifest)
-    except specs.SpecError as error:
+        return digest.verify_files_against_manifest(dist_path, manifest)
+    except parsing.SpecError as error:
         raise SystemExit(str(error)) from error
 
 
 def _promote_targets(owner: str, staged_specs: list[str]) -> list[str]:
-    explicit = specs.parse_spec_list(os.environ.get("PROMOTE_SPECS", ""))
+    explicit = parsing.parse_spec_list(os.environ.get("PROMOTE_SPECS", ""))
     if explicit:
         try:
-            validated = specs.validate_spec_list(
+            validated = parsing.validate_spec_list(
                 os.environ.get("PROMOTE_SPECS", ""), field="promote-specs"
             )
-        except specs.SpecError as error:
+        except parsing.SpecError as error:
             raise SystemExit(str(error)) from error
-        return [specs.owner_qualified(owner, spec) for spec in validated]
+        return [parsing.owner_qualified(owner, spec) for spec in validated]
     # Chained mode: promote exactly the staging specs derived from the verified set.
     return list(staged_specs)
 

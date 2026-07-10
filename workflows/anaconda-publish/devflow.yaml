@@ -141,7 +141,7 @@ notes:
     publish-client-version), so no conda environment is needed - this replaces the
     drafts' miniconda+conda-install boilerplate. The default version is registered
     for Renovate (a custom pep440 manager over the pinned constant in
-    scripts/specs.py) so it stays current. anaconda-client was chosen over
+    scripts/commands.py) so it stays current. anaconda-client was chosen over
     rattler-build upload because promote (anaconda move) and maintain (anaconda
     remove) require it; rattler-build upload is upload-only. uv-cache-mode is
     deliberately NOT exposed: the only uv use is a one-shot tool install on
@@ -158,8 +158,9 @@ notes:
     without a token. They CANNOT prove: (a) that a digest MISMATCH is rejected mid
     reusable-call - the harness cannot keep a failing `uses:` green, so digest,
     size, unlisted, missing, wrong-kind, version-skew, spec-parsing, and
-    argv-construction behavior are covered exhaustively by unit tests of specs.py and
-    verify-dist.py in tests/test_anaconda_publish.py; (b) that the token is accepted
+    argv-construction behavior are covered exhaustively by unit tests of the shared
+    parsing/arguments/manifest/digest/commands modules and verify-dist.py in
+    tests/test_anaconda_publish.py; (b) that the token is accepted
     and that server-side label semantics, skip/overwrite behavior, and move/remove
     effects are correct - only a real-credential run proves those. The rehearsal path
     is publish-dry-run-enabled for every consumer, and a post-merge weekly sentinel

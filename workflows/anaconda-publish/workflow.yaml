@@ -251,7 +251,9 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ${{ inputs.artifact-download-enabled }}
           ARTIFACT_DOWNLOAD_NAME: ${{ inputs.artifact-download-name }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/specs.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/arguments.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/validate-inputs.py"
 
   verify:
@@ -289,7 +291,11 @@ jobs:
           MAINTAIN_ENABLED: ${{ inputs.maintain-enabled }}
           MAINTAIN_REMOVE_SPECS: ${{ inputs.maintain-remove-specs }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/specs.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/arguments.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/digest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/verify-dist.py"
 
   upload:
@@ -321,7 +327,11 @@ jobs:
           PUBLISH_EXPECTED_VERSION: ${{ inputs.publish-expected-version }}
           UPLOAD_ENABLED: ${{ inputs.upload-enabled }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/specs.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/arguments.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/digest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/verify-dist.py"
 
       - name: Set up uv
@@ -352,7 +362,11 @@ jobs:
           UPLOAD_EXISTING_MODE: ${{ inputs.upload-existing-mode }}
           UPLOAD_ARGUMENTS: ${{ inputs.upload-arguments }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/specs.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/arguments.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/digest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/upload.py"
 
   promote:
@@ -403,7 +417,8 @@ jobs:
           PROMOTE_LABEL: ${{ inputs.promote-label }}
           PROMOTED_SPECS: ${{ needs.verify.outputs.promoted-specs }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/specs.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/promote.py"
 
   maintain:
@@ -443,5 +458,5 @@ jobs:
           PUBLISH_CLIENT_VERSION: ${{ inputs.publish-client-version }}
           REMOVED_SPECS: ${{ needs.verify.outputs.removed-specs }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/specs.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/maintain.py"

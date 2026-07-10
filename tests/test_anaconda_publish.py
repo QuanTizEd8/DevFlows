@@ -16,12 +16,15 @@ from devflows.publish import build_published_workflow, caller_required_permissio
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT_DIR = REPO / "workflows" / "anaconda-publish" / "scripts"
 
-# The workflow scripts import their sibling ``specs.py`` (materialized next to them
-# at run time); make that importable here too.
+# The workflow scripts import their sibling helper modules (materialized next to
+# them at run time); make them importable here too.
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-import specs  # type: ignore  # noqa: E402
+import arguments  # type: ignore  # noqa: E402
+import commands  # type: ignore  # noqa: E402
+import digest  # type: ignore  # noqa: E402
+import parsing  # type: ignore  # noqa: E402
 
 
 def _load_script(name: str) -> ModuleType:
@@ -54,23 +57,23 @@ def _parse_github_output(path: Path) -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# specs.py: filename and spec parsing                                          #
+# parsing.py / arguments.py: filename, spec, and upload-argument parsing        #
 # --------------------------------------------------------------------------- #
 def test_parse_conda_filename_handles_hyphenated_names() -> None:
-    assert specs.parse_conda_filename("my-pkg-1.2.3-h0_0.conda") == ("my-pkg", "1.2.3")
-    assert specs.parse_conda_filename("pkg-0.1.0-py39h0.tar.bz2") == ("pkg", "0.1.0")
+    assert parsing.parse_conda_filename("my-pkg-1.2.3-h0_0.conda") == ("my-pkg", "1.2.3")
+    assert parsing.parse_conda_filename("pkg-0.1.0-py39h0.tar.bz2") == ("pkg", "0.1.0")
 
 
 def test_parse_conda_filename_rejects_non_conda() -> None:
-    with pytest.raises(specs.SpecError):
-        specs.parse_conda_filename("pkg-1.0-py3-none-any.whl")
-    with pytest.raises(specs.SpecError):
-        specs.parse_conda_filename("pkg-1.0.conda")  # only two segments
+    with pytest.raises(parsing.SpecError):
+        parsing.parse_conda_filename("pkg-1.0-py3-none-any.whl")
+    with pytest.raises(parsing.SpecError):
+        parsing.parse_conda_filename("pkg-1.0.conda")  # only two segments
 
 
 @pytest.mark.parametrize("spec", ["pkg/1.0", "my-pkg/1.0.0", "pkg/1.0/pkg-1.0-h0.conda"])
 def test_parse_spec_accepts_valid(spec: str) -> None:
-    assert specs.parse_spec(spec)[0] == spec.split("/")[0]
+    assert parsing.parse_spec(spec)[0] == spec.split("/")[0]
 
 
 @pytest.mark.parametrize(
@@ -82,32 +85,32 @@ def test_parse_spec_accepts_valid(spec: str) -> None:
     ],
 )
 def test_parse_spec_rejects_owner_qualified(spec: str) -> None:
-    with pytest.raises(specs.SpecError, match="without an owner segment"):
-        specs.parse_spec(spec)
+    with pytest.raises(parsing.SpecError, match="without an owner segment"):
+        parsing.parse_spec(spec)
 
 
 @pytest.mark.parametrize("spec", ["pkg", "a/b/c/d", "", "pkg/", "/1.0"])
 def test_parse_spec_rejects_malformed(spec: str) -> None:
-    with pytest.raises(specs.SpecError):
-        specs.parse_spec(spec)
+    with pytest.raises(parsing.SpecError):
+        parsing.parse_spec(spec)
 
 
 def test_validate_owner_and_label() -> None:
-    assert specs.validate_owner(" my-org ") == "my-org"
+    assert parsing.validate_owner(" my-org ") == "my-org"
     for bad in ["", "has space", "-lead", "a/b"]:
-        with pytest.raises(specs.SpecError):
-            specs.validate_owner(bad)
-    assert specs.validate_label("main", field="promote-label") == "main"
-    with pytest.raises(specs.SpecError):
-        specs.validate_label("", field="upload-label")
-    with pytest.raises(specs.SpecError):
-        specs.validate_label("bad/label", field="upload-label")
+        with pytest.raises(parsing.SpecError):
+            parsing.validate_owner(bad)
+    assert parsing.validate_label("main", field="promote-label") == "main"
+    with pytest.raises(parsing.SpecError):
+        parsing.validate_label("", field="upload-label")
+    with pytest.raises(parsing.SpecError):
+        parsing.validate_label("bad/label", field="upload-label")
 
 
 def test_parse_extra_arguments_accepts_allowlisted_flags() -> None:
     # Allowlisted boolean and --flag=value forms are accepted verbatim and in order,
     # so the built argv is exactly what the caller wrote.
-    assert specs.parse_extra_arguments(
+    assert arguments.parse_extra_arguments(
         "--no-register --summary=hi --description='two words' --no-progress --keep-basename",
         field="upload-arguments",
     ) == [
@@ -117,8 +120,8 @@ def test_parse_extra_arguments_accepts_allowlisted_flags() -> None:
         "--no-progress",
         "--keep-basename",
     ]
-    assert specs.parse_extra_arguments("", field="upload-arguments") == []
-    assert specs.parse_extra_arguments("--register", field="upload-arguments") == ["--register"]
+    assert arguments.parse_extra_arguments("", field="upload-arguments") == []
+    assert arguments.parse_extra_arguments("--register", field="upload-arguments") == ["--register"]
 
 
 @pytest.mark.parametrize(
@@ -160,27 +163,27 @@ def test_parse_extra_arguments_accepts_allowlisted_flags() -> None:
     ],
 )
 def test_parse_extra_arguments_rejects_non_allowlisted(smuggled: str) -> None:
-    with pytest.raises(specs.SpecError):
-        specs.parse_extra_arguments(smuggled, field="upload-arguments")
+    with pytest.raises(parsing.SpecError):
+        arguments.parse_extra_arguments(smuggled, field="upload-arguments")
 
 
 def test_parse_extra_arguments_owned_flag_message_mentions_typed_inputs() -> None:
     # The scenario and validate-inputs test pin this substring for smuggled owned flags.
-    with pytest.raises(specs.SpecError, match="owned by typed inputs"):
-        specs.parse_extra_arguments("--force", field="upload-arguments")
-    with pytest.raises(specs.SpecError, match="owned by typed inputs"):
-        specs.parse_extra_arguments("evil.conda", field="upload-arguments")
+    with pytest.raises(parsing.SpecError, match="owned by typed inputs"):
+        arguments.parse_extra_arguments("--force", field="upload-arguments")
+    with pytest.raises(parsing.SpecError, match="owned by typed inputs"):
+        arguments.parse_extra_arguments("evil.conda", field="upload-arguments")
 
 
 def test_validate_existing_mode() -> None:
-    for mode in specs.EXISTING_MODES:
-        assert specs.validate_existing_mode(mode) == mode
-    with pytest.raises(specs.SpecError, match="must be one of"):
-        specs.validate_existing_mode("clobber")
+    for mode in arguments.EXISTING_MODES:
+        assert arguments.validate_existing_mode(mode) == mode
+    with pytest.raises(parsing.SpecError, match="must be one of"):
+        arguments.validate_existing_mode("clobber")
 
 
 # --------------------------------------------------------------------------- #
-# specs.py: digest verification                                               #
+# digest.py: digest verification                                              #
 # --------------------------------------------------------------------------- #
 def _conda_file(directory: Path, name: str, data: bytes) -> dict[str, object]:
     path = directory / "noarch" / name
@@ -200,46 +203,46 @@ def _manifest(files: list[dict[str, object]]) -> dict[str, object]:
 
 def test_verify_files_success(tmp_path: Path) -> None:
     entry = _conda_file(tmp_path, "pkg-1.2.3-h0.conda", b"payload-a")
-    verified = specs.verify_files_against_manifest(tmp_path, _manifest([entry]))
+    verified = digest.verify_files_against_manifest(tmp_path, _manifest([entry]))
     assert [item.name for item in verified] == ["pkg-1.2.3-h0.conda"]
     assert verified[0].version == "1.2.3"
-    assert specs.resolve_version(verified) == "1.2.3"
+    assert digest.resolve_version(verified) == "1.2.3"
 
 
 def test_verify_files_digest_mismatch(tmp_path: Path) -> None:
     entry = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"real")
     entry["sha256"] = "0" * 64
-    with pytest.raises(specs.SpecError, match="sha256 mismatch"):
-        specs.verify_files_against_manifest(tmp_path, _manifest([entry]))
+    with pytest.raises(parsing.SpecError, match="sha256 mismatch"):
+        digest.verify_files_against_manifest(tmp_path, _manifest([entry]))
 
 
 def test_verify_files_size_mismatch(tmp_path: Path) -> None:
     entry = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"real")
     entry["size"] = 999
-    with pytest.raises(specs.SpecError, match="size mismatch"):
-        specs.verify_files_against_manifest(tmp_path, _manifest([entry]))
+    with pytest.raises(parsing.SpecError, match="size mismatch"):
+        digest.verify_files_against_manifest(tmp_path, _manifest([entry]))
 
 
 def test_verify_files_missing_file(tmp_path: Path) -> None:
     tmp_path.joinpath("noarch").mkdir()
     entry = {"name": "gone-1.0-h0.conda", "sha256": "0" * 64, "size": 1, "kind": "conda"}
-    with pytest.raises(specs.SpecError, match="missing from"):
-        specs.verify_files_against_manifest(tmp_path, _manifest([entry]))
+    with pytest.raises(parsing.SpecError, match="missing from"):
+        digest.verify_files_against_manifest(tmp_path, _manifest([entry]))
 
 
 def test_verify_files_unlisted_file(tmp_path: Path) -> None:
     listed = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"real")
     _conda_file(tmp_path, "extra-1.0-h0.conda", b"surprise")
-    with pytest.raises(specs.SpecError, match="not listed in the dist manifest"):
-        specs.verify_files_against_manifest(tmp_path, _manifest([listed]))
+    with pytest.raises(parsing.SpecError, match="not listed in the dist manifest"):
+        digest.verify_files_against_manifest(tmp_path, _manifest([listed]))
 
 
 def test_verify_files_wrong_kind(tmp_path: Path) -> None:
     good = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"real")
     wrong = _conda_file(tmp_path, "other-1.0-h0.conda", b"other")
     wrong["kind"] = "wheel"  # a .conda file listed under a non-conda kind
-    with pytest.raises(specs.SpecError, match="not 'conda'"):
-        specs.verify_files_against_manifest(tmp_path, _manifest([good, wrong]))
+    with pytest.raises(parsing.SpecError, match="not 'conda'"):
+        digest.verify_files_against_manifest(tmp_path, _manifest([good, wrong]))
 
 
 def test_verify_files_no_conda_entries(tmp_path: Path) -> None:
@@ -248,31 +251,31 @@ def test_verify_files_no_conda_entries(tmp_path: Path) -> None:
         "schema": 1,
         "files": [{"name": "w.whl", "sha256": "0", "size": 1, "kind": "wheel"}],
     }
-    with pytest.raises(specs.SpecError, match="no conda packages"):
-        specs.verify_files_against_manifest(tmp_path, manifest)
+    with pytest.raises(parsing.SpecError, match="no conda packages"):
+        digest.verify_files_against_manifest(tmp_path, manifest)
 
 
 def test_resolve_version_rejects_mixed_and_honors_expected(tmp_path: Path) -> None:
     a = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"a")
     b = _conda_file(tmp_path, "pkg-2.0-h0.conda", b"bb")
-    verified = specs.verify_files_against_manifest(tmp_path, _manifest([a, b]))
-    with pytest.raises(specs.SpecError, match="disagree on version"):
-        specs.resolve_version(verified)
+    verified = digest.verify_files_against_manifest(tmp_path, _manifest([a, b]))
+    with pytest.raises(parsing.SpecError, match="disagree on version"):
+        digest.resolve_version(verified)
 
 
 def test_resolve_version_expected_mismatch(tmp_path: Path) -> None:
     entry = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"a")
-    verified = specs.verify_files_against_manifest(tmp_path, _manifest([entry]))
-    assert specs.resolve_version(verified, expected="1.0") == "1.0"
-    with pytest.raises(specs.SpecError, match="does not match"):
-        specs.resolve_version(verified, expected="9.9")
+    verified = digest.verify_files_against_manifest(tmp_path, _manifest([entry]))
+    assert digest.resolve_version(verified, expected="1.0") == "1.0"
+    with pytest.raises(parsing.SpecError, match="does not match"):
+        digest.resolve_version(verified, expected="9.9")
 
 
 # --------------------------------------------------------------------------- #
-# specs.py: argv construction                                                 #
+# commands.py: argv construction                                              #
 # --------------------------------------------------------------------------- #
 def test_build_argv_shapes() -> None:
-    up = specs.build_upload_argv(
+    up = commands.build_upload_argv(
         server_url="",
         owner="org",
         label="staging",
@@ -291,19 +294,19 @@ def test_build_argv_shapes() -> None:
         "--no-register",
         "/x/p.conda",
     ]
-    assert specs.build_upload_argv(
+    assert commands.build_upload_argv(
         server_url="https://s", owner="o", label="l", mode="fail", extra_arguments=[], file_path="f"
     )[:3] == ["anaconda", "-s", "https://s"]
-    assert specs.build_move_argv(
+    assert commands.build_move_argv(
         server_url="", from_label="staging", to_label="main", target="org/pkg/1.0"
     ) == ["anaconda", "move", "--from-label", "staging", "--to-label", "main", "org/pkg/1.0"]
-    assert specs.build_remove_argv(server_url="", target="org/pkg/1.0") == [
+    assert commands.build_remove_argv(server_url="", target="org/pkg/1.0") == [
         "anaconda",
         "remove",
         "--force",
         "org/pkg/1.0",
     ]
-    assert specs.uvx_wrap("1.13.0", ["anaconda", "upload"])[:3] == [
+    assert commands.uvx_wrap("1.13.0", ["anaconda", "upload"])[:3] == [
         "uvx",
         "--from",
         "anaconda-client==1.13.0",
@@ -318,7 +321,7 @@ def test_build_upload_argv_maps_existing_mode(mode: str, expected_mode_flags: li
     # Pin the exact upload-existing-mode -> flag mapping so a silent remap (e.g.
     # skip -> --force) cannot pass: 'fail' emits neither flag, 'skip' emits exactly
     # --skip-existing, 'overwrite' emits exactly --force.
-    argv = specs.build_upload_argv(
+    argv = commands.build_upload_argv(
         server_url="",
         owner="org",
         label="staging",
@@ -341,8 +344,8 @@ def test_build_upload_argv_maps_existing_mode(mode: str, expected_mode_flags: li
 
 
 def test_resolve_client_version_uses_pin_or_override() -> None:
-    assert specs.resolve_client_version("") == specs.ANACONDA_CLIENT_VERSION
-    assert specs.resolve_client_version(" 2.0.0 ") == "2.0.0"
+    assert commands.resolve_client_version("") == commands.ANACONDA_CLIENT_VERSION
+    assert commands.resolve_client_version(" 2.0.0 ") == "2.0.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -794,7 +797,7 @@ def test_upload_executor_builds_expected_argv(monkeypatch, tmp_path: Path) -> No
     assert module.main() == 0
     assert len(calls) == 1
     argv = calls[0]
-    assert argv[:3] == ["uvx", "--from", f"anaconda-client=={specs.ANACONDA_CLIENT_VERSION}"]
+    assert argv[:3] == ["uvx", "--from", f"anaconda-client=={commands.ANACONDA_CLIENT_VERSION}"]
     assert argv[3:] == [
         "anaconda",
         "upload",
@@ -960,25 +963,25 @@ def test_preflight_requires_token_when_not_dry_run(monkeypatch) -> None:
 # --------------------------------------------------------------------------- #
 def test_anaconda_client_pin_matches_renovate_manager() -> None:
     # The pinned version must be a plausible PEP440 release.
-    assert re.fullmatch(r"[0-9]+(\.[0-9]+)*", specs.ANACONDA_CLIENT_VERSION)
+    assert re.fullmatch(r"[0-9]+(\.[0-9]+)*", commands.ANACONDA_CLIENT_VERSION)
     renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
-    assert "workflows/anaconda-publish/scripts/specs" in renovate
+    assert "workflows/anaconda-publish/scripts/commands" in renovate
     # Pull Renovate's ACTUAL configured matchString (the one keyed on the constant)
     # out of renovate.json5 rather than hand-mirroring it: decode the JSON5
     # single-quoted escaping (\\S -> \S), translate the .NET-style (?<name>) capture
-    # groups to Python's (?P<name>), then apply THAT regex to specs.py. This proves
+    # groups to Python's (?P<name>), then apply THAT regex to commands.py. This proves
     # the configured manager still matches the constant, so the pin keeps
     # auto-updating; a hand-copied regex could silently drift from the real config.
     match_strings = re.findall(r"'([^']*ANACONDA_CLIENT_VERSION[^']*)'", renovate)
     assert len(match_strings) == 1, "expected exactly one anaconda-client matchString"
     configured = match_strings[0].replace("\\\\", "\\")  # JSON5 unescape: \\S -> \S
     python_pattern = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", configured)
-    source = (SCRIPT_DIR / "specs.py").read_text(encoding="utf-8")
+    source = (SCRIPT_DIR / "commands.py").read_text(encoding="utf-8")
     match = re.search(python_pattern, source)
     assert match is not None, python_pattern
     assert match.group("datasource") == "pypi"
     assert match.group("depName") == "anaconda-client"
-    assert match.group("currentValue") == specs.ANACONDA_CLIENT_VERSION
+    assert match.group("currentValue") == commands.ANACONDA_CLIENT_VERSION
 
 
 # --------------------------------------------------------------------------- #
