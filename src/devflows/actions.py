@@ -71,6 +71,31 @@ ACTION_PINS: dict[str, ActionPin] = {
         "513af61f4de4f75d37e4438f184ba4358f0fc1ca",
         "v0.3.1900000450",
     ),
+    # Python build toolchain (python-build workflow). setup-uv and setup-python are
+    # generic across the Python workflow family (build/test/lint/docs); cibuildwheel
+    # and rattler-build-action are python-build-specific but registered here so the
+    # generator annotates their version comments in the dumped output and the adapter
+    # contract test (test_contract.py) verifies their emitted with: keys on pin bumps.
+    "cibuildwheel": ActionPin(
+        "pypa/cibuildwheel",
+        "294735312765b09d24a2fbec22660ce817587d55",
+        "v4.1.0",
+    ),
+    "rattler-build": ActionPin(
+        "prefix-dev/rattler-build-action",
+        "1ca5f45832f419a46d1326ccc5861d7e14d67c44",
+        "v0.2.39",
+    ),
+    "setup-python": ActionPin(
+        "actions/setup-python",
+        "ece7cb06caefa5fff74198d8649806c4678c61a1",
+        "v6.3.0",
+    ),
+    "setup-uv": ActionPin(
+        "astral-sh/setup-uv",
+        "11f9893b081a58869d3b5fccaea48c9e9e46f990",
+        "v8.3.2",
+    ),
 }
 
 PINS_BY_REF: dict[str, ActionPin] = {pin.ref: pin for pin in ACTION_PINS.values()}

@@ -1,0 +1,34 @@
+name: Build native wheels and conda packages
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  build:
+    # Replace python-build/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    with:
+      # The host build only makes the sdist; every wheel comes from cibuildwheel.
+      build-wheel-enabled: false
+      cibw-enabled: true
+      cibw-matrix: |
+        [
+          { "runner": "ubuntu-latest", "only": "cp312-manylinux_x86_64" },
+          { "runner": "macos-14", "only": "cp312-macosx_arm64" }
+        ]
+      conda-enabled: true
+      conda-recipe-path: conda.recipe/recipe.yaml
+      conda-matrix: |
+        [
+          { "runner": "ubuntu-latest", "target-platform": "linux-64" },
+          { "runner": "ubuntu-latest", "target-platform": "noarch" }
+        ]
+      conda-channels: |
+        conda-forge
+      dist-artifact-prefix: my-package
