@@ -158,6 +158,8 @@ Mutation scenarios are skipped on `pull_request` events. They run on trusted
 `push` and `workflow_dispatch` events, where the generated setup, writeback, and
 cleanup jobs can request `contents: write`.
 
+(validation-failure-scenarios)=
+
 ## Validation-Failure Scenarios
 
 Set `expect: validation-failure` to assert that a workflow **rejects bad
