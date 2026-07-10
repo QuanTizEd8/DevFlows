@@ -137,6 +137,14 @@ tasks:
     cmds:
       - pixi run -- devflows release-check
 
+  propagation-check:
+    desc: >-
+      Fail when a shared-generator change alters a published workflow without a
+      change release-please can attribute to it. Diffs against DEVFLOWS_BASE_SHA
+      (set in CI); a no-op when it is unset.
+    cmds:
+      - pixi run -- devflows propagation-check
+
   # ---------------------------------------------------------------- maintenance
   clean:
     desc: Remove generated docs, build artifacts, and tool caches.

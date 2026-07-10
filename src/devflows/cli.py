@@ -12,6 +12,7 @@ from devflows.catalog import CATALOG_DIR, PUBLISHED_DIR, load_catalog, validate_
 from devflows.docs import write_generated_docs
 from devflows.errors import DevflowsError
 from devflows.project import find_root, load_project
+from devflows.propagation import changed_paths_since, propagation_violations
 from devflows.publish import render_published_workflow, validate_publish_config
 from devflows.scenarios import (
     run_local_scenarios,
@@ -66,6 +67,18 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser(
         "release-check", parents=[common], help="Validate local release-please config."
     )
+    propagation_check = subparsers.add_parser(
+        "propagation-check",
+        parents=[common],
+        help="Fail when a shared-generator change alters a published workflow "
+        "without a change release-please can attribute to it.",
+    )
+    propagation_check.add_argument(
+        "--base",
+        default=None,
+        help="Base git ref to diff against. Defaults to the DEVFLOWS_BASE_SHA "
+        "environment variable; the check is skipped when neither is set.",
+    )
     subparsers.add_parser("list", parents=[common], help="List active workflow IDs.")
 
     args = parser.parse_args(argv)
@@ -90,6 +103,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _test_local()
     if args.command == "release-check":
         return _release_check()
+    if args.command == "propagation-check":
+        return _propagation_check(base=args.base)
     if args.command == "list":
         workflows = load_catalog()
         for item in workflows:
@@ -249,6 +264,25 @@ def _release_check() -> int:
             print(error, file=sys.stderr)
         return 1
     print("Release configuration is valid.")
+    return 0
+
+
+def _propagation_check(*, base: str | None) -> int:
+    base_ref = base or os.environ.get("DEVFLOWS_BASE_SHA") or ""
+    if not base_ref:
+        print(
+            "propagation-check: no base ref (pass --base or set DEVFLOWS_BASE_SHA); skipping.",
+            file=sys.stderr,
+        )
+        return 0
+    workflows = _require_catalog()
+    changed = changed_paths_since(base_ref)
+    violations = propagation_violations(changed, [item.id for item in workflows])
+    if violations:
+        for violation in violations:
+            print(f"error: {violation}", file=sys.stderr)
+        return 1
+    print(f"propagation-check: {len(workflows)} workflows propagate cleanly.", file=sys.stderr)
     return 0
 
 
