@@ -543,12 +543,16 @@ def test_repo2docker_version_pin_matches_renovate_manager() -> None:
     default = _workflow_default("repo2docker-version")
     assert re.fullmatch(r"[0-9]{4}\.[0-9]{1,2}\.[0-9]+", default)
     renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
-    assert "workflows/binder-build/workflow" in renovate
-    # Pull Renovate's ACTUAL matchString for this manager (the one keyed on a YAML
-    # `default:` line) out of renovate.json5 and apply it to the source workflow, so
-    # the configured manager provably still matches the pinned default.
-    match_strings = re.findall(r"'([^']*default: [^']*currentValue[^']*)'", renovate)
-    assert len(match_strings) == 1, "expected exactly one binder-build default matchString"
+    # Scope extraction to the binder-build manager block so a sibling workflow's
+    # `default:` matchString (paper-openjournals is double-quoted, next to binder in
+    # the file) can't be swept into a cross-manager span.
+    anchor = renovate.index("workflows/binder-build/workflow")
+    block = renovate[anchor:]
+    # Pull Renovate's ACTUAL matchString for this manager (the single-quoted string
+    # after this manager's managerFilePatterns) and apply it to the source workflow,
+    # so the configured manager provably still matches the pinned default.
+    match_strings = re.findall(r"'([^']*default: [^']*currentValue[^']*)'", block)
+    assert match_strings, "binder-build default matchString not found"
     configured = match_strings[0].replace("\\\\", "\\")
     python_pattern = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", configured)
     source = (WORKFLOW_DIR / "workflow.yaml").read_text(encoding="utf-8")
