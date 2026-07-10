@@ -7,6 +7,7 @@ lints them and these tests can run their logic directly.
 
 from __future__ import annotations
 
+import json
 import runpy
 from pathlib import Path
 
@@ -59,9 +60,27 @@ def test_assert_file_contains(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 
 def test_create_setup_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     _run(
         "create-setup-files.py",
         {"DEVFLOWS_SETUP_FILES": '[{"path": "nested/out.txt", "content": "body"}]'},
         monkeypatch,
     )
     assert (tmp_path / "nested/out.txt").read_text(encoding="utf-8") == "body"
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    ["/etc/passwd", "../escape.txt", ".git/hooks/pre-commit", ".devflows-writeback/x"],
+)
+def test_create_setup_files_rejects_unsafe_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, bad_path: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    with pytest.raises(SystemExit):
+        _run(
+            "create-setup-files.py",
+            {"DEVFLOWS_SETUP_FILES": json.dumps([{"path": bad_path, "content": "x"}])},
+            monkeypatch,
+        )

@@ -4,7 +4,14 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+# Make the sibling helper importable whether this runs as `python <path>` (which
+# puts the dir on sys.path) or via runpy in the unit tests (which does not).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _ephemeral import artifact_name, branch_name  # noqa: E402
 
 # Runtime scripts for the published workflows are no longer copied under
 # .github/workflows/<id>/ (they are inlined at sync time). This harness, however,
@@ -21,14 +28,12 @@ def _write_output(key: str, value: str) -> None:
 workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
 fixture_path = Path(os.environ["DEVFLOWS_FIXTURE_PATH"])
 payload_dir = workspace / ".devflows-writeback" / "payload"
-artifact_name = (
-    f"{os.environ['DEVFLOWS_ARTIFACT_NAME']}-"
-    f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-)
-branch = (
-    f"{os.environ['DEVFLOWS_BRANCH_PREFIX']}-"
-    f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-)
+run_id = os.environ["GITHUB_RUN_ID"]
+run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+# Derive the branch/artifact names from the shared helper so cleanup, which globs
+# {prefix}-{run_id}-*, always matches whatever this setup pushed.
+artifact = artifact_name(os.environ["DEVFLOWS_ARTIFACT_NAME"], run_id, run_attempt)
+branch = branch_name(os.environ["DEVFLOWS_BRANCH_PREFIX"], run_id, run_attempt)
 initial_files = json.loads(os.environ["DEVFLOWS_INITIAL_FILES"])
 payload_files = json.loads(os.environ["DEVFLOWS_PAYLOAD_FILES"])
 payload_paths = json.loads(os.environ["DEVFLOWS_PAYLOAD_PATHS"])
@@ -39,7 +44,7 @@ delete_paths = json.loads(os.environ["DEVFLOWS_DELETE_PATHS"])
 # branch/artifact names. Cleanup does not depend on these outputs (it recomputes
 # the deterministic branch name), so an orphaned branch is deleted regardless.
 _write_output("branch", branch)
-_write_output("artifact-name", artifact_name)
+_write_output("artifact-name", artifact)
 
 subprocess.run(["git", "config", "user.name", "DevFlows E2E"], check=True)
 subprocess.run(["git", "config", "user.email", "devflows-e2e@example.test"], check=True)
