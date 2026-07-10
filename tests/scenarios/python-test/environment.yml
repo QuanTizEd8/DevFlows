@@ -1,0 +1,7 @@
+name: devflows-python-test
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - pip
+  - pytest

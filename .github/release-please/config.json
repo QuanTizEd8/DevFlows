@@ -28,6 +28,12 @@
       "package-name": "python-build",
       "changelog-path": "CHANGELOG.md"
     },
+    "workflows/python-test": {
+      "component": "python-test",
+      "release-type": "simple",
+      "package-name": "python-test",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/writeback": {
       "component": "writeback",
       "release-type": "simple",

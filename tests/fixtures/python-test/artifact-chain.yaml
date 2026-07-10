@@ -1,0 +1,66 @@
+name: Build, test built wheels, and upload coverage
+
+on:
+  push:
+
+permissions: {}
+
+jobs:
+  build:
+    # Replace python-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    permissions:
+      contents: read
+      actions: read
+
+  test:
+    needs: build
+    # Replace python-test/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-test.yaml@python-test/v0.1.0
+    permissions:
+      contents: read
+      actions: read
+    with:
+      test-matrix: |
+        [
+          { "runner": "ubuntu-latest", "python-version": "3.13" }
+        ]
+      # Install the compatible wheel from the wheelhouse python-build produced.
+      test-install-source: artifact
+      artifact-download-enabled: true
+      artifact-download-name: ${{ needs.build.outputs.wheels-artifact-name }}
+      artifact-download-path: dist
+      test-dist-path: dist
+      test-dependencies: |
+        pytest
+        pytest-cov
+      test-command: >-
+        pytest --junitxml=reports/junit.xml --cov
+        --cov-report=xml:reports/coverage.xml
+      report-artifact-enabled: true
+      report-artifact-name: python-test-reports
+      report-path: |
+        reports/junit.xml
+        reports/coverage.xml
+
+  # Coverage upload lives in the caller, holding id-token: write, so the reusable
+  # test job can stay at contents: read. It downloads the merged report artifact
+  # and hands the coverage files to Codecov over OIDC (no token secret).
+  coverage:
+    needs: test
+    if: ${{ !cancelled() && needs.test.outputs.report-artifact-name != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download test reports
+        uses: actions/download-artifact@v8 # pin to a full commit SHA in real usage
+        with:
+          name: ${{ needs.test.outputs.report-artifact-name }}
+          path: reports
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5 # pin to a full commit SHA in real usage
+        with:
+          use_oidc: true
+          directory: reports

@@ -76,8 +76,8 @@ ACTION_PINS: dict[str, ActionPin] = {
         "513af61f4de4f75d37e4438f184ba4358f0fc1ca",
         "v0.3.1900000450",
     ),
-    # Python build toolchain (python-build workflow). setup-uv and setup-python are
-    # generic across the Python workflow family (build/test/lint/docs); cibuildwheel
+    # Python toolchain (python-* and docs-build workflows). setup-uv, setup-python,
+    # and setup-micromamba are generic across the Python workflow family; cibuildwheel
     # and rattler-build-action are python-build-specific but registered here so the
     # generator annotates their version comments in the dumped output and the adapter
     # contract test (test_contract.py) verifies their emitted with: keys on pin bumps.
@@ -90,6 +90,11 @@ ACTION_PINS: dict[str, ActionPin] = {
         "prefix-dev/rattler-build-action",
         "1ca5f45832f419a46d1326ccc5861d7e14d67c44",
         "v0.2.39",
+    ),
+    "setup-micromamba": ActionPin(
+        "mamba-org/setup-micromamba",
+        "d7c9bd84e824b79d2af72a2d4196c7f4300d3476",
+        "v3.0.0",
     ),
     "setup-python": ActionPin(
         "actions/setup-python",

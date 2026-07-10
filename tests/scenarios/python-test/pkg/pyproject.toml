@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "devflows-test-fixture"
+version = "0.1.0"
+description = "Tiny fixture package exercised by the DevFlows python-test scenarios."
+requires-python = ">=3.9"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/devflows_test_fixture"]
+
+# A self-contained pytest config so scenario runs use THIS project as the rootdir
+# (via `pytest -c .../pkg/pyproject.toml`) instead of the DevFlows repository's
+# root pytest config, which would apply its own addopts and testpaths.
+[tool.pytest.ini_options]
+testpaths = ["tests"]

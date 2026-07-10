@@ -10,8 +10,9 @@ def test_catalog_loads_active_workflows() -> None:
     assert [item.id for item in workflows] == [
         "build-devcontainer",
         "pandoc",
-        "python-lint",
         "python-build",
+        "python-lint",
+        "python-test",
         "writeback",
     ]
     assert (
