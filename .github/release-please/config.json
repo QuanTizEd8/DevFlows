@@ -28,16 +28,16 @@
       "package-name": "pandoc",
       "changelog-path": "CHANGELOG.md"
     },
-    "workflows/python-lint": {
-      "component": "python-lint",
-      "release-type": "simple",
-      "package-name": "python-lint",
-      "changelog-path": "CHANGELOG.md"
-    },
     "workflows/python-build": {
       "component": "python-build",
       "release-type": "simple",
       "package-name": "python-build",
+      "changelog-path": "CHANGELOG.md"
+    },
+    "workflows/python-lint": {
+      "component": "python-lint",
+      "release-type": "simple",
+      "package-name": "python-lint",
       "changelog-path": "CHANGELOG.md"
     },
     "workflows/python-test": {
