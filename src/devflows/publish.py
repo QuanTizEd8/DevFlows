@@ -9,7 +9,7 @@ from devflows.actions import annotate_pins
 from devflows.actions import ref as action_ref
 from devflows.catalog import CATALOG_DIR, Workflow
 from devflows.errors import DevflowsError
-from devflows.yaml import dump_yaml
+from devflows.yaml import dump_yaml, load_yaml_text
 
 # At sync time each workflow's runtime scripts are inlined into the generated
 # YAML (rather than checked out from the DevFlows repo at run time, which broke
@@ -29,7 +29,68 @@ def render_published_workflow(item: Workflow) -> str:
         body = item.workflow_path.read_text(encoding="utf-8")
     else:
         body = dump_yaml(build_published_workflow(item))
-    return header + annotate_pins(body)
+    rendered = header + annotate_pins(body)
+    _assert_inlined_scripts_intact(item, rendered)
+    return rendered
+
+
+_HEREDOC_OPEN = re.compile(
+    rf'^\s*cat > "{re.escape(RUNTIME_SCRIPT_ROOT)}/(?P<relpath>[^"]+)"'
+    rf" <<'{re.escape(RUNTIME_SCRIPT_DELIMITER)}'$"
+)
+
+
+def _extract_heredoc_bodies(run: str) -> dict[str, str]:
+    """Map each inlined script's relpath to its heredoc body in a materialize run."""
+    bodies: dict[str, str] = {}
+    lines = run.splitlines()
+    index = 0
+    while index < len(lines):
+        match = _HEREDOC_OPEN.match(lines[index])
+        if not match:
+            index += 1
+            continue
+        relpath = match.group("relpath")
+        index += 1
+        body_lines: list[str] = []
+        while index < len(lines) and lines[index] != RUNTIME_SCRIPT_DELIMITER:
+            body_lines.append(lines[index])
+            index += 1
+        bodies[relpath] = "\n".join(body_lines)
+        index += 1  # skip the closing delimiter
+    return bodies
+
+
+def _assert_inlined_scripts_intact(item: Workflow, rendered: str) -> None:
+    """Fail if the full dump/annotate pipeline altered any inlined script body.
+
+    ``annotate_pins`` and the YAML dumper both operate on text, so a regression
+    could rewrite a line *inside* an inlined heredoc (e.g. a script that contains
+    the literal ``uses: <action>@<sha>``). Re-parse the rendered workflow and
+    confirm every materialized body still byte-matches its catalog source.
+    """
+    if not _io_config(item):
+        return
+    workflow = load_yaml_text(rendered)
+    for job in (workflow.get("jobs") or {}).values():
+        if not isinstance(job, dict):
+            continue
+        for step in job.get("steps", []) or []:
+            if not isinstance(step, dict) or step.get("id") != "devflows-runtime":
+                continue
+            run = step.get("run")
+            if not isinstance(run, str):
+                continue
+            for relpath, body in _extract_heredoc_bodies(run).items():
+                expected = (
+                    _source_script_path(item, relpath).read_text(encoding="utf-8").rstrip("\n")
+                )
+                if body != expected:
+                    raise DevflowsError(
+                        f"{item.metadata_path}: inlined runtime script {relpath!r} does not "
+                        "byte-match its catalog source after rendering. The dump/annotate "
+                        "pipeline corrupted the heredoc body."
+                    )
 
 
 def build_published_workflow(item: Workflow) -> dict[str, Any]:
@@ -142,17 +203,63 @@ def validate_publish_config(item: Workflow) -> list[str]:
     elif not any(isinstance(job, dict) and "steps" in job for job in jobs.values()):
         errors.append(f"{item.metadata_path}: io requires at least one runner job.")
     runtime_jobs = config.get("runtime-jobs", []) or []
+    runtime_job_ids: list[str] = []
     if not isinstance(runtime_jobs, list):
         errors.append(f"{item.metadata_path}: io.runtime-jobs must be a list.")
     else:
-        for runtime_job_id in runtime_jobs:
-            job = jobs.get(str(runtime_job_id))
+        runtime_job_ids = [str(runtime_job_id) for runtime_job_id in runtime_jobs]
+        for runtime_job_id in runtime_job_ids:
+            job = jobs.get(runtime_job_id)
             if not isinstance(job, dict) or "steps" not in job:
                 errors.append(
                     f"{item.metadata_path}: io.runtime-jobs item {runtime_job_id!r} "
                     "must be a runner job."
                 )
+    # io.job cannot also be a runtime-job: both paths inject the "devflows-runtime"
+    # materialize step, so listing the io job twice generates duplicate step ids.
+    if job_id and job_id in runtime_job_ids:
+        errors.append(
+            f"{item.metadata_path}: io.job {job_id!r} must not also appear in io.runtime-jobs."
+        )
+    # Every job that runs a ${DEVFLOWS_SCRIPT_ROOT}/ script must receive the
+    # materialize step, i.e. be io.job or a runtime-job. Otherwise script-root is
+    # never exported for it and the step fails at runtime with an empty path.
+    if _enabled(config, "runtime"):
+        resolved_job_id = job_id or _safe_first_runner_job_id(jobs)
+        script_capable = {resolved_job_id, *runtime_job_ids}
+        for candidate_id, candidate in jobs.items():
+            if not isinstance(candidate, dict):
+                continue
+            if _job_references_script_root(candidate) and str(candidate_id) not in script_capable:
+                errors.append(
+                    f"{item.metadata_path}: job {candidate_id!r} references "
+                    "${DEVFLOWS_SCRIPT_ROOT} but is neither io.job nor listed in "
+                    "io.runtime-jobs, so no materialize step exports script-root for it."
+                )
     return errors
+
+
+def _safe_first_runner_job_id(jobs: dict[str, Any]) -> str:
+    for candidate_id, candidate in jobs.items():
+        if isinstance(candidate, dict) and "steps" in candidate:
+            return str(candidate_id)
+    return ""
+
+
+def _job_references_script_root(job: dict[str, Any]) -> bool:
+    """Whether any step in ``job`` reads the DevFlows runtime script root."""
+    for step in job.get("steps", []) or []:
+        if not isinstance(step, dict):
+            continue
+        run = step.get("run")
+        if isinstance(run, str) and "DEVFLOWS_SCRIPT_ROOT" in run:
+            return True
+        env = step.get("env")
+        if isinstance(env, dict):
+            for value in env.values():
+                if isinstance(value, str) and "devflows-runtime" in value:
+                    return True
+    return False
 
 
 def published_workflow_call(item: Workflow) -> dict[str, Any]:
@@ -204,21 +311,43 @@ def _ensure_job_permissions(
     workflow_permissions: dict[str, Any],
     **permissions: str | None,
 ) -> None:
-    current = job.setdefault("permissions", {})
-    if current is None:
-        current = {}
-        job["permissions"] = current
-    if not isinstance(current, dict):
+    """Grant a job the permissions the injected IO channels need.
+
+    GitHub job-level permissions *replace* the workflow-level grant rather than
+    merge with it, so a job that declares its own ``permissions`` block no longer
+    inherits any workflow-level scope. Two consequences drive this logic:
+
+    * When a job declares no permissions block it inherits the workflow-level
+      grant. If every channel permission is already satisfied by that grant we
+      leave the block absent so inheritance keeps working. Only when a channel
+      needs a scope the workflow level does not provide must we introduce a
+      job-level block — and then we seed the full workflow-level map first, or
+      the newly-introduced block would silently drop the workflow's grants (the
+      reproduced case: workflow-level ``packages: write`` vanishing from an io
+      job that only asked for ``contents: read``).
+    * A job that already declares its own permissions block is authoritative;
+      we only add channel scopes it is missing and never remove a key the source
+      declared explicitly (including an author-written ``permissions: {}``).
+    """
+    requested = {name: level for name, level in permissions.items() if level is not None}
+    existing = job.get("permissions")
+    if isinstance(existing, dict):
+        for name, level in requested.items():
+            existing.setdefault(name, level)
         return
-    for name, level in permissions.items():
-        if level is None:
-            continue
-        if str(workflow_permissions.get(name) or "") == level:
-            continue
-        if name not in current:
-            current[name] = level
-    if not current:
-        job.pop("permissions", None)
+    if "permissions" in job:
+        # Author wrote a non-mapping permissions value (e.g. null); leave intent.
+        return
+    missing = {
+        name: level
+        for name, level in requested.items()
+        if str(workflow_permissions.get(name) or "") != level
+    }
+    if not missing:
+        return
+    seeded = dict(workflow_permissions)
+    seeded.update(missing)
+    job["permissions"] = seeded
 
 
 def _checkout_step() -> dict[str, Any]:

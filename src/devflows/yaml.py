@@ -53,6 +53,21 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def load_yaml_text(text: str) -> dict[str, Any]:
+    """Parse a YAML document from an in-memory string (mirrors ``load_yaml``)."""
+    if yaml is None:
+        raise RuntimeError("PyYAML is required to parse generated YAML text.")
+    try:
+        data = yaml.load(text, Loader=GitHubActionsLoader)
+    except yaml.YAMLError as error:
+        raise DevflowsError(f"invalid YAML: {error}") from error
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise DevflowsError("YAML text must contain a mapping at the document root.")
+    return data
+
+
 def dump_yaml(data: Any) -> str:
     if yaml is None:
         raise RuntimeError("PyYAML is required to write generated YAML files.")

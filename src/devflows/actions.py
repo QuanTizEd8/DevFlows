@@ -4,6 +4,18 @@ import re
 from dataclasses import dataclass
 
 _USES_LINE = re.compile(r"^(?P<indent>\s*(?:- )?)uses:\s*(?P<ref>\S+@[0-9a-fA-F]{7,40})\s*$")
+# A mapping value that opens a YAML block scalar (`key: |`, `key: >-`, ...). Its
+# content is literal text — including any inlined heredoc script body — and must
+# never be treated as workflow structure to annotate.
+_BLOCK_SCALAR_OPENER = re.compile(r":\s*[|>][+-]?[0-9]*\s*$")
+_LINE_PREFIX = re.compile(r"^(?P<indent>\s*)(?P<dash>- )?")
+
+
+def _key_column(line: str) -> int:
+    """Column at which a mapping key starts, accounting for a `- ` list marker."""
+    match = _LINE_PREFIX.match(line)
+    assert match is not None
+    return len(match.group("indent")) + (2 if match.group("dash") else 0)
 
 
 @dataclass(frozen=True)
@@ -73,20 +85,36 @@ def ref(name: str) -> str:
 
 
 def annotate_pins(text: str) -> str:
-    """Append a `# <version>` comment to every `uses: <action>@<sha>` line.
+    """Append a `# <version>` comment to every step `uses: <action>@<sha>` line.
 
     PyYAML strips comments, so version annotations are re-applied to the dumped
     text. Consumers audit these pins, and the comment restores the version that
     the bare SHA hides.
+
+    The pass is block-scalar aware: lines inside a `run: |` (or any block scalar)
+    are literal content — for the generator that includes whole inlined heredoc
+    script bodies — and are copied through untouched. Annotating them would
+    corrupt an inlined script that happens to contain the literal
+    ``uses: <action>@<sha>`` (reproduced with such a script).
     """
     lines = text.splitlines()
     annotated: list[str] = []
+    # Key column of the currently-open block scalar, or None outside one.
+    scalar_key_column: int | None = None
     for line in lines:
+        if scalar_key_column is not None:
+            indent = len(line) - len(line.lstrip(" "))
+            if line.strip() == "" or indent > scalar_key_column:
+                annotated.append(line)  # literal block-scalar content
+                continue
+            scalar_key_column = None  # dedented out of the scalar; process normally
         match = _USES_LINE.match(line)
         if match:
             action_pin = PINS_BY_REF.get(match.group("ref"))
             if action_pin is not None:
                 line = f"{line.rstrip()}  # {action_pin.version}"
+        elif _BLOCK_SCALAR_OPENER.search(line):
+            scalar_key_column = _key_column(line)
         annotated.append(line)
     trailing = "\n" if text.endswith("\n") else ""
     return "\n".join(annotated) + trailing

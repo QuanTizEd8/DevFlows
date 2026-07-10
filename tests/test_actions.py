@@ -31,3 +31,39 @@ def test_annotate_pins_is_idempotent() -> None:
     twice = annotate_pins(once)
 
     assert once == twice
+
+
+def test_annotate_pins_ignores_uses_inside_block_scalar() -> None:
+    # A `uses: <pinned-ref>` line living inside an inlined heredoc script body
+    # (a `run: |` block scalar) is literal content, not workflow structure, and
+    # must not be annotated — otherwise the materialized script is corrupted.
+    text = (
+        "      - name: Materialize\n"
+        "        run: |\n"
+        "          cat > script.py <<'EOF'\n"
+        f"          # uses: {ref('checkout')}\n"
+        "          print('hi')\n"
+        "          EOF\n"
+        "      - name: Real step\n"
+        f"        uses: {ref('upload-artifact')}\n"
+    )
+    annotated = annotate_pins(text)
+
+    # The script line is untouched (no version comment appended)...
+    assert f"          # uses: {ref('checkout')}\n" in annotated
+    assert "# uses:" in annotated and "checkout" in annotated
+    assert "# v7.0.0" not in annotated
+    # ...while a real step `uses:` outside the scalar is still annotated.
+    assert f"        uses: {ref('upload-artifact')}  # v7.0.1\n" in annotated
+
+
+def test_annotate_pins_resumes_after_block_scalar() -> None:
+    text = (
+        "        run: |\n"
+        "          echo done\n"
+        "      - name: After\n"
+        f"        uses: {ref('checkout')}\n"
+    )
+    annotated = annotate_pins(text)
+
+    assert f"        uses: {ref('checkout')}  # v7.0.0\n" in annotated

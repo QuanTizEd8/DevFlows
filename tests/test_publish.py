@@ -1,9 +1,28 @@
-from devflows.catalog import load_catalog
-from devflows.publish import build_published_workflow, render_published_workflow
+from pathlib import Path
+
+from devflows.actions import ref as action_ref
+from devflows.catalog import Workflow, load_catalog
+from devflows.publish import (
+    _ensure_job_permissions,
+    build_published_workflow,
+    render_published_workflow,
+    validate_publish_config,
+)
 
 
 def _workflow(workflow_id: str):
     return {item.id: item for item in load_catalog()}[workflow_id]
+
+
+def _make_workflow(metadata: dict, workflow: dict) -> Workflow:
+    return Workflow(
+        id=str(metadata.get("id", "demo")),
+        path=Path("workflows/demo"),
+        workflow_path=Path("workflows/demo/workflow.yaml"),
+        metadata_path=Path("workflows/demo/devflow.yaml"),
+        metadata=metadata,
+        workflow=workflow,
+    )
 
 
 def test_pandoc_source_workflow_only_declares_domain_inputs() -> None:
@@ -131,3 +150,115 @@ def test_build_devcontainer_published_workflow_filters_conflicting_action_inputs
     assert "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0" in rendered
     assert "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c" in rendered
     assert "devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca" in rendered
+
+
+# --------------------------------------------------------------- item 9: permissions
+
+
+def test_ensure_job_permissions_seeds_workflow_level_when_job_has_none() -> None:
+    # A job with no permissions block inherits workflow-level today; introducing
+    # a job-level block for a channel scope must carry the workflow grants along,
+    # or job-level replacement silently drops packages: write.
+    job: dict = {"steps": []}
+    _ensure_job_permissions(job, {"packages": "write"}, contents="read", actions="read")
+
+    assert job["permissions"] == {
+        "packages": "write",
+        "contents": "read",
+        "actions": "read",
+    }
+
+
+def test_ensure_job_permissions_keeps_inheritance_when_workflow_level_covers_channels() -> None:
+    job: dict = {"steps": []}
+    _ensure_job_permissions(
+        job, {"contents": "read", "actions": "read"}, contents="read", actions="read"
+    )
+
+    assert "permissions" not in job  # nothing to add; keep inheriting workflow-level
+
+
+def test_ensure_job_permissions_preserves_explicit_empty_deny_all() -> None:
+    job: dict = {"steps": [], "permissions": {}}
+    _ensure_job_permissions(job, {"contents": "read"}, contents=None, actions=None)
+
+    assert job["permissions"] == {}  # never pop an author-declared block
+
+
+def test_ensure_job_permissions_augments_existing_block_without_removing_keys() -> None:
+    job: dict = {"steps": [], "permissions": {"contents": "read"}}
+    _ensure_job_permissions(job, {"packages": "write"}, contents="read", actions="read")
+
+    assert job["permissions"] == {"contents": "read", "actions": "read"}
+
+
+# ------------------------------------------------- item 10: validate_publish_config
+
+
+def _script_step() -> dict:
+    return {
+        "steps": [
+            {
+                "name": "Run",
+                "env": {
+                    "DEVFLOWS_SCRIPT_ROOT": "${{ steps.devflows-runtime.outputs.script-root }}"
+                },
+                "run": 'python "${DEVFLOWS_SCRIPT_ROOT}/demo/run.py"',
+            }
+        ]
+    }
+
+
+def test_validate_rejects_io_job_listed_as_runtime_job() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "demo", "runtime": True, "runtime-jobs": ["demo"]}},
+        {"jobs": {"demo": _script_step()}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("must not also appear in io.runtime-jobs" in error for error in errors)
+
+
+def test_validate_rejects_script_reference_in_unmaterialized_job() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "demo", "runtime": True}},
+        {"jobs": {"demo": {"steps": []}, "rogue": _script_step()}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("'rogue'" in error and "DEVFLOWS_SCRIPT_ROOT" in error for error in errors)
+
+
+def test_validate_accepts_script_reference_in_runtime_job() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "demo", "runtime": True, "runtime-jobs": ["helper"]}},
+        {"jobs": {"demo": {"steps": []}, "helper": _script_step()}},
+    )
+
+    assert validate_publish_config(item) == []
+
+
+# ------------------------------------------------- item 11: inlined script integrity
+
+
+def test_render_leaves_uses_line_inside_inlined_script_untouched(make_catalog) -> None:
+    from devflows.catalog import load_workflow
+
+    # A script whose body contains a real pinned `uses:` line must survive the
+    # dump/annotate pipeline byte-for-byte (no version comment injected), and the
+    # integrity check must accept it.
+    pin_line = f"# uses: {action_ref('checkout')}\n"
+    root = make_catalog(script_body=pin_line + "print('ok')\n")
+    import os
+
+    original = Path.cwd()
+    try:
+        os.chdir(root)
+        rendered = render_published_workflow(load_workflow(Path("workflows/demo")))
+    finally:
+        os.chdir(original)
+
+    assert pin_line.rstrip() in rendered
+    assert "# v7.0.0" not in rendered
