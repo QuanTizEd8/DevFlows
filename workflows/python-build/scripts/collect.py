@@ -11,10 +11,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 MANIFEST_SCHEMA = 1
-# Pinned in the script (version-controlled with the aggregation logic) rather than
-# exposed as an input: re-indexing is an internal implementation detail. conda-index
-# is the conda organization's pure-Python channel indexer.
-CONDA_INDEX_VERSION = "0.12.1"
+# Re-indexing the merged conda channel is done by the sibling
+# reindex-conda-channel.py, a self-contained repodata.json generator with no
+# conda dependency (see that file for why conda-index was dropped). Its only
+# third-party need is zstandard, to decompress the ``.conda`` inner tarball; it is
+# delivered through an ephemeral, pinned ``uv run --with`` environment so nothing
+# is installed on the collect runner's interpreter. Pinned here, version-locked
+# with the aggregation logic, rather than exposed as an input: re-indexing is an
+# internal implementation detail.
+ZSTANDARD_VERSION = "0.25.0"
+REINDEX_SCRIPT = Path(__file__).with_name("reindex-conda-channel.py")
 
 
 @dataclass(frozen=True)
@@ -139,8 +145,10 @@ def _reindex_conda_channel(channel: Path) -> None:
     """Regenerate authoritative repodata.json across every subdir of the channel.
 
     Per-leg repodata only covers that leg's packages, so the merged channel needs
-    a fresh index. conda-index (the conda organization's pure-Python indexer) is
-    run pinned through an ephemeral uv environment — no conda install required.
+    a fresh index. The generation is done by reindex-conda-channel.py (no conda
+    dependency), run through an ephemeral uv environment that supplies only a
+    pinned zstandard for ``.conda`` decompression — nothing lands on the runner's
+    interpreter.
     """
     subprocess.run(
         [
@@ -148,10 +156,9 @@ def _reindex_conda_channel(channel: Path) -> None:
             "run",
             "--no-project",
             "--with",
-            f"conda-index=={CONDA_INDEX_VERSION}",
+            f"zstandard=={ZSTANDARD_VERSION}",
             "python",
-            "-m",
-            "conda_index",
+            str(REINDEX_SCRIPT),
             str(channel),
         ],
         check=True,

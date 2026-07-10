@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -626,9 +627,16 @@ def test_collect_conda_channel_reindexed(monkeypatch, tmp_path) -> None:
     channel_pkg = Path(env["CONDA_OUT"]) / "noarch" / "python-build-conda-fixture-0.1.0-0.conda"
     assert channel_pkg.is_file()
     assert len(reindex) == 1
-    assert reindex[0][:2] == ["uv", "run"]
-    assert f"conda-index=={module.CONDA_INDEX_VERSION}" in reindex[0]
-    assert reindex[0][-1] == str(Path(env["CONDA_OUT"]).resolve())
+    command = reindex[0]
+    assert command[:2] == ["uv", "run"]
+    # zstandard (for .conda decompression), not conda-index, is delivered into the
+    # ephemeral uv env; conda is yanked/unavailable on PyPI.
+    assert f"zstandard=={module.ZSTANDARD_VERSION}" in command
+    assert not any("conda-index" in part or "conda_index" in part for part in command)
+    # The self-contained generator is invoked (not `python -m conda_index`) against
+    # the channel root.
+    assert str(module.REINDEX_SCRIPT) in command
+    assert command[-1] == str(Path(env["CONDA_OUT"]).resolve())
 
 
 def test_collect_rejects_version_mismatch(monkeypatch, tmp_path) -> None:
@@ -685,6 +693,183 @@ def test_collect_writes_step_summary(monkeypatch, tmp_path) -> None:
     summary = Path(env["GITHUB_STEP_SUMMARY"]).read_text(encoding="utf-8")
     assert "python-build distribution manifest" in summary
     assert "pkg-0.1.0-py3-none-any.whl" in summary
+
+
+# --------------------------------------------------------------------------- #
+# reindex-conda-channel.py                                                     #
+# --------------------------------------------------------------------------- #
+def _index_json(**overrides) -> dict:
+    base = {
+        "name": "demo-pkg",
+        "version": "1.2.3",
+        "build": "h0_0",
+        "build_number": 0,
+        "depends": ["python >=3.9"],
+        "subdir": "noarch",
+        "license": "MIT",
+    }
+    base.update(overrides)
+    return base
+
+
+def _write_tar_bz2(path: Path, members: dict[str, bytes]) -> None:
+    """A legacy .tar.bz2 conda package holding the given archive members."""
+    import io
+    import tarfile
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(path, "w:bz2") as archive:
+        for name, payload in members.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            archive.addfile(info, io.BytesIO(payload))
+
+
+def _write_conda(path: Path, index: dict) -> None:
+    """A modern .conda package: a zip whose info-*.tar.zst carries index.json."""
+    import io
+    import tarfile
+    import zipfile
+
+    import zstandard
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(index).encode("utf-8")
+    tar_buffer = io.BytesIO()
+    with tarfile.open(fileobj=tar_buffer, mode="w") as archive:
+        info = tarfile.TarInfo("info/index.json")
+        info.size = len(payload)
+        archive.addfile(info, io.BytesIO(payload))
+    compressed = zstandard.ZstdCompressor().compress(tar_buffer.getvalue())
+    stem = path.name[: -len(".conda")]
+    with zipfile.ZipFile(path, "w") as bundle:
+        bundle.writestr("metadata.json", json.dumps({"conda_pkg_format_version": 2}))
+        bundle.writestr(f"info-{stem}.tar.zst", compressed)
+        bundle.writestr(f"pkg-{stem}.tar.zst", compressed)
+
+
+def _load_reindexer() -> ModuleType:
+    return _load_script("reindex-conda-channel.py")
+
+
+def test_reindex_conda_package_matches_reference(tmp_path) -> None:
+    """A .conda record is its index.json augmented with md5/sha256/size."""
+    module = _load_reindexer()
+    subdir = tmp_path / "noarch"
+    pkg = subdir / "demo-pkg-1.2.3-h0_0.conda"
+    _write_conda(pkg, _index_json(subdir="noarch", noarch="generic"))
+    assert module.main([str(tmp_path)]) == 0
+
+    repodata = json.loads((subdir / "repodata.json").read_text(encoding="utf-8"))
+    assert repodata["info"] == {"subdir": "noarch"}
+    assert repodata["repodata_version"] == 1
+    assert repodata["packages"] == {}
+    record = repodata["packages.conda"]["demo-pkg-1.2.3-h0_0.conda"]
+    assert record["name"] == "demo-pkg"
+    assert record["version"] == "1.2.3"
+    assert record["depends"] == ["python >=3.9"]
+    assert record["noarch"] == "generic"
+    data = pkg.read_bytes()
+    assert record["size"] == len(data)
+    assert record["sha256"] == hashlib.sha256(data).hexdigest()
+    assert record["md5"] == hashlib.md5(data).hexdigest()
+
+
+def test_reindex_legacy_tar_bz2(tmp_path) -> None:
+    """The legacy .tar.bz2 format (stdlib bz2, no zstd) indexes into packages."""
+    module = _load_reindexer()
+    subdir = tmp_path / "linux-64"
+    pkg = subdir / "legacy-9.9-h1_2.tar.bz2"
+    _write_tar_bz2(
+        pkg,
+        {"info/index.json": json.dumps(_index_json(name="legacy", subdir="linux-64")).encode()},
+    )
+    assert module.main([str(tmp_path)]) == 0
+    repodata = json.loads((subdir / "repodata.json").read_text(encoding="utf-8"))
+    assert repodata["info"] == {"subdir": "linux-64"}
+    assert repodata["packages.conda"] == {}
+    record = repodata["packages"]["legacy-9.9-h1_2.tar.bz2"]
+    assert record["name"] == "legacy"
+    assert len(record["sha256"]) == 64 and len(record["md5"]) == 32 and record["size"] > 0
+
+
+def test_reindex_multiple_subdirs(tmp_path) -> None:
+    """Each subdir gets its own repodata.json; a bare file at the root is ignored."""
+    module = _load_reindexer()
+    _write_conda(tmp_path / "noarch" / "a-1.0-h0_0.conda", _index_json(name="a", subdir="noarch"))
+    _write_tar_bz2(
+        tmp_path / "linux-64" / "b-2.0-h0_0.tar.bz2",
+        {"info/index.json": json.dumps(_index_json(name="b", subdir="linux-64")).encode()},
+    )
+    (tmp_path / "channeldata.json").write_text("{}", encoding="utf-8")  # not a subdir
+    assert module.main([str(tmp_path)]) == 0
+    noarch = json.loads((tmp_path / "noarch" / "repodata.json").read_text())
+    linux = json.loads((tmp_path / "linux-64" / "repodata.json").read_text())
+    assert "a-1.0-h0_0.conda" in noarch["packages.conda"]
+    assert "b-2.0-h0_0.tar.bz2" in linux["packages"]
+
+
+def test_reindex_deterministic_output(tmp_path) -> None:
+    """Regenerating the same channel yields byte-identical repodata.json."""
+    module = _load_reindexer()
+    _write_conda(tmp_path / "noarch" / "a-1.0-h0_0.conda", _index_json(name="a", subdir="noarch"))
+    module.main([str(tmp_path)])
+    first = (tmp_path / "noarch" / "repodata.json").read_bytes()
+    module.main([str(tmp_path)])
+    second = (tmp_path / "noarch" / "repodata.json").read_bytes()
+    assert first == second
+
+
+def test_reindex_rejects_missing_index_json(tmp_path) -> None:
+    """A package without info/index.json fails loudly, not silently."""
+    module = _load_reindexer()
+    pkg = tmp_path / "noarch" / "broken-1.0-h0_0.tar.bz2"
+    _write_tar_bz2(pkg, {"info/about.json": b"{}"})
+    with pytest.raises(SystemExit) as excinfo:
+        module.main([str(tmp_path)])
+    assert "index.json not found" in str(excinfo.value)
+
+
+def test_reindex_rejects_unparseable_conda(tmp_path) -> None:
+    """A .conda that is not a valid zip fails loudly."""
+    module = _load_reindexer()
+    pkg = tmp_path / "noarch" / "garbage-1.0-h0_0.conda"
+    pkg.parent.mkdir(parents=True)
+    pkg.write_bytes(b"this is not a zip archive")
+    with pytest.raises(SystemExit) as excinfo:
+        module.main([str(tmp_path)])
+    assert "garbage-1.0-h0_0.conda" in str(excinfo.value)
+
+
+def test_reindex_rejects_index_missing_required_fields(tmp_path) -> None:
+    """An index.json lacking name/version is rejected."""
+    module = _load_reindexer()
+    pkg = tmp_path / "noarch" / "nofields-1.0-h0_0.tar.bz2"
+    _write_tar_bz2(pkg, {"info/index.json": json.dumps({"build": "h0_0"}).encode()})
+    with pytest.raises(SystemExit) as excinfo:
+        module.main([str(tmp_path)])
+    assert "name/version" in str(excinfo.value)
+
+
+def test_reindex_requires_channel_argument(tmp_path) -> None:
+    module = _load_reindexer()
+    with pytest.raises(SystemExit):
+        module.main([])
+    with pytest.raises(SystemExit) as excinfo:
+        module.main([str(tmp_path / "does-not-exist")])
+    assert "does not exist" in str(excinfo.value)
+
+
+def test_collect_reindex_script_is_materialized() -> None:
+    """The generated workflow inlines reindex-conda-channel.py next to collect.py.
+
+    collect.py locates its sibling via Path(__file__).with_name, so a materialize
+    step that inlined collect.py but not the reindexer would break the conda path
+    at runtime. This guards the run-block reference that triggers the inlining.
+    """
+    generated = Path(".github/workflows/python-build.yaml").read_text(encoding="utf-8")
+    assert "$RUNNER_TEMP/devflows/python-build/collect.py" in generated
+    assert "$RUNNER_TEMP/devflows/python-build/reindex-conda-channel.py" in generated
 
 
 # --------------------------------------------------------------------------- #

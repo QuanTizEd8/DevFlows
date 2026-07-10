@@ -30,6 +30,12 @@ sphinx-design = ">=0.6"
 taplo = ">=0.10"
 yamllint = ">=1.35"
 zizmor = ">=1.0"
+# Test-only: lets tests/test_python_build.py read a real .conda package (a zip of
+# zstd tarballs) when exercising reindex-conda-channel.py. That script needs
+# zstandard at workflow runtime too, where it is delivered by an ephemeral
+# `uv run --with zstandard` (see collect.py), so it is not a runtime dependency of
+# the DevFlows package itself.
+zstandard = ">=0.22"
 
 # gitleaks is intentionally NOT a pixi dependency: it has no conda-forge package
 # and no real PyPI distribution (the `gitleaks` binary is a standalone Go release).

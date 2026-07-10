@@ -418,7 +418,13 @@ jobs:
           SDIST_OUT: ${{ runner.temp }}/collect/out/sdist
           WHEELS_OUT: ${{ runner.temp }}/collect/out/wheels
           CONDA_OUT: ${{ runner.temp }}/collect/out/conda-channel
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-build/collect.py"
+        run: |
+          # collect.py invokes the sibling reindexer as a subprocess when the build
+          # produced conda packages. This comment references it so the materialize
+          # step inlines reindex-conda-channel.py into the script-root next to
+          # collect.py, which locates it via Path(__file__).with_name:
+          #   ${DEVFLOWS_SCRIPT_ROOT}/python-build/reindex-conda-channel.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/python-build/collect.py"
 
       - name: Upload sdist artifact
         if: steps.collect.outputs.sdist-artifact-name != ''

@@ -71,8 +71,8 @@ notes:
     The conda flavor builds recipe.yaml (v1 recipe format) packages with
     rattler-build in setup-only mode; legacy conda-build meta.yaml recipes are not
     supported (port the recipe to recipe.yaml v1). The merged channel is
-    re-indexed at collect time with a pinned conda-index so repodata.json is
-    authoritative across matrix legs.
+    re-indexed at collect time by a self-contained pure-Python generator (no conda
+    dependency) so repodata.json is authoritative across matrix legs.
   - >-
     collect cross-checks that every produced distribution (sdist, wheels, conda
     packages) agrees on version and fails loudly otherwise. A conda recipe whose
