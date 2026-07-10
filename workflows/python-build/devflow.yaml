@@ -169,11 +169,12 @@ tests:
     - id: cibw-manylinux
       # One cheap native leg (cp313-manylinux_x86_64 on ubuntu-latest) that builds
       # the minimal C-extension fixture end to end: prepare-cibw-env -> the pinned
-      # cibuildwheel action -> collect's flat wheelhouse. The manylinux image is
-      # pinned in the fixture's pyproject [tool.cibuildwheel] so the repaired wheel's
-      # platform tag is deterministic for the exact-path assertion. Expected duration
-      # ~2-4 min (a manylinux2014 container build of a trivial extension); it is the
-      # only hosted cibw leg, so the per-PR cost is bounded.
+      # cibuildwheel action -> collect's flat wheelhouse. auditwheel stamps every
+      # manylinux compatibility tag the repaired wheel satisfies, so the exact
+      # filename is inherently non-deterministic; the assertion uses a *manylinux*
+      # glob (file-glob-exists) instead of an exact name. Expected duration ~2-4 min
+      # (a manylinux container build of a trivial extension); it is the only hosted
+      # cibw leg, so the per-PR cost is bounded.
       name: cibuildwheel builds a manylinux wheel into the wheelhouse
       runs:
         - hosted
@@ -188,8 +189,8 @@ tests:
         name: python-build-cibw-wheels
         path: .devflows-test-artifacts/python-build/cibw
       assertions:
-        - type: file-exists
-          path: devflows_cext_fixture-0.1.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+        - type: file-glob-exists
+          path: devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl
         - type: workflow-output-equals
           name: wheels-artifact-name
           value: python-build-cibw-wheels

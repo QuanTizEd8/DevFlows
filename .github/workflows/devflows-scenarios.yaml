@@ -830,10 +830,11 @@ jobs:
         with:
           name: python-build-cibw-wheels
           path: .devflows-test-artifacts/python-build/cibw
-      - name: 'Assert file exists: devflows_cext_fixture-0.1.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl'
+      - name: 'Assert file matches glob: devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl'
         shell: bash
         env:
-          ASSERT_PATH: .devflows-test-artifacts/python-build/cibw/devflows_cext_fixture-0.1.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+          ASSERT_PATH: .devflows-test-artifacts/python-build/cibw/devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl
+          ASSERT_GLOB: '1'
         run: python harness/scenarios/assert-file-exists.py
       - name: Assert output wheels-artifact-name
         shell: bash

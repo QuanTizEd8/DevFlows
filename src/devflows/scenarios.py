@@ -350,11 +350,16 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 assertion_type = assertion.get("type")
                 if assertion_type not in {
                     "file-exists",
+                    "file-glob-exists",
                     "file-contains",
                     "workflow-output-equals",
                 }:
                     errors.append(f"{prefix}: unsupported assertion type {assertion_type!r}.")
-                if assertion_type in {"file-exists", "file-contains"} and not assertion.get("path"):
+                if assertion_type in {
+                    "file-exists",
+                    "file-glob-exists",
+                    "file-contains",
+                } and not assertion.get("path"):
                     errors.append(f"{prefix}: {assertion_type} assertions require path.")
                 if assertion_type == "file-contains" and "text" not in assertion:
                     errors.append(f"{prefix}: file-contains assertions require text.")
@@ -959,12 +964,19 @@ def _assertion_steps(
             }
         ]
     path = _assertion_path(scenario, assertion, runner=runner)
-    if assertion_type == "file-exists":
+    if assertion_type in {"file-exists", "file-glob-exists"}:
+        is_glob = assertion_type == "file-glob-exists"
+        env = {"ASSERT_PATH": path}
+        if is_glob:
+            # assert-file-exists.py treats ASSERT_PATH as a glob requiring >=1
+            # match when ASSERT_GLOB is set.
+            env["ASSERT_GLOB"] = "1"
+        label = "matches glob" if is_glob else "exists"
         return [
             {
-                "name": f"Assert file exists: {assertion['path']}",
+                "name": f"Assert file {label}: {assertion['path']}",
                 "shell": "bash",
-                "env": {"ASSERT_PATH": path},
+                "env": env,
                 "run": f"python {_script('assert-file-exists.py')}",
             }
         ]
@@ -1002,6 +1014,6 @@ def _cleanup_local_outputs(scenarios: list[Scenario]) -> None:
 
 def _has_file_assertions(scenario: Scenario) -> bool:
     return any(
-        assertion.get("type") in {"file-exists", "file-contains"}
+        assertion.get("type") in {"file-exists", "file-glob-exists", "file-contains"}
         for assertion in scenario.assertions
     )

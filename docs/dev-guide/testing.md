@@ -86,7 +86,13 @@ state, and deletes the branch.
 `workflow-output-equals` : Compares a reusable workflow output to an expected
 string.
 
-`file-exists` : Fails unless a file exists.
+`file-exists` : Fails unless a file exists at the exact `path`.
+
+`file-glob-exists` : Fails unless at least one file matches the shell glob in
+`path` (`*`, `?`, `**` with `recursive`). Use this when the producer emits a
+non-deterministic filename — for example a cibuildwheel/auditwheel wheel, whose
+platform tag lists every manylinux compatibility level it satisfies, so the
+exact name is not stable (`pkg-0.1.0-cp313-cp313-*manylinux*.whl`).
 
 `file-contains` : Fails unless a file exists and contains a string.
 

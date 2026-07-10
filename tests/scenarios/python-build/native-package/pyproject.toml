@@ -11,8 +11,8 @@ requires-python = ">=3.9"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.cibuildwheel]
-# Pin the manylinux image so the repaired wheel's platform tag is deterministic
-# (manylinux_2_17_x86_64.manylinux2014_x86_64) and the scenario's exact-path
-# file-exists assertion does not depend on cibuildwheel's default image choice.
-manylinux-x86_64-image = "manylinux2014"
+# No [tool.cibuildwheel] block is needed: the scenario selects the manylinux
+# build via the workflow's cibw-matrix (only: cp313-manylinux_x86_64) and asserts
+# the wheel with a *manylinux* glob, so it tolerates whatever manylinux image
+# cibuildwheel defaults to (auditwheel stamps every satisfied tag, making the
+# exact filename non-deterministic regardless of the image).

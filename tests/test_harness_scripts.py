@@ -46,6 +46,51 @@ def test_assert_file_exists(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
         _run("assert-file-exists.py", {"ASSERT_PATH": str(tmp_path / "missing.txt")}, monkeypatch)
 
 
+def test_assert_file_exists_glob_match(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / "pkg-0.1.0-cp313-cp313-manylinux_2_17_x86_64.whl").write_text("w", encoding="utf-8")
+    _run(
+        "assert-file-exists.py",
+        {"ASSERT_PATH": str(tmp_path / "pkg-0.1.0-*manylinux*.whl"), "ASSERT_GLOB": "1"},
+        monkeypatch,
+    )
+
+
+def test_assert_file_exists_glob_no_match(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / "pkg-0.1.0-py3-none-any.whl").write_text("w", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        _run(
+            "assert-file-exists.py",
+            {"ASSERT_PATH": str(tmp_path / "pkg-0.1.0-*manylinux*.whl"), "ASSERT_GLOB": "1"},
+            monkeypatch,
+        )
+
+
+def test_assert_file_exists_glob_multiple_match(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # More than one match is fine: the assertion requires at least one.
+    (tmp_path / "pkg-0.1.0-cp312-manylinux_2_17_x86_64.whl").write_text("a", encoding="utf-8")
+    (tmp_path / "pkg-0.1.0-cp313-manylinux_2_17_x86_64.whl").write_text("b", encoding="utf-8")
+    _run(
+        "assert-file-exists.py",
+        {"ASSERT_PATH": str(tmp_path / "pkg-0.1.0-*manylinux*.whl"), "ASSERT_GLOB": "1"},
+        monkeypatch,
+    )
+
+
+def test_assert_file_exists_glob_ignores_directories(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A directory matching the glob is not a file; the assertion must still fail.
+    (tmp_path / "pkg-0.1.0-manylinux.whl").mkdir()
+    with pytest.raises(SystemExit):
+        _run(
+            "assert-file-exists.py",
+            {"ASSERT_PATH": str(tmp_path / "pkg-0.1.0-*manylinux*.whl"), "ASSERT_GLOB": "1"},
+            monkeypatch,
+        )
+
+
 def test_assert_file_contains(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     target = tmp_path / "doc.html"
     target.write_text("<h1>Title</h1>", encoding="utf-8")

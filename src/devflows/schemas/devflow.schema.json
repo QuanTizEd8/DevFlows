@@ -159,6 +159,7 @@
           "type": "string",
           "enum": [
             "file-exists",
+            "file-glob-exists",
             "file-contains",
             "workflow-output-equals",
             "branch-file-contains",

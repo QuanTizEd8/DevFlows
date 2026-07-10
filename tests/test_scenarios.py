@@ -434,6 +434,75 @@ def test_success_scenario_assert_job_uses_always_and_success_result() -> None:
     assert "EXPECTED_RESULT" not in result_step["env"]
 
 
+# --- file-glob-exists assertion ---
+
+
+def test_file_glob_exists_assert_step_sets_glob_flag() -> None:
+    # The real python-build cibw scenario asserts a *manylinux* wheel with a glob,
+    # because auditwheel makes the exact filename non-deterministic.
+    scenario = _scenario("python-build", "cibw-manylinux")
+
+    assert_job = _assert_job(scenario, runner="hosted")
+    glob_step = next(step for step in assert_job["steps"] if "matches glob" in step["name"])
+
+    assert glob_step["env"]["ASSERT_GLOB"] == "1"
+    # The glob is joined under the downloaded-artifact path, and the wildcard is
+    # preserved for the harness to expand.
+    assert glob_step["env"]["ASSERT_PATH"].endswith(
+        "devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl"
+    )
+    assert "assert-file-exists.py" in glob_step["run"]
+
+
+def test_file_glob_exists_is_accepted_and_requires_path() -> None:
+    ok = _with_scenarios(
+        "pandoc",
+        [
+            {
+                "id": "glob-ok",
+                "runs": ["hosted"],
+                "inputs": {},
+                "artifact": {"name": "a"},
+                "assertions": [{"type": "file-glob-exists", "path": "out/*.whl"}],
+            }
+        ],
+    )
+    assert validate_scenarios([ok]) == []
+
+    missing_path = _with_scenarios(
+        "pandoc",
+        [
+            {
+                "id": "glob-nopath",
+                "runs": ["hosted"],
+                "inputs": {},
+                "artifact": {"name": "a"},
+                "assertions": [{"type": "file-glob-exists"}],
+            }
+        ],
+    )
+    errors = validate_scenarios([missing_path])
+    assert any("file-glob-exists assertions require path" in error for error in errors)
+
+
+def test_hosted_file_glob_assertion_requires_artifact_metadata() -> None:
+    # file-glob-exists is a file assertion, so a hosted scenario using it must
+    # declare artifact metadata (the assert job downloads it before globbing).
+    workflow = _with_scenarios(
+        "pandoc",
+        [
+            {
+                "id": "glob-noartifact",
+                "runs": ["hosted"],
+                "inputs": {},
+                "assertions": [{"type": "file-glob-exists", "path": "out/*.whl"}],
+            }
+        ],
+    )
+    errors = validate_scenarios([workflow])
+    assert any("hosted file assertions require artifact metadata" in error for error in errors)
+
+
 # --- expect: validation-failure scenarios (validate-script harness) ---
 #
 # Promoted catalog workflows do not (yet) expose an inputs-only validate step:
