@@ -153,6 +153,21 @@ tasks:
       - pixi run -- devflows propagation-check
 
   # ---------------------------------------------------------------- maintenance
+  pixi-lock:
+    desc: >-
+      Refresh pixi.lock from pixi.toml (the reliable path when Renovate's
+      experimental pixi manager lags). Review the diff before committing.
+    cmds:
+      - pixi lock
+
+  env-lock:
+    desc: >-
+      Refresh the reproducible-environment locks (pixi.lock now; see
+      docs/dev-guide/environment.md for the devcontainer feature and base-image
+      digest refresh, which need docker / the devcontainer CLI).
+    deps:
+      - pixi-lock
+
   clean:
     desc: Remove generated docs, build artifacts, and tool caches.
     cmds:

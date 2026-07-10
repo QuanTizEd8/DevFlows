@@ -84,10 +84,83 @@ task release-check
 The hosted release workflow runs Release Please after the configuration lands on
 the default branch.
 
-## Moving Tags
+## Shared-Generator Propagation
 
-Release automation publishes immutable exact tags for every release. Once a
-workflow reaches major `>= 1`, the release workflow additionally force-updates a
-moving major tag `workflow-id/vN` to the newest release on that line (see
-"Moving major tag automation" below). Moving minor tags are not published. While
-a workflow is on `0.x`, no moving tag is published.
+The published reusable workflows in `.github/workflows/<id>.yaml` are generated
+from `workflows/<id>/` **plus** the shared generator in `src/devflows/` (notably
+the IO-channel templates in `publish.py` and the SHA-pin registry in
+`actions.py`). release-please attributes a release to a workflow only from
+commits that touch that workflow's package path (`workflows/<id>/`); the commit
+_scope_ is cosmetic. So a change to the shared generator can alter a workflow's
+published output while release-please cuts no release for it, stranding
+consumers on stale code.
+
+`task propagation-check` (run on every pull request, and available locally
+against a base ref via `DEVFLOWS_BASE_SHA`) fails when a workflow's
+`.github/workflows/<id>.yaml` changed but nothing under `workflows/<id>/` did.
+
+**Runbook when you change the shared generator:**
+
+1. Make the generator change and run `task sync` to regenerate published
+   workflows.
+2. Inspect which `.github/workflows/<id>.yaml` files changed.
+3. For every affected workflow, land a source change under `workflows/<id>/` (a
+   real edit — for example note the interface/behavior change in its
+   `devflow.yaml` `notes`) in the same pull request, with a conventional commit
+   such as `fix(<id>): regenerate for shared checkout input`. This is what makes
+   release-please cut a release for that workflow.
+4. If a regenerated diff is genuinely consumer-neutral, revert that workflow's
+   output rather than shipping an unreleased change.
+
+`task propagation-check` enforces steps 2–3 in CI.
+
+## Moving Major Tag Automation
+
+Release automation publishes immutable exact tags (`<id>/vX.Y.Z`) for every
+release. Once a workflow is released at major `>= 1`, the
+`Force-move moving major tags` step in `devflows-release.yaml` additionally
+force-updates `<id>/v<major>` onto that release's commit. The logic lives in
+`scripts/move_major_tags.py` (`compute_major_tag_moves`, unit-tested in
+`tests/test_release_tags.py`) and reads the release-please-action outputs.
+
+The automation is **dormant during `0.x`** by construction: every released major
+is `0`, so `compute_major_tag_moves` returns nothing and no tag is moved. It is
+already wired in, so the first `1.0.0` release needs no new machinery. Moving
+minor tags are never published.
+
+## Release Token (PAT) Setup
+
+`devflows-release.yaml` uses `secrets.RELEASE_PLEASE_TOKEN` for both the
+release-please step and the moving-major-tag push, falling back to
+`github.token` so the workflow runs before the secret exists. A fine-grained PAT
+is required so that release pull requests trigger CI (pull requests opened with
+the default `GITHUB_TOKEN` do not start workflow runs) and so tag pushes are
+attributed to a real identity.
+
+Owner setup:
+
+- **Token type:** fine-grained personal access token (a GitHub App token works
+  too; PAT is simpler for a single repo).
+- **Resource owner / repository:** `QuanTizEd8`, scoped to **only**
+  `QuanTizEd8/DevFlows`.
+- **Repository permissions:** `Contents: Read and write` (create tags, releases,
+  and the release branch) and `Pull requests: Read and write` (open/update
+  release PRs). No account or organization permissions are needed.
+- **Expiry:** the shortest that is operationally comfortable — 90 days is a good
+  default; calendar a rotation reminder.
+- **Secret name:** add it as the repository Actions secret
+  `RELEASE_PLEASE_TOKEN` (Settings → Secrets and variables → Actions). The
+  workflow keeps working with the `github.token` fallback until this is set,
+  minus the CI-on-release-PR benefit.
+
+## Release Runbook
+
+1. Merge feature/fix pull requests to `main` using Conventional Commits and, for
+   shared-generator changes, satisfy the propagation guard (above).
+2. `DevFlows Release` runs release-please on `main` and opens/updates a release
+   pull request per workflow.
+3. Review the release pull request (version bump, changelog). With the PAT
+   configured, CI runs on it; require it green before merging.
+4. Merge the release pull request. release-please creates the `<id>/vX.Y.Z` tag
+   and GitHub release; the tag-automation step moves `<id>/v<major>` when the
+   major is `>= 1`.
