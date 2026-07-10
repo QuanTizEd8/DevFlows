@@ -18,7 +18,7 @@ UPLOAD_PAGES_ARTIFACT = "actions/upload-pages-artifact@fc324d3547104276b827a68af
 CONFIGURE_PAGES = "actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d"
 DEPLOY_PAGES = "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128"
 
-VALIDATE = Path("workflows/deploy-pages/scripts/validate-pages-inputs.py")
+VALIDATE = Path("workflows/deploy-pages/scripts/validate-inputs.py")
 
 _ENV_KEYS = (
     "PAGES_PATH",
@@ -46,7 +46,7 @@ def _set_env(monkeypatch, **values: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# validate-pages-inputs.py behavior (incl. every failure path)
+# validate-inputs.py behavior (incl. every failure path)
 # --------------------------------------------------------------------------- #
 
 

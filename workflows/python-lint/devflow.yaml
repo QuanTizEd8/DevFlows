@@ -158,3 +158,38 @@ tests:
         - type: workflow-output-equals
           name: typecheck-outcome
           value: skipped
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. They rely only on the default lint-paths/working-directory
+    # ('.'), which resolve inside the checked-out workspace; each pins a stable
+    # substring of the deterministic input rejection it targets.
+    - id: invalid-typecheck-tool
+      name: Unknown typecheck tool fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "typecheck-tool must be one of"
+      inputs:
+        typecheck-enabled: true
+        typecheck-tool: pytype
+    - id: no-lint-tools
+      name: All lint tools disabled fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "At least one of ruff-check-enabled"
+      inputs:
+        ruff-check-enabled: false
+        ruff-format-enabled: false
+        typecheck-enabled: false
+    - id: invalid-uv-cache-mode
+      name: Invalid uv-cache-mode fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "uv-cache-mode must be one of"
+      inputs:
+        uv-cache-mode: sometimes

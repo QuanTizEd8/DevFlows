@@ -269,7 +269,7 @@ jobs:
         run: |-
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/devflows/deploy-pages"
-          cat > "$RUNNER_TEMP/devflows/deploy-pages/validate-pages-inputs.py" <<'DEVFLOWS_SCRIPT_EOF'
+          cat > "$RUNNER_TEMP/devflows/deploy-pages/validate-inputs.py" <<'DEVFLOWS_SCRIPT_EOF'
           from __future__ import annotations
 
           import os
@@ -374,7 +374,7 @@ jobs:
           PAGES_ARTIFACT_NAME: ${{ inputs.pages-artifact-name }}
           PAGES_TIMEOUT_MINUTES: ${{ inputs.pages-timeout-minutes }}
         shell: bash
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/deploy-pages/validate-pages-inputs.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/deploy-pages/validate-inputs.py"
       - name: Upload Pages artifact
         if: inputs.pages-artifact-enabled
         id: upload

@@ -46,7 +46,6 @@ def _validate_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "MICROMAMBA_ENVIRONMENT_FILE": "",
         "CONTAINER_IMAGE": "",
         "CONTAINER_LOGIN_ENABLED": "false",
-        "CONTAINER_PASSWORD_SET": "false",
         "PAGES_ARTIFACT_ENABLED": "false",
         "PAGES_ARTIFACT_NAME": "github-pages",
         "GITHUB_WORKSPACE": str(tmp_path),
@@ -182,16 +181,6 @@ def test_validate_accepts_valid_combinations(monkeypatch, tmp_path, overrides) -
             },
             "not a valid image reference",
         ),
-        (
-            {
-                "DOCS_ENVIRONMENT": "container",
-                "CONTAINER_IMAGE": "ghcr.io/org/d:1",
-                "CONTAINER_LOGIN_ENABLED": "true",
-                "CONTAINER_PASSWORD_SET": "false",
-                "PIP_INSTALL_TARGETS": "",
-            },
-            "container-login-enabled requires the container-password secret",
-        ),
     ],
 )
 def test_validate_rejects_bad_combinations(monkeypatch, tmp_path, overrides, message) -> None:
@@ -203,14 +192,16 @@ def test_validate_rejects_bad_combinations(monkeypatch, tmp_path, overrides, mes
     assert message in str(excinfo.value)
 
 
-def test_validate_container_login_ok_with_password(monkeypatch, tmp_path) -> None:
+def test_validate_container_login_ignores_password(monkeypatch, tmp_path) -> None:
+    # The container-login-enabled/container-password consistency check now lives in
+    # a workflow step (it depends on the secret), so validate-inputs.py accepts a
+    # login-enabled container call and no longer reads CONTAINER_PASSWORD_SET.
     _run_validate(
         monkeypatch,
         tmp_path,
         DOCS_ENVIRONMENT="container",
         CONTAINER_IMAGE="ghcr.io/org/docs:1",
         CONTAINER_LOGIN_ENABLED="true",
-        CONTAINER_PASSWORD_SET="true",
         PIP_INSTALL_TARGETS="",
     )
 

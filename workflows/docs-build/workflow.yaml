@@ -343,8 +343,6 @@ jobs:
           PIXI_FROZEN: ${{ inputs.pixi-frozen }}
           MICROMAMBA_ENVIRONMENT_FILE: ${{ inputs.micromamba-environment-file }}
           CONTAINER_IMAGE: ${{ inputs.container-image }}
-          CONTAINER_LOGIN_ENABLED: ${{ inputs.container-login-enabled }}
-          CONTAINER_PASSWORD_SET: ${{ secrets.container-password != '' }}
           PAGES_ARTIFACT_ENABLED: ${{ inputs.pages-artifact-enabled }}
           PAGES_ARTIFACT_NAME: ${{ inputs.pages-artifact-name }}
         shell: bash
@@ -389,6 +387,20 @@ jobs:
           cache-environment: ${{ inputs.micromamba-cache-enabled }}
           init-shell: bash
           micromamba-version: ${{ inputs.micromamba-version }}
+
+      - name: Require container-password when logging in
+        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+        shell: bash
+        env:
+          # Read the secret here (not in the validate job) so the validate step's
+          # env maps only inputs.* and stays reconstructable by the
+          # expect: validation-failure scenario harness.
+          CONTAINER_PASSWORD: ${{ secrets.container-password }}
+        run: |
+          if [ -z "${CONTAINER_PASSWORD}" ]; then
+            echo "::error::container-login-enabled requires the container-password secret; it is unset."
+            exit 1
+          fi
 
       - name: Log in to container registry
         if: inputs.docs-environment == 'container' && inputs.container-login-enabled

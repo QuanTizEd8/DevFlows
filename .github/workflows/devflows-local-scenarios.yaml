@@ -19,6 +19,54 @@ jobs:
             exit 1
           fi
           echo "Running under act."
+  deploy_pages_pages_path_missing_validate:
+    name: 'Deploy Pages: Packaging enabled without a pages-path fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/deploy-pages/scripts/validate-inputs.py
+          PAGES_PATH: ''
+          PAGES_ARTIFACT_ENABLED: 'true'
+          PAGES_DEPLOY_ENABLED: 'true'
+          PAGES_ARTIFACT_NAME: github-pages
+          PAGES_TIMEOUT_MINUTES: '10'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: pages-path is required when pages-artifact-enabled is true
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  deploy_pages_nothing_to_do_validate:
+    name: 'Deploy Pages: Neither packaging nor deploying fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/deploy-pages/scripts/validate-inputs.py
+          PAGES_PATH: ''
+          PAGES_ARTIFACT_ENABLED: 'false'
+          PAGES_DEPLOY_ENABLED: 'false'
+          PAGES_ARTIFACT_NAME: github-pages
+          PAGES_TIMEOUT_MINUTES: '10'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  deploy_pages_deploy_only_with_path_validate:
+    name: 'Deploy Pages: Deploy-only mode with a pages-path fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/deploy-pages/scripts/validate-inputs.py
+          PAGES_PATH: site
+          PAGES_ARTIFACT_ENABLED: 'false'
+          PAGES_DEPLOY_ENABLED: 'true'
+          PAGES_ARTIFACT_NAME: github-pages
+          PAGES_TIMEOUT_MINUTES: '10'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: pages-path must be empty when pages-artifact-enabled is false
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
   docs_build_sphinx_container_local_clean:
     name: 'Build Documentation: Sphinx build in a container image (local) cleanup'
     runs-on: ubuntu-latest
@@ -67,6 +115,66 @@ jobs:
           ASSERT_PATH: .devflows-test/docs-build/sphinx-container-local/site/index.html
           ASSERT_TEXT: DevFlows Docs Build Fixture
         run: python harness/scenarios/assert-file-contains.py
+  docs_build_linkcheck_mkdocs_invalid_validate:
+    name: 'Build Documentation: Link check requested with MkDocs fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/docs-build/scripts/validate-inputs.py
+          DOCS_TOOL: mkdocs
+          DOCS_ENVIRONMENT: uv
+          DOCS_BUILD_COMMAND: ''
+          DOCS_WORKING_DIRECTORY: .
+          DOCS_OUTPUT_DIRECTORY: _site
+          DOCS_WARNINGS_AS_ERRORS: 'false'
+          DOCS_LINKCHECK_ENABLED: 'true'
+          SPHINX_BUILDER: html
+          SPHINX_ARGUMENTS: ''
+          MKDOCS_ARGUMENTS: ''
+          UV_CACHE_MODE: auto
+          PIP_REQUIREMENTS_FILE: ''
+          PIP_INSTALL_TARGETS: ''
+          PIXI_LOCKED: 'true'
+          PIXI_FROZEN: 'false'
+          MICROMAMBA_ENVIRONMENT_FILE: ''
+          CONTAINER_IMAGE: ''
+          PAGES_ARTIFACT_ENABLED: 'false'
+          PAGES_ARTIFACT_NAME: github-pages
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: docs-linkcheck-enabled requires docs-tool sphinx
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  docs_build_container_missing_image_validate:
+    name: 'Build Documentation: Container mode without an image fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/docs-build/scripts/validate-inputs.py
+          DOCS_TOOL: sphinx
+          DOCS_ENVIRONMENT: container
+          DOCS_BUILD_COMMAND: ''
+          DOCS_WORKING_DIRECTORY: .
+          DOCS_OUTPUT_DIRECTORY: _site
+          DOCS_WARNINGS_AS_ERRORS: 'false'
+          DOCS_LINKCHECK_ENABLED: 'false'
+          SPHINX_BUILDER: html
+          SPHINX_ARGUMENTS: ''
+          MKDOCS_ARGUMENTS: ''
+          UV_CACHE_MODE: auto
+          PIP_REQUIREMENTS_FILE: ''
+          PIP_INSTALL_TARGETS: ''
+          PIXI_LOCKED: 'true'
+          PIXI_FROZEN: 'false'
+          MICROMAMBA_ENVIRONMENT_FILE: ''
+          CONTAINER_IMAGE: ''
+          PAGES_ARTIFACT_ENABLED: 'false'
+          PAGES_ARTIFACT_NAME: github-pages
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: container mode requires container-image
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
   pandoc_markdown_html_local_clean:
     name: 'Pandoc: Markdown to HTML without artifact upload cleanup'
     runs-on: ubuntu-latest
@@ -156,6 +264,126 @@ jobs:
           ASSERT_PATH: tests/scenarios/pandoc/working-directory/output.html
           ASSERT_TEXT: Pandoc Working Directory
         run: python harness/scenarios/assert-file-contains.py
+  python_build_nothing_to_build_validate:
+    name: 'Python Build: All build flavors disabled fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-build/scripts/validate-inputs.py
+          BUILD_TOOL: uv
+          BUILD_SDIST_ENABLED: 'false'
+          BUILD_WHEEL_ENABLED: 'false'
+          CIBW_ENABLED: 'false'
+          CIBW_MATRIX: '[]'
+          CONDA_ENABLED: 'false'
+          CONDA_RECIPE_PATH: ''
+          CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
+          DIST_ARTIFACT_PREFIX: python-build
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to build
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_build_cibw_empty_matrix_validate:
+    name: 'Python Build: cibw enabled with an empty matrix fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-build/scripts/validate-inputs.py
+          BUILD_TOOL: uv
+          BUILD_SDIST_ENABLED: 'true'
+          BUILD_WHEEL_ENABLED: 'true'
+          CIBW_ENABLED: 'true'
+          CIBW_MATRIX: '[]'
+          CONDA_ENABLED: 'false'
+          CONDA_RECIPE_PATH: ''
+          CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
+          DIST_ARTIFACT_PREFIX: python-build
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cibw-enabled is true but cibw-matrix is empty
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_build_conda_missing_recipe_validate:
+    name: 'Python Build: conda enabled without a recipe path fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-build/scripts/validate-inputs.py
+          BUILD_TOOL: uv
+          BUILD_SDIST_ENABLED: 'true'
+          BUILD_WHEEL_ENABLED: 'true'
+          CIBW_ENABLED: 'false'
+          CIBW_MATRIX: '[]'
+          CONDA_ENABLED: 'true'
+          CONDA_RECIPE_PATH: ''
+          CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
+          DIST_ARTIFACT_PREFIX: python-build
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: conda-recipe-path is empty
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_build_unknown_build_tool_validate:
+    name: 'Python Build: Unknown build tool fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-build/scripts/validate-inputs.py
+          BUILD_TOOL: cargo
+          BUILD_SDIST_ENABLED: 'true'
+          BUILD_WHEEL_ENABLED: 'true'
+          CIBW_ENABLED: 'false'
+          CIBW_MATRIX: '[]'
+          CONDA_ENABLED: 'false'
+          CONDA_RECIPE_PATH: ''
+          CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
+          DIST_ARTIFACT_PREFIX: python-build
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: build-tool must be 'uv' or 'python-build'
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_build_malformed_matrix_json_validate:
+    name: 'Python Build: Malformed cibw-matrix JSON fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-build/scripts/validate-inputs.py
+          BUILD_TOOL: uv
+          BUILD_SDIST_ENABLED: 'true'
+          BUILD_WHEEL_ENABLED: 'true'
+          CIBW_ENABLED: 'false'
+          CIBW_MATRIX: '{not json'
+          CONDA_ENABLED: 'false'
+          CONDA_RECIPE_PATH: ''
+          CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
+          DIST_ARTIFACT_PREFIX: python-build
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cibw-matrix is not valid JSON
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_build_unsafe_artifact_prefix_validate:
+    name: 'Python Build: Unsafe dist-artifact-prefix fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-build/scripts/validate-inputs.py
+          BUILD_TOOL: uv
+          BUILD_SDIST_ENABLED: 'true'
+          BUILD_WHEEL_ENABLED: 'true'
+          CIBW_ENABLED: 'false'
+          CIBW_MATRIX: '[]'
+          CONDA_ENABLED: 'false'
+          CONDA_RECIPE_PATH: ''
+          CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
+          DIST_ARTIFACT_PREFIX: has space
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: dist-artifact-prefix must be a non-empty artifact-name-safe string
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
   python_lint_clean_local_clean:
     name: 'Python Lint: Clean project passes locally cleanup'
     runs-on: ubuntu-latest
@@ -200,6 +428,90 @@ jobs:
           ASSERT_PATH: .devflows-test/python-lint/clean-local/results.json
           ASSERT_TEXT: '"violations": 0'
         run: python harness/scenarios/assert-file-contains.py
+  python_lint_invalid_typecheck_tool_validate:
+    name: 'Python Lint: Unknown typecheck tool fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-lint/scripts/validate-inputs.py
+          LINT_PATHS: .
+          LINT_WORKING_DIRECTORY: .
+          LINT_REPORT_DIRECTORY: ''
+          LINT_UV_CACHE_MODE: auto
+          LINT_UV_SYNC_ENABLED: 'false'
+          LINT_UV_SYNC_ARGUMENTS: ''
+          LINT_RUFF_CHECK_ENABLED: 'true'
+          LINT_RUFF_CHECK_ARGUMENTS: ''
+          LINT_RUFF_FORMAT_ENABLED: 'true'
+          LINT_RUFF_FORMAT_ARGUMENTS: ''
+          LINT_RUFF_VERSION: ''
+          LINT_TYPECHECK_ENABLED: 'true'
+          LINT_TYPECHECK_TOOL: pytype
+          LINT_TYPECHECK_VERSION: ''
+          LINT_TYPECHECK_ARGUMENTS: ''
+          LINT_TYPECHECK_PYTHON_VERSIONS: '[]'
+          LINT_TYPECHECK_WITH: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: typecheck-tool must be one of
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_lint_no_lint_tools_validate:
+    name: 'Python Lint: All lint tools disabled fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-lint/scripts/validate-inputs.py
+          LINT_PATHS: .
+          LINT_WORKING_DIRECTORY: .
+          LINT_REPORT_DIRECTORY: ''
+          LINT_UV_CACHE_MODE: auto
+          LINT_UV_SYNC_ENABLED: 'false'
+          LINT_UV_SYNC_ARGUMENTS: ''
+          LINT_RUFF_CHECK_ENABLED: 'false'
+          LINT_RUFF_CHECK_ARGUMENTS: ''
+          LINT_RUFF_FORMAT_ENABLED: 'false'
+          LINT_RUFF_FORMAT_ARGUMENTS: ''
+          LINT_RUFF_VERSION: ''
+          LINT_TYPECHECK_ENABLED: 'false'
+          LINT_TYPECHECK_TOOL: mypy
+          LINT_TYPECHECK_VERSION: ''
+          LINT_TYPECHECK_ARGUMENTS: ''
+          LINT_TYPECHECK_PYTHON_VERSIONS: '[]'
+          LINT_TYPECHECK_WITH: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: At least one of ruff-check-enabled
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  python_lint_invalid_uv_cache_mode_validate:
+    name: 'Python Lint: Invalid uv-cache-mode fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-lint/scripts/validate-inputs.py
+          LINT_PATHS: .
+          LINT_WORKING_DIRECTORY: .
+          LINT_REPORT_DIRECTORY: ''
+          LINT_UV_CACHE_MODE: sometimes
+          LINT_UV_SYNC_ENABLED: 'false'
+          LINT_UV_SYNC_ARGUMENTS: ''
+          LINT_RUFF_CHECK_ENABLED: 'true'
+          LINT_RUFF_CHECK_ARGUMENTS: ''
+          LINT_RUFF_FORMAT_ENABLED: 'true'
+          LINT_RUFF_FORMAT_ARGUMENTS: ''
+          LINT_RUFF_VERSION: ''
+          LINT_TYPECHECK_ENABLED: 'true'
+          LINT_TYPECHECK_TOOL: mypy
+          LINT_TYPECHECK_VERSION: ''
+          LINT_TYPECHECK_ARGUMENTS: ''
+          LINT_TYPECHECK_PYTHON_VERSIONS: '[]'
+          LINT_TYPECHECK_WITH: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: uv-cache-mode must be one of
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
   python_test_source_uv_local_clean:
     name: 'Python Test: Install from source with uv and run pytest cleanup'
     runs-on: ubuntu-latest
@@ -247,3 +559,22 @@ jobs:
           ASSERT_PATH: .devflows-test/python-test/source-uv/report.xml
           ASSERT_TEXT: <testsuite
         run: python harness/scenarios/assert-file-contains.py
+  python_test_invalid_matrix_json_validate:
+    name: 'Python Test: Non-JSON test-matrix fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/python-test/scripts/validate-inputs.py
+          TEST_MATRIX: '{not json'
+          TEST_ENV_MANAGER: uv
+          TEST_ENVIRONMENT_FILE: ''
+          TEST_INSTALL_SOURCE: source
+          TEST_INSTALL_PREFER: wheel
+          TEST_DEPENDENCY_GROUPS: ''
+          REPORT_ARTIFACT_ENABLED: 'false'
+          REPORT_PATH: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: test-matrix must be valid JSON
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act

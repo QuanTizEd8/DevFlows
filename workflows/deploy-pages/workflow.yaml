@@ -117,7 +117,7 @@ jobs:
           PAGES_ARTIFACT_NAME: ${{ inputs.pages-artifact-name }}
           PAGES_TIMEOUT_MINUTES: ${{ inputs.pages-timeout-minutes }}
         shell: bash
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/deploy-pages/validate-pages-inputs.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/deploy-pages/validate-inputs.py"
       - name: Upload Pages artifact
         if: inputs.pages-artifact-enabled
         id: upload

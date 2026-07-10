@@ -218,7 +218,7 @@ jobs:
           TEST_DEPENDENCY_GROUPS: ${{ inputs.test-dependency-groups }}
           REPORT_ARTIFACT_ENABLED: ${{ inputs.report-artifact-enabled }}
           REPORT_PATH: ${{ inputs.report-path }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-test/validate-matrix.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-test/validate-inputs.py"
 
   test:
     name: ${{ matrix.name }}

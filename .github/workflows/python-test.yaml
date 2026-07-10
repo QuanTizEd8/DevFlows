@@ -301,7 +301,7 @@ jobs:
         run: |-
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/devflows/python-test"
-          cat > "$RUNNER_TEMP/devflows/python-test/validate-matrix.py" <<'DEVFLOWS_SCRIPT_EOF'
+          cat > "$RUNNER_TEMP/devflows/python-test/validate-inputs.py" <<'DEVFLOWS_SCRIPT_EOF'
           from __future__ import annotations
 
           import json
@@ -534,7 +534,7 @@ jobs:
           TEST_DEPENDENCY_GROUPS: ${{ inputs.test-dependency-groups }}
           REPORT_ARTIFACT_ENABLED: ${{ inputs.report-artifact-enabled }}
           REPORT_PATH: ${{ inputs.report-path }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-test/validate-matrix.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/python-test/validate-inputs.py"
   test:
     name: ${{ matrix.name }}
     needs: validate

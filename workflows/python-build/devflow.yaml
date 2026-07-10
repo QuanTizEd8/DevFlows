@@ -174,12 +174,66 @@ tests:
         - type: workflow-output-equals
           name: conda-artifact-name
           value: python-build-conda-conda-channel
-    # NOTE: expect-failure scenarios (nothing-to-build, empty cibw-matrix, missing
-    # conda recipe, unknown build-tool, unsafe prefix) are intentionally NOT
-    # declared here. The phase-1 expect-failure harness emits `continue-on-error:
-    # true` on the reusable-workflow call job, which GitHub rejects on `uses:` jobs
-    # (community discussions 77915 / 159265) and actionlint flags as a syntax
-    # error, so a generated expect-failure workflow will not start. Reported to the
-    # lead as a platform bug. Until the harness carries the failure differently,
-    # every validate-script failure path is covered exhaustively by
-    # tests/test_python_build.py (the documented unit-test fallback).
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. Each pins a stable substring of the rejection it targets;
+    # the exhaustive script coverage still lives in tests/test_python_build.py.
+    - id: nothing-to-build
+      name: All build flavors disabled fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "Nothing to build"
+      inputs:
+        build-sdist-enabled: false
+        build-wheel-enabled: false
+        cibw-enabled: false
+        conda-enabled: false
+    - id: cibw-empty-matrix
+      name: cibw enabled with an empty matrix fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cibw-enabled is true but cibw-matrix is empty"
+      inputs:
+        cibw-enabled: true
+        cibw-matrix: "[]"
+    - id: conda-missing-recipe
+      name: conda enabled without a recipe path fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "conda-recipe-path is empty"
+      inputs:
+        conda-enabled: true
+        conda-recipe-path: ""
+    - id: unknown-build-tool
+      name: Unknown build tool fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "build-tool must be 'uv' or 'python-build'"
+      inputs:
+        build-tool: cargo
+    - id: malformed-matrix-json
+      name: Malformed cibw-matrix JSON fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cibw-matrix is not valid JSON"
+      inputs:
+        cibw-matrix: "{not json"
+    - id: unsafe-artifact-prefix
+      name: Unsafe dist-artifact-prefix fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "dist-artifact-prefix must be a non-empty artifact-name-safe string"
+      inputs:
+        dist-artifact-prefix: "has space"

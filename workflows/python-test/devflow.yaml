@@ -203,10 +203,18 @@ tests:
         - type: file-contains
           path: report.xml
           text: "<testsuite"
-      # Failure-path scenarios (invalid test-matrix JSON; artifact mode with an
-      # empty test-dist-path) are covered by unit tests of validate-matrix.py and
-      # install-package.py in tests/test_python_test.py. Hosted expect:failure
-      # scenarios are deferred: the shared scenario harness renders a failing
-      # reusable-workflow call with job-level continue-on-error, which actionlint
-      # (and GitHub's reusable-call job schema) reject. Re-add them once the
-      # harness emits an actionlint-valid negative-path shape.
+    # invalid-matrix-json exercises validate-inputs.py directly (no reusable call)
+    # via the expect: validation-failure harness, so it runs under act and hosted
+    # CI. The other intended negative path -- artifact install mode with no dists
+    # -- is NOT expressible here: it fails in the install-package step, not the
+    # validate job, so validate-inputs.py legitimately accepts those inputs. It
+    # stays covered by unit tests of install-package.py in tests/test_python_test.py.
+    - id: invalid-matrix-json
+      name: Non-JSON test-matrix fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "test-matrix must be valid JSON"
+      inputs:
+        test-matrix: "{not json"

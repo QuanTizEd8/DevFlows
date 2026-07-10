@@ -169,3 +169,30 @@ tests:
         - type: workflow-output-equals
           name: pages-artifact-name
           value: docs-build-pages-chain
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. They rely only on the default docs-working-directory
+    # ('.'), which resolves inside the checked-out workspace; each pins a stable
+    # substring of the rejection it targets.
+    - id: linkcheck-mkdocs-invalid
+      name: Link check requested with MkDocs fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "docs-linkcheck-enabled requires docs-tool sphinx"
+      inputs:
+        docs-tool: mkdocs
+        docs-environment: uv
+        docs-linkcheck-enabled: true
+    - id: container-missing-image
+      name: Container mode without an image fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "container mode requires container-image"
+      inputs:
+        docs-tool: sphinx
+        docs-environment: container
+        container-image: ""

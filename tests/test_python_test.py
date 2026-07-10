@@ -51,7 +51,7 @@ def _load(name: str) -> ModuleType:
     return module
 
 
-VALIDATE = _load("validate-matrix")
+VALIDATE = _load("validate-inputs")
 INSTALL = _load("install-package")
 RUNTESTS = _load("run-tests")
 
@@ -71,7 +71,7 @@ def _normalize(matrix: str, **overrides):
     return VALIDATE.normalize(**kwargs)
 
 
-# --------------------------------------------------------------- validate-matrix
+# --------------------------------------------------------------- validate-inputs
 
 
 def test_uv_leg_normalizes_with_derived_name() -> None:

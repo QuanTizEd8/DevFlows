@@ -134,10 +134,10 @@ def main() -> int:
                 f"container-image is not a valid image reference: {image!r}. "
                 "Expected [registry/]name[:tag][@digest]."
             )
-        if _bool("CONTAINER_LOGIN_ENABLED") and not _bool("CONTAINER_PASSWORD_SET"):
-            raise SystemExit(
-                "container-login-enabled requires the container-password secret; it is unset."
-            )
+        # NOTE: the container-login-enabled/container-password consistency check
+        # lives in a dedicated workflow step (see workflow.yaml) rather than here,
+        # because it depends on the secret. Keeping this validate step's env
+        # inputs-only lets the expect: validation-failure harness reconstruct it.
 
     _emit_outputs(
         **{

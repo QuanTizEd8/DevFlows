@@ -626,10 +626,10 @@ jobs:
                           f"container-image is not a valid image reference: {image!r}. "
                           "Expected [registry/]name[:tag][@digest]."
                       )
-                  if _bool("CONTAINER_LOGIN_ENABLED") and not _bool("CONTAINER_PASSWORD_SET"):
-                      raise SystemExit(
-                          "container-login-enabled requires the container-password secret; it is unset."
-                      )
+                  # NOTE: the container-login-enabled/container-password consistency check
+                  # lives in a dedicated workflow step (see workflow.yaml) rather than here,
+                  # because it depends on the secret. Keeping this validate step's env
+                  # inputs-only lets the expect: validation-failure harness reconstruct it.
 
               _emit_outputs(
                   **{
@@ -940,8 +940,6 @@ jobs:
           PIXI_FROZEN: ${{ inputs.pixi-frozen }}
           MICROMAMBA_ENVIRONMENT_FILE: ${{ inputs.micromamba-environment-file }}
           CONTAINER_IMAGE: ${{ inputs.container-image }}
-          CONTAINER_LOGIN_ENABLED: ${{ inputs.container-login-enabled }}
-          CONTAINER_PASSWORD_SET: ${{ secrets.container-password != '' }}
           PAGES_ARTIFACT_ENABLED: ${{ inputs.pages-artifact-enabled }}
           PAGES_ARTIFACT_NAME: ${{ inputs.pages-artifact-name }}
         shell: bash
@@ -982,6 +980,16 @@ jobs:
           cache-environment: ${{ inputs.micromamba-cache-enabled }}
           init-shell: bash
           micromamba-version: ${{ inputs.micromamba-version }}
+      - name: Require container-password when logging in
+        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+        shell: bash
+        env:
+          CONTAINER_PASSWORD: ${{ secrets.container-password }}
+        run: |
+          if [ -z "${CONTAINER_PASSWORD}" ]; then
+            echo "::error::container-login-enabled requires the container-password secret; it is unset."
+            exit 1
+          fi
       - name: Log in to container registry
         if: inputs.docs-environment == 'container' && inputs.container-login-enabled
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0

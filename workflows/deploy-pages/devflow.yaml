@@ -149,11 +149,39 @@ tests:
       assertions:
         - type: file-exists
           path: artifact.tar
-    # Failure-path coverage (missing pages-path, conflicting mode inputs, the
-    # no-op call, and a nonexistent pages-path) is asserted by unit tests of
-    # validate-pages-inputs.py in tests/test_deploy_pages.py. The design's four
-    # expect: failure hosted scenarios are intentionally NOT generated yet: the
-    # scenario harness emits continue-on-error: true on the reusable-workflow call
-    # job, which GitHub rejects on a uses: job (actionlint syntax-check), so every
-    # expect: failure catalog scenario currently fails lint. Reported to the lead
-    # to fix in src/devflows/scenarios.py; re-add these four scenarios once fixed.
+    # Failure-path scenarios exercise validate-inputs.py directly (no reusable
+    # call) through the expect: validation-failure harness, so they run under both
+    # act and hosted CI. They cover the mode matrix's meaningful rejections and
+    # never touch the filesystem (each fails before pages-path is resolved).
+    # Exhaustive script coverage still lives in tests/test_deploy_pages.py.
+    - id: pages-path-missing
+      name: Packaging enabled without a pages-path fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "pages-path is required when pages-artifact-enabled is true"
+      inputs:
+        pages-artifact-enabled: true
+        pages-path: ""
+    - id: nothing-to-do
+      name: Neither packaging nor deploying fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "Nothing to do"
+      inputs:
+        pages-artifact-enabled: false
+        pages-deploy-enabled: false
+    - id: deploy-only-with-path
+      name: Deploy-only mode with a pages-path fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "pages-path must be empty when pages-artifact-enabled is false"
+      inputs:
+        pages-artifact-enabled: false
+        pages-deploy-enabled: true
+        pages-path: site
