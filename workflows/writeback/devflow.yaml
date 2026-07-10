@@ -14,6 +14,9 @@ docs:
     - commit
     - artifacts
     - generated-files
+io:
+  job: writeback
+  runtime: true
 notes:
   - Writeback consumes a manifest-based payload artifact rather than a raw tar
     archive.

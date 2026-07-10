@@ -88,29 +88,9 @@ jobs:
           name: ${{ inputs.writeback-artifact-name }}
           path: ${{ inputs.writeback-artifact-path }}
 
-      - name: Resolve DevFlows runtime
-        id: devflows-runtime
-        shell: bash
-        env:
-          DEVFLOWS_WORKFLOW_REF: ${{ github.workflow_ref }}
-        run:
-          if [ -z "${DEVFLOWS_WORKFLOW_REF}" ]; then echo
-          "script-root=.github/workflows"; else echo
-          "repository=${DEVFLOWS_WORKFLOW_REF%%/.github/workflows/*}"; echo
-          "ref=${DEVFLOWS_WORKFLOW_REF##*@}"; echo
-          "script-root=.devflows-runtime/.github/workflows"; fi >>
-          "$GITHUB_OUTPUT"
-
-      - name: Checkout DevFlows runtime
-        if: steps.devflows-runtime.outputs.repository != ''
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: ${{ steps.devflows-runtime.outputs.repository }}
-          ref: ${{ steps.devflows-runtime.outputs.ref }}
-          token: ${{ github.token }}
-          path: .devflows-runtime
-          persist-credentials: false
-
+      # The "Materialize DevFlows runtime scripts" step (id: devflows-runtime),
+      # which writes apply-payload.py to $RUNNER_TEMP/devflows and exports
+      # script-root, is injected by the generator via io.runtime in devflow.yaml.
       - name: Apply writeback payload
         env:
           COMMIT_AUTHOR_EMAIL: ${{ inputs.commit-author-email }}
