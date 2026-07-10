@@ -141,7 +141,7 @@ on:
         default: true
       report-artifact-enabled:
         description:
-          Whether each leg uploads report-path as artifact <report-artifact-name>-<leg-name>
+          Whether each leg uploads report-path as artifact <report-artifact-name>--leg-<leg-name>
           (even when tests fail, unless cancelled). Enabling this with an empty report-path
           fails validation. Include coverage files under report-path to publish them to a
           caller-side Codecov job (see notes).
@@ -158,10 +158,10 @@ on:
         default: ""
       report-artifact-name:
         description:
-          Base report artifact name. Per-leg artifacts are suffixed with the leg name; the
-          merge job combines them under exactly this name with one subdirectory per leg.
-          Callers invoking this workflow more than once in the same run must pass distinct
-          names.
+          Base report artifact name. Per-leg artifacts are named <report-artifact-name>--leg-<leg>
+          (the '--leg-' delimiter keeps the merge glob collision-proof); the merge job combines
+          them under exactly this name with one subdirectory per leg. Callers invoking this
+          workflow more than once in the same run must pass distinct names.
         type: string
         required: false
         default: python-test-report
@@ -216,6 +216,7 @@ jobs:
           TEST_INSTALL_SOURCE: ${{ inputs.test-install-source }}
           TEST_INSTALL_PREFER: ${{ inputs.test-install-prefer }}
           TEST_DEPENDENCY_GROUPS: ${{ inputs.test-dependency-groups }}
+          UV_CACHE_MODE: ${{ inputs.uv-cache-mode }}
           REPORT_ARTIFACT_ENABLED: ${{ inputs.report-artifact-enabled }}
           REPORT_PATH: ${{ inputs.report-path }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/python-test/validate-inputs.py"
@@ -275,7 +276,10 @@ jobs:
         if: ${{ !cancelled() && inputs.report-artifact-enabled }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.report-artifact-name }}-${{ matrix.name }}
+          # '--leg-' is a collision-proof delimiter: the merge pattern below is
+          # '<name>--leg-*', so a sibling invocation whose report-artifact-name is a
+          # hyphen-prefix of this one cannot match (and be deleted) by this merge.
+          name: ${{ inputs.report-artifact-name }}--leg-${{ matrix.name }}
           path: ${{ inputs.report-path }}
           if-no-files-found: error
           retention-days: ${{ inputs.report-artifact-retention-days }}
@@ -284,7 +288,10 @@ jobs:
   merge-reports:
     name: Merge test reports
     needs: test
-    if: ${{ !cancelled() && inputs.report-artifact-enabled && inputs.report-merge-enabled }}
+    # needs.test.result != 'skipped' guards the case where validate fails and the
+    # test job is skipped (skipped != cancelled): without it, merge-reports would
+    # still run and upload-artifact/merge hard-fails when no per-leg artifacts exist.
+    if: ${{ !cancelled() && needs.test.result != 'skipped' && inputs.report-artifact-enabled && inputs.report-merge-enabled }}
     runs-on: ubuntu-latest
     outputs:
       report-artifact-name: ${{ inputs.report-artifact-name }}
@@ -293,7 +300,7 @@ jobs:
         uses: actions/upload-artifact/merge@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.report-artifact-name }}
-          pattern: ${{ inputs.report-artifact-name }}-*
+          pattern: ${{ inputs.report-artifact-name }}--leg-*
           separate-directories: true
           delete-merged: true
           include-hidden-files: ${{ inputs.report-artifact-include-hidden-files }}

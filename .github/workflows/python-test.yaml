@@ -93,7 +93,7 @@ name: '[Reusable]: Python Test'
         required: false
         default: true
       report-artifact-enabled:
-        description: Whether each leg uploads report-path as artifact <report-artifact-name>-<leg-name> (even when tests fail, unless cancelled). Enabling this with an empty report-path fails validation. Include coverage files under report-path to publish them to a caller-side Codecov job (see notes).
+        description: Whether each leg uploads report-path as artifact <report-artifact-name>--leg-<leg-name> (even when tests fail, unless cancelled). Enabling this with an empty report-path fails validation. Include coverage files under report-path to publish them to a caller-side Codecov job (see notes).
         type: boolean
         required: false
         default: false
@@ -103,7 +103,7 @@ name: '[Reusable]: Python Test'
         required: false
         default: ''
       report-artifact-name:
-        description: Base report artifact name. Per-leg artifacts are suffixed with the leg name; the merge job combines them under exactly this name with one subdirectory per leg. Callers invoking this workflow more than once in the same run must pass distinct names.
+        description: Base report artifact name. Per-leg artifacts are named <report-artifact-name>--leg-<leg> (the '--leg-' delimiter keeps the merge glob collision-proof); the merge job combines them under exactly this name with one subdirectory per leg. Callers invoking this workflow more than once in the same run must pass distinct names.
         type: string
         required: false
         default: python-test-report
@@ -321,6 +321,7 @@ jobs:
           ENV_MANAGERS = ("uv", "micromamba")
           INSTALL_SOURCES = ("source", "artifact")
           INSTALL_PREFERS = ("wheel", "sdist")
+          UV_CACHE_MODES = ("auto", "true", "false")
           ALLOWED_LEG_KEYS = frozenset(
               {"runner", "python-version", "name", "environment-file", "test-arguments"}
           )
@@ -467,11 +468,14 @@ jobs:
               install_source: str,
               install_prefer: str,
               dependency_groups: str,
+              uv_cache_mode: str,
               report_enabled: bool,
               report_path: str,
           ) -> list[dict[str, Any]]:
               if env_manager not in ENV_MANAGERS:
                   _fail(f"test-env-manager must be one of {list(ENV_MANAGERS)}; got {env_manager!r}.")
+              if uv_cache_mode not in UV_CACHE_MODES:
+                  _fail(f"uv-cache-mode must be one of {list(UV_CACHE_MODES)}; got {uv_cache_mode!r}.")
               if install_source not in INSTALL_SOURCES:
                   _fail(
                       f"test-install-source must be one of {list(INSTALL_SOURCES)}; got {install_source!r}."
@@ -504,6 +508,7 @@ jobs:
                   install_source=os.environ.get("TEST_INSTALL_SOURCE", "source"),
                   install_prefer=os.environ.get("TEST_INSTALL_PREFER", "wheel"),
                   dependency_groups=os.environ.get("TEST_DEPENDENCY_GROUPS", ""),
+                  uv_cache_mode=os.environ.get("UV_CACHE_MODE", "auto").strip() or "auto",
                   report_enabled=_as_bool(os.environ.get("REPORT_ARTIFACT_ENABLED", "false")),
                   report_path=os.environ.get("REPORT_PATH", ""),
               )
@@ -532,6 +537,7 @@ jobs:
           TEST_INSTALL_SOURCE: ${{ inputs.test-install-source }}
           TEST_INSTALL_PREFER: ${{ inputs.test-install-prefer }}
           TEST_DEPENDENCY_GROUPS: ${{ inputs.test-dependency-groups }}
+          UV_CACHE_MODE: ${{ inputs.uv-cache-mode }}
           REPORT_ARTIFACT_ENABLED: ${{ inputs.report-artifact-enabled }}
           REPORT_PATH: ${{ inputs.report-path }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/python-test/validate-inputs.py"
@@ -836,7 +842,7 @@ jobs:
         if: ${{ !cancelled() && inputs.report-artifact-enabled }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: ${{ inputs.report-artifact-name }}-${{ matrix.name }}
+          name: ${{ inputs.report-artifact-name }}--leg-${{ matrix.name }}
           path: ${{ inputs.report-path }}
           if-no-files-found: error
           retention-days: ${{ inputs.report-artifact-retention-days }}
@@ -844,7 +850,7 @@ jobs:
   merge-reports:
     name: Merge test reports
     needs: test
-    if: ${{ !cancelled() && inputs.report-artifact-enabled && inputs.report-merge-enabled }}
+    if: ${{ !cancelled() && needs.test.result != 'skipped' && inputs.report-artifact-enabled && inputs.report-merge-enabled }}
     runs-on: ubuntu-latest
     outputs:
       report-artifact-name: ${{ inputs.report-artifact-name }}
@@ -853,7 +859,7 @@ jobs:
         uses: actions/upload-artifact/merge@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ inputs.report-artifact-name }}
-          pattern: ${{ inputs.report-artifact-name }}-*
+          pattern: ${{ inputs.report-artifact-name }}--leg-*
           separate-directories: true
           delete-merged: true
           include-hidden-files: ${{ inputs.report-artifact-include-hidden-files }}

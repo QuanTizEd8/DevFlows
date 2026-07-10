@@ -65,11 +65,14 @@ notes:
     test-dependencies.
   - >-
     When report-artifact-enabled is true, each leg uploads report-path as
-    <report-artifact-name>-<leg-name> and the merge-reports job combines them into
-    one artifact named report-artifact-name (separate-directories, delete-merged).
-    The report-artifact-name output is the empty string when the feature is off or
-    the merge job did not run, so downstream consumers must guard on a non-empty
-    value. Invoking this workflow more than once in the same run requires distinct
+    <report-artifact-name>--leg-<leg-name> and the merge-reports job combines them
+    into one artifact named report-artifact-name (separate-directories,
+    delete-merged) with pattern <report-artifact-name>--leg-*. The '--leg-'
+    delimiter keeps the merge glob collision-proof when two same-run invocations use
+    distinct names where one is a hyphen-prefix of the other. The
+    report-artifact-name output is the empty string when the feature is off or the
+    merge job did not run, so downstream consumers must guard on a non-empty value.
+    Invoking this workflow more than once in the same run requires distinct
     report-artifact-name values, because upload-artifact names are immutable.
   - >-
     A nonzero test-command exit fails the leg, so pytest exit 5 (no tests
@@ -135,9 +138,9 @@ tests:
         path: .devflows-test-artifacts/python-test/reports
       assertions:
         - type: file-exists
-          path: python-test-scn-reports-leg-a/report.xml
+          path: python-test-scn-reports--leg-leg-a/report.xml
         - type: file-exists
-          path: python-test-scn-reports-leg-b/report.xml
+          path: python-test-scn-reports--leg-leg-b/report.xml
         - type: workflow-output-equals
           name: report-artifact-name
           value: python-test-scn-reports
@@ -168,7 +171,7 @@ tests:
         report-artifact-name: python-test-artifact-report
         report-path: .devflows-test/python-test/artifact/report.xml
       artifact:
-        name: python-test-artifact-report-artifact
+        name: python-test-artifact-report--leg-artifact
         path: .devflows-test-artifacts/python-test/artifact
       assertions:
         - type: file-exists
@@ -195,7 +198,7 @@ tests:
         report-artifact-name: python-test-micromamba-report
         report-path: .devflows-test/python-test/micromamba/report.xml
       artifact:
-        name: python-test-micromamba-report-mamba
+        name: python-test-micromamba-report--leg-mamba
         path: .devflows-test-artifacts/python-test/micromamba
       assertions:
         - type: file-exists
@@ -218,3 +221,13 @@ tests:
       failure-message-contains: "test-matrix must be valid JSON"
       inputs:
         test-matrix: "{not json"
+    - id: invalid-uv-cache-mode
+      name: Invalid uv-cache-mode fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "uv-cache-mode must be one of"
+      inputs:
+        test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "leg"}]'
+        uv-cache-mode: sometimes

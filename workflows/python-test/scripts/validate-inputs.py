@@ -17,6 +17,7 @@ from typing import Any, NoReturn
 ENV_MANAGERS = ("uv", "micromamba")
 INSTALL_SOURCES = ("source", "artifact")
 INSTALL_PREFERS = ("wheel", "sdist")
+UV_CACHE_MODES = ("auto", "true", "false")
 ALLOWED_LEG_KEYS = frozenset(
     {"runner", "python-version", "name", "environment-file", "test-arguments"}
 )
@@ -163,11 +164,14 @@ def normalize(
     install_source: str,
     install_prefer: str,
     dependency_groups: str,
+    uv_cache_mode: str,
     report_enabled: bool,
     report_path: str,
 ) -> list[dict[str, Any]]:
     if env_manager not in ENV_MANAGERS:
         _fail(f"test-env-manager must be one of {list(ENV_MANAGERS)}; got {env_manager!r}.")
+    if uv_cache_mode not in UV_CACHE_MODES:
+        _fail(f"uv-cache-mode must be one of {list(UV_CACHE_MODES)}; got {uv_cache_mode!r}.")
     if install_source not in INSTALL_SOURCES:
         _fail(
             f"test-install-source must be one of {list(INSTALL_SOURCES)}; got {install_source!r}."
@@ -200,6 +204,7 @@ def main() -> int:
         install_source=os.environ.get("TEST_INSTALL_SOURCE", "source"),
         install_prefer=os.environ.get("TEST_INSTALL_PREFER", "wheel"),
         dependency_groups=os.environ.get("TEST_DEPENDENCY_GROUPS", ""),
+        uv_cache_mode=os.environ.get("UV_CACHE_MODE", "auto").strip() or "auto",
         report_enabled=_as_bool(os.environ.get("REPORT_ARTIFACT_ENABLED", "false")),
         report_path=os.environ.get("REPORT_PATH", ""),
     )

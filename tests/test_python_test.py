@@ -64,6 +64,7 @@ def _normalize(matrix: str, **overrides):
         "install_source": "source",
         "install_prefer": "wheel",
         "dependency_groups": "",
+        "uv_cache_mode": "auto",
         "report_enabled": False,
         "report_path": "",
     }
@@ -151,6 +152,15 @@ def test_enum_inputs_are_validated(field, value, fragment) -> None:
     with pytest.raises(SystemExit) as excinfo:
         _normalize('[{"runner": "ubuntu-latest", "python-version": "3.13"}]', **{field: value})
     assert fragment in str(excinfo.value)
+
+
+def test_uv_cache_mode_is_validated() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        _normalize(
+            '[{"runner": "ubuntu-latest", "python-version": "3.13"}]',
+            uv_cache_mode="sometimes",
+        )
+    assert "uv-cache-mode must be one of" in str(excinfo.value)
 
 
 def test_report_enabled_requires_report_path() -> None:
@@ -484,3 +494,24 @@ def test_test_job_stays_read_only_without_id_token() -> None:
     assert permissions == {"contents": "read", "actions": "read"}
     assert "id-token" not in permissions
     assert workflow["permissions"] == {"contents": "read"}
+
+
+def test_merge_reports_skips_when_test_job_skipped() -> None:
+    # When validate fails, the test job is skipped (skipped != cancelled); the merge
+    # job must NOT run, or upload-artifact/merge hard-fails with no per-leg artifacts.
+    workflow = _published()
+    condition = workflow["jobs"]["merge-reports"]["if"]
+    assert "needs.test.result != 'skipped'" in condition
+    assert "!cancelled()" in condition
+
+
+def test_per_leg_and_merge_names_are_collision_proof() -> None:
+    # The '--leg-' delimiter plus the matching '<name>--leg-*' merge pattern keep a
+    # sibling invocation whose name is a hyphen-prefix of this one from being matched
+    # (and deleted) by delete-merged: true.
+    workflow = _published()
+    steps = workflow["jobs"]["test"]["steps"]
+    upload = next(step for step in steps if step.get("name") == "Upload test report")
+    assert upload["with"]["name"] == "${{ inputs.report-artifact-name }}--leg-${{ matrix.name }}"
+    merge = workflow["jobs"]["merge-reports"]["steps"][0]
+    assert merge["with"]["pattern"] == "${{ inputs.report-artifact-name }}--leg-*"
