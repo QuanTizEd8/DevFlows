@@ -213,13 +213,18 @@ name: '[Reusable]: Build Devcontainer'
         type: string
         required: false
         default: /tmp/devcontainer-userdata
+      devcontainer-cache-registry-enabled:
+        description: Whether to use the default registry build cache. When true (default) and no explicit cache-from/cache-to is given, the build reads and writes a registry cache tagged image-name:cache-key-prefix-platform_tag (for example image:devcontainer-linux-amd64), which needs packages write permission on the registry. Set to false, or set the cache-from/cache-to inputs to none, to opt out.
+        type: boolean
+        required: false
+        default: true
       devcontainer-cache-from:
-        description: Additional images to use for build caching.
+        description: Additional images to use for build caching. Empty derives the default registry cache tag when devcontainer-cache-registry-enabled is true; set to none to disable cache-from.
         type: string
         required: false
         default: ''
       devcontainer-cache-to:
-        description: Build cache destination.
+        description: Build cache destination. Empty derives the default registry cache tag; set to none to disable it. Cache-to is disabled automatically when devcontainer-push is never so build-only validation runs need no push rights.
         type: string
         required: false
         default: ''
@@ -428,8 +433,44 @@ permissions:
   contents: read
   packages: write
 jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve DevFlows runtime
+        id: devflows-runtime
+        shell: bash
+        env:
+          DEVFLOWS_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |-
+          if [ -z "${DEVFLOWS_WORKFLOW_REF}" ]; then
+            echo "script-root=.github/workflows"
+          else
+            echo "repository=${DEVFLOWS_WORKFLOW_REF%%/.github/workflows/*}"
+            echo "ref=${DEVFLOWS_WORKFLOW_REF##*@}"
+            echo "script-root=.devflows-runtime/.github/workflows"
+          fi >> "$GITHUB_OUTPUT"
+      - name: Checkout DevFlows runtime
+        if: steps.devflows-runtime.outputs.repository != ''
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          repository: ${{ steps.devflows-runtime.outputs.repository }}
+          ref: ${{ steps.devflows-runtime.outputs.ref }}
+          token: ${{ github.token }}
+          path: .devflows-runtime
+          persist-credentials: false
+      - name: Validate inputs
+        shell: bash
+        env:
+          BUILD_MATRIX: ${{ inputs.build-matrix }}
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DOCKER_LOGIN_ENABLED: ${{ inputs.docker-login-enabled }}
+          DOCKER_PASSWORD_SET: ${{ secrets.docker-password != '' }}
+          DOCKER_REGISTRY: ${{ inputs.docker-registry }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/validate-inputs.py"
   build-devcontainer:
     name: Build (${{ matrix.platform }})
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -514,7 +555,9 @@ jobs:
           CACHE_PATH: ${{ inputs.cache-path }}
           CACHE_RESTORE_KEYS: ${{ inputs.cache-restore-keys }}
           DEVCONTAINER_CACHE_FROM: ${{ inputs.devcontainer-cache-from }}
+          DEVCONTAINER_CACHE_REGISTRY_ENABLED: ${{ inputs.devcontainer-cache-registry-enabled }}
           DEVCONTAINER_CACHE_TO: ${{ inputs.devcontainer-cache-to }}
+          DEVCONTAINER_PUSH: ${{ inputs.devcontainer-push }}
           DEVCONTAINER_USER_DATA_FOLDER: ${{ inputs.devcontainer-user-data-folder }}
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           IMAGE_NAME: ${{ inputs.image-name }}
@@ -526,7 +569,7 @@ jobs:
         with:
           registry: ${{ inputs.docker-registry }}
           username: ${{ inputs.docker-username }}
-          password: ${{ secrets.docker-password || github.token }}
+          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token) || '' }}
           ecr: ${{ inputs.docker-ecr }}
           scope: ${{ inputs.docker-scope }}
           logout: ${{ inputs.docker-logout }}
@@ -574,6 +617,26 @@ jobs:
           cacheFrom: ${{ steps.build-settings.outputs.cache-from }}
           cacheTo: ${{ steps.build-settings.outputs.cache-to }}
           noCache: ${{ inputs.devcontainer-no-cache }}
+      - name: Capture image digest
+        if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DIGEST_DIR: ${{ runner.temp }}/devflows-digests
+          IMAGE_NAME: ${{ inputs.image-name }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
+      - name: Upload platform digest
+        if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: devflows-devcontainer-digest-${{ inputs.image-tag }}-${{ matrix.platform_tag }}
+          path: ${{ runner.temp }}/devflows-digests/${{ matrix.platform_tag }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
   merge-devcontainer:
     name: Merge multi-arch manifest
     needs: build-devcontainer
@@ -611,7 +674,7 @@ jobs:
         with:
           registry: ${{ inputs.docker-registry }}
           username: ${{ inputs.docker-username }}
-          password: ${{ secrets.docker-password || github.token }}
+          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token) || '' }}
           ecr: ${{ inputs.docker-ecr }}
           scope: ${{ inputs.docker-scope }}
           logout: ${{ inputs.docker-logout }}
@@ -633,12 +696,19 @@ jobs:
           keep-state: ${{ inputs.buildx-keep-state }}
           cache-binary: ${{ inputs.buildx-cache-binary }}
           cleanup: ${{ inputs.buildx-cleanup }}
+      - name: Download platform digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: devflows-devcontainer-digest-${{ inputs.image-tag }}-*
+          path: ${{ runner.temp }}/devflows-digests
+          merge-multiple: true
       - name: Merge manifest
         id: merge
         shell: bash
         env:
           BUILD_MATRIX: ${{ inputs.build-matrix }}
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DIGEST_DIR: ${{ runner.temp }}/devflows-digests
           IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_SHA_TAG_ENABLED: ${{ inputs.image-sha-tag-enabled }}
           IMAGE_SHA_TAG_PREFIX: ${{ inputs.image-sha-tag-prefix }}
