@@ -36,6 +36,11 @@ class ActionPin:
 # this registry so the SHAs are defined once. Dependency-update tooling can target
 # this table, and generated YAML carries the version as a trailing comment.
 ACTION_PINS: dict[str, ActionPin] = {
+    "attest-build-provenance": ActionPin(
+        "actions/attest-build-provenance",
+        "0f67c3f4856b2e3261c31976d6725780e5e4c373",
+        "v4.1.1",
+    ),
     "checkout": ActionPin(
         "actions/checkout",
         "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",

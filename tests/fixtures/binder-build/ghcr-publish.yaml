@@ -1,0 +1,35 @@
+name: Build and publish a Binder image to GHCR
+
+on:
+  push:
+    branches:
+      - main
+
+# binder-build isolates every credentialed/irreversible grant on its push-image job.
+# GitHub validates the nested-permission superset at startup, so the calling job must
+# grant the union of every job's permissions even though the write scopes are only
+# exercised by the push job (and never when publish-dry-run-enabled is true).
+permissions: {}
+
+jobs:
+  binder:
+    name: Build and push the Binder image
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
+    # Replace binder-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/binder-build.yaml@binder-build/v0.1.0
+    # docker-password defaults to github.token for ghcr.io; store an explicit token as
+    # an environment secret on the push environment for any other registry.
+    secrets: inherit
+    with:
+      image-name: ghcr.io/${{ github.repository }}-binder
+      image-tags: |
+        latest
+        ${{ github.ref_name }}
+      image-sha-tag-enabled: true
+      push-environment-name: binder-release
+      binder-cache-warm-enabled: true

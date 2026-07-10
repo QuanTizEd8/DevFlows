@@ -1,0 +1,3 @@
+# Minimal repo2docker source for the binder-build dry-run scenario.
+# An empty (comment-only) requirements.txt selects repo2docker's Python buildpack,
+# which produces a real image whose config digest the build-only proof records.
