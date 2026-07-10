@@ -12,7 +12,7 @@ it independently. A consuming repository calls a workflow as a job:
 ```yaml
 jobs:
   convert-docs:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -22,8 +22,8 @@ jobs:
       artifact-upload-path: site/index.html
 ```
 
-Replace `owner/devflows` with the actual repository owner/name for the DevFlows
-repository you use.
+`QuanTizEd8/DevFlows` is the canonical repository. Substitute your own fork's
+owner/name if you consume DevFlows from a fork.
 
 ### The Short Version
 
@@ -31,7 +31,7 @@ repository you use.
 2. Read its generated reference page for inputs, secrets, outputs, permissions,
    examples, and test scenarios.
 3. Call the workflow with a versioned reference:
-   `owner/devflows/.github/workflows/<workflow-id>.yaml@<workflow-id>/v1`.
+   `QuanTizEd8/DevFlows/.github/workflows/<workflow-id>.yaml@<workflow-id>/v1`.
 4. Prefer pinned input values, especially Docker image tags and release tags.
 5. Give the caller workflow only the permissions and secrets it needs.
 6. Use the standard IO channels when available: checkout for source input,
@@ -47,13 +47,13 @@ references look like this:
 
 ```yaml
 # Stable convenience reference for compatible v1 updates.
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
 
 # Exact workflow release.
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
 
 # Highest assurance, pinned to a commit.
-uses: owner/devflows/.github/workflows/pandoc.yaml@<commit-sha>
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@<commit-sha>
 ```
 
 ### What To Read Next

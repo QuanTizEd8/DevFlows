@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   pandoc:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -84,7 +84,7 @@ custom checkout token or SSH key, pass only the secret needed for that caller:
 ```yaml
 jobs:
   pandoc:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     secrets:
       checkout-token: ${{ secrets.DEVFLOWS_CHECKOUT_TOKEN }}
 ```

@@ -25,7 +25,7 @@ passes them. Prefer explicit secrets:
 ```yaml
 jobs:
   publish:
-    uses: owner/devflows/.github/workflows/some-workflow.yaml@some-workflow/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/some-workflow.yaml@some-workflow/v1
     secrets:
       publish-token: ${{ secrets.PUBLISH_TOKEN }}
 ```

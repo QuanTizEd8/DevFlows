@@ -8,7 +8,7 @@ generated reference page is {doc}`Pandoc </reference/workflows/pandoc>`.
 ```yaml
 jobs:
   convert:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -101,7 +101,7 @@ permissions:
 
 jobs:
   convert:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-

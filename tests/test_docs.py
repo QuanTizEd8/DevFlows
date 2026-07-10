@@ -16,7 +16,7 @@ def test_workflow_docs_include_interface_sections() -> None:
 
     assert "# Pandoc" in rendered
     assert "| pandoc-image | string | False | pandoc/latex:3-ubuntu |" in rendered
-    assert "owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1" in rendered
+    assert "QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1" in rendered
 
 
 def test_pandoc_docs_include_image_notes() -> None:
@@ -41,7 +41,8 @@ def test_build_devcontainer_docs_include_filtered_interface() -> None:
 
     assert "# Build Devcontainer" in rendered
     assert (
-        "owner/devflows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1" in rendered
+        "QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1"
+        in rendered
     )
     assert "| image-name | string | True |  |" in rendered
     assert "build-matrix" in rendered

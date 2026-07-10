@@ -43,7 +43,7 @@ valid writeback payload artifact:
 ```yaml
 jobs:
   writeback:
-    uses: owner/devflows/.github/workflows/writeback.yaml@writeback/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/writeback.yaml@writeback/v1
     permissions:
       actions: read
       contents: write
