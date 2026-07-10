@@ -60,6 +60,22 @@
       ],
       datasourceTemplate: "github-tags",
       versioningTemplate: "semver"
+    },
+    {
+      // Keep the pinned anaconda-client version the anaconda-publish workflow
+      // installs (ephemerally, via `uvx --from anaconda-client==<version>`)
+      // current. The inline `# renovate:` comment supplies datasource/depName;
+      // Renovate bumps the pep440 version string in place. A unit test
+      // (tests/test_anaconda_publish.py) asserts this regex still matches the
+      // constant so the pin never silently stops updating.
+      customType: "regex",
+      managerFilePatterns: [
+        "/^workflows/anaconda-publish/scripts/specs\\.py$/"
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ANACONDA_CLIENT_VERSION = "(?<currentValue>[^"]+)"'
+      ],
+      versioningTemplate: "pep440"
     }
   ],
   // ------------------------------------------------------------- packageRules

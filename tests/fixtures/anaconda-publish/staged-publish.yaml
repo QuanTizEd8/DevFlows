@@ -1,0 +1,52 @@
+name: Release conda packages to anaconda.org
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# anaconda-publish never needs a write scope: it disables checkout and all
+# authority to mutate anaconda.org comes from the anaconda-token secret. The
+# verify/upload jobs host the artifact-download channel (actions: read) and the
+# generator grants the ingesting job contents: read, so the calling job grants
+# both. python-build needs the same read union.
+permissions: {}
+
+jobs:
+  build:
+    name: Build the conda channel
+    permissions:
+      contents: read
+      actions: read
+    # Replace python-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    with:
+      conda-enabled: true
+      conda-recipe-path: recipe.yaml
+      dist-artifact-prefix: myproject
+
+  publish:
+    name: Stage and promote to anaconda.org
+    needs: build
+    # Chaining convention: run only when the upstream conda channel exists.
+    if: ${{ !cancelled() && needs.build.outputs.conda-artifact-name != '' }}
+    permissions:
+      contents: read
+      actions: read
+    # Replace anaconda-publish/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/anaconda-publish.yaml@anaconda-publish/v0.1.0
+    # Pass the anaconda-token environment secret through; store it on the
+    # anaconda-staging / anaconda-release environments for tightest scoping.
+    secrets: inherit
+    with:
+      publish-owner: my-anaconda-org
+      upload-enabled: true
+      promote-enabled: true
+      upload-label: staging
+      promote-label: main
+      artifact-download-enabled: true
+      artifact-download-name: ${{ needs.build.outputs.conda-artifact-name }}
+      artifact-download-path: conda-channel
+      publish-dist-path: conda-channel
+      publish-dist-manifest: ${{ needs.build.outputs.dist-manifest }}
+      publish-expected-version: ${{ needs.build.outputs.package-version }}

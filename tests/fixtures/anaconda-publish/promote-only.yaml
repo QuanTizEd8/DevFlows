@@ -1,0 +1,34 @@
+name: Promote a soak-tested staging build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version already staged under the staging label to promote.
+        required: true
+        type: string
+
+# The read union is required even for a promote-only call: the verify job
+# statically declares actions: read and the generator grants the ingesting job
+# contents: read, so GitHub validates them at startup regardless of runtime mode.
+permissions: {}
+
+jobs:
+  promote:
+    name: Promote staging -> main
+    permissions:
+      contents: read
+      actions: read
+    # Replace anaconda-publish/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/anaconda-publish.yaml@anaconda-publish/v0.1.0
+    secrets: inherit
+    with:
+      publish-owner: my-anaconda-org
+      # Promote-only: no upload, so verify does no digest work and specs are explicit.
+      upload-enabled: false
+      promote-enabled: true
+      upload-label: staging
+      promote-label: main
+      # Owner-free specs, typically the staged-specs output of the staging run with
+      # the owner segment stripped.
+      promote-specs: myproject/${{ inputs.version }}
