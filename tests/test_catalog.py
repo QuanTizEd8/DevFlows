@@ -7,7 +7,12 @@ def test_catalog_loads_active_workflows() -> None:
     workflows = load_catalog()
     workflows_by_id = {item.id: item for item in workflows}
 
-    assert [item.id for item in workflows] == ["build-devcontainer", "pandoc", "writeback"]
+    assert [item.id for item in workflows] == [
+        "build-devcontainer",
+        "pandoc",
+        "python-test",
+        "writeback",
+    ]
     assert (
         workflows_by_id["pandoc"].workflow_call["inputs"]["pandoc-image"]["default"]
         == "pandoc/latex:3-ubuntu"

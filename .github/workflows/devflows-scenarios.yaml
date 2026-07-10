@@ -235,6 +235,185 @@ jobs:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/artifact-download-html/example.html
           ASSERT_TEXT: Pandoc Artifact Input
         run: python harness/scenarios/assert-file-contains.py
+  python_test_reports_merge_hosted_call:
+    name: 'Python Test: Multi-leg matrix with merged report artifact'
+    uses: ./.github/workflows/python-test.yaml
+    with:
+      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.11", "name": "leg-a"}, {"runner": "ubuntu-latest", "python-version": "3.13", "name": "leg-b"}]'
+      test-install-source: source
+      test-source-directory: tests/scenarios/python-test/pkg
+      test-dependencies: pytest
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/reports/report.xml tests/scenarios/python-test/pkg/tests
+      report-artifact-enabled: true
+      report-merge-enabled: true
+      report-artifact-name: python-test-scn-reports
+      report-path: .devflows-test/python-test/reports/report.xml
+    permissions:
+      actions: read
+      contents: read
+  python_test_reports_merge_hosted_assert:
+    name: 'Python Test: Multi-leg matrix with merged report artifact assertions'
+    runs-on: ubuntu-latest
+    needs: python_test_reports_merge_hosted_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.python_test_reports_merge_hosted_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: python-test-scn-reports
+          path: .devflows-test-artifacts/python-test/reports
+      - name: 'Assert file exists: python-test-scn-reports-leg-a/report.xml'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-test/reports/python-test-scn-reports-leg-a/report.xml
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file exists: python-test-scn-reports-leg-b/report.xml'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-test/reports/python-test-scn-reports-leg-b/report.xml
+        run: python harness/scenarios/assert-file-exists.py
+      - name: Assert output report-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: report-artifact-name
+          EXPECTED: python-test-scn-reports
+          ACTUAL: ${{ needs.python_test_reports_merge_hosted_call.outputs.report-artifact-name }}
+        run: python harness/scenarios/assert-equals.py
+  python_test_artifact_install_hosted_setup:
+    name: 'Python Test: Install a staged wheel and run pytest setup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Create setup files
+        shell: bash
+        env:
+          DEVFLOWS_SETUP_FILES: |-
+            [
+              {
+                "path": ".devflows-test/python-test/wheelhouse/devflows_test_fixture-0.1.0-py3-none-any.whl",
+                "source-path": "tests/scenarios/python-test/dist/devflows_test_fixture-0.1.0-py3-none-any.whl"
+              }
+            ]
+        run: python harness/scenarios/create-setup-files.py
+      - name: Upload setup artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: python-test-wheelhouse
+          path: .devflows-test/python-test/wheelhouse
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+  python_test_artifact_install_hosted_call:
+    name: 'Python Test: Install a staged wheel and run pytest'
+    uses: ./.github/workflows/python-test.yaml
+    with:
+      artifact-download-enabled: true
+      artifact-download-name: python-test-wheelhouse
+      artifact-download-path: dist
+      test-install-source: artifact
+      test-dist-path: dist
+      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "artifact"}]'
+      test-dependencies: pytest
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/artifact/report.xml tests/scenarios/python-test/pkg/tests
+      report-artifact-enabled: true
+      report-merge-enabled: false
+      report-artifact-name: python-test-artifact-report
+      report-path: .devflows-test/python-test/artifact/report.xml
+    permissions:
+      actions: read
+      contents: read
+    needs: python_test_artifact_install_hosted_setup
+  python_test_artifact_install_hosted_assert:
+    name: 'Python Test: Install a staged wheel and run pytest assertions'
+    runs-on: ubuntu-latest
+    needs: python_test_artifact_install_hosted_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.python_test_artifact_install_hosted_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: python-test-artifact-report-artifact
+          path: .devflows-test-artifacts/python-test/artifact
+      - name: 'Assert file exists: report.xml'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-test/artifact/report.xml
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: report.xml'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-test/artifact/report.xml
+          ASSERT_TEXT: <testsuite
+        run: python harness/scenarios/assert-file-contains.py
+  python_test_micromamba_source_hosted_call:
+    name: 'Python Test: Install from source in a micromamba environment'
+    uses: ./.github/workflows/python-test.yaml
+    with:
+      test-env-manager: micromamba
+      test-environment-file: tests/scenarios/python-test/environment.yml
+      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.12", "name": "mamba"}]'
+      test-install-source: source
+      test-source-directory: tests/scenarios/python-test/pkg
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/micromamba/report.xml tests/scenarios/python-test/pkg/tests
+      report-artifact-enabled: true
+      report-merge-enabled: false
+      report-artifact-name: python-test-micromamba-report
+      report-path: .devflows-test/python-test/micromamba/report.xml
+    permissions:
+      actions: read
+      contents: read
+  python_test_micromamba_source_hosted_assert:
+    name: 'Python Test: Install from source in a micromamba environment assertions'
+    runs-on: ubuntu-latest
+    needs: python_test_micromamba_source_hosted_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.python_test_micromamba_source_hosted_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: python-test-micromamba-report-mamba
+          path: .devflows-test-artifacts/python-test/micromamba
+      - name: 'Assert file exists: report.xml'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-test/micromamba/report.xml
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: report.xml'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/python-test/micromamba/report.xml
+          ASSERT_TEXT: <testsuite
+        run: python harness/scenarios/assert-file-contains.py
   writeback_ephemeral_branch_writeback_setup:
     name: 'Writeback: Writeback to ephemeral branch setup'
     runs-on: ubuntu-latest

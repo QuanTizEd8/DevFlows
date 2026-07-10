@@ -71,6 +71,16 @@ ACTION_PINS: dict[str, ActionPin] = {
         "513af61f4de4f75d37e4438f184ba4358f0fc1ca",
         "v0.3.1900000450",
     ),
+    "setup-micromamba": ActionPin(
+        "mamba-org/setup-micromamba",
+        "d7c9bd84e824b79d2af72a2d4196c7f4300d3476",
+        "v3.0.0",
+    ),
+    "setup-uv": ActionPin(
+        "astral-sh/setup-uv",
+        "11f9893b081a58869d3b5fccaea48c9e9e46f990",
+        "v8.3.2",
+    ),
 }
 
 PINS_BY_REF: dict[str, ActionPin] = {pin.ref: pin for pin in ACTION_PINS.values()}
