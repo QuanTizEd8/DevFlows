@@ -1,6 +1,7 @@
 name: DevFlows Docs
 
 on:
+  pull_request:
   push:
     branches:
       - main
@@ -10,35 +11,52 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: devflows-docs-${{ github.ref }}
+  # Supersede in-flight PR doc builds, but never cancel a main deploy mid-flight.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # pull the prebuilt CI devcontainer image / build cache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Log in to GHCR for the devcontainer cache
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
       - name: Build docs in devcontainer
-        uses: devcontainers/ci@b63b30de439b47a52267f241112c5b453b673db5
+        uses: devcontainers/ci@b63b30de439b47a52267f241112c5b453b673db5 # v0.3.1900000449
         with:
           configFile: .devcontainer/devcontainer.json
+          push: never
+          cacheFrom: ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64
           runCmd: |
             pixi install
             task docs
+      # Pages configuration/upload and deploy run only on main; pull requests
+      # build the docs to catch Sphinx errors but never touch Pages.
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: docs/_build/html
 
   deploy:
     name: Deploy
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -49,4 +67,4 @@ jobs:
     steps:
       - name: Deploy Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

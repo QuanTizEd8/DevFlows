@@ -10,20 +10,48 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs on the same ref (a new PR push supersedes the old one).
+concurrency:
+  group: devflows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read # pull the prebuilt CI devcontainer image / build cache
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          # Full history so the propagation guard can diff against the PR base.
+          fetch-depth: 0
           persist-credentials: false
+      - name: Log in to GHCR for the devcontainer cache
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
       - name: Run in devcontainer
-        uses: devcontainers/ci@b63b30de439b47a52267f241112c5b453b673db5
+        uses: devcontainers/ci@b63b30de439b47a52267f241112c5b453b673db5 # v0.3.1900000449
         with:
           configFile: .devcontainer/devcontainer.json
+          push: never
+          # Reuse the prebuilt CI image / registry cache published by
+          # devflows-devcontainer.yaml so CI stops rebuilding from scratch. Until
+          # that pipeline first runs the cache simply misses and the build falls
+          # back to the pinned base image.
+          cacheFrom: ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64
+          # The propagation guard only runs on pull_request, where a base sha
+          # exists; on push this is empty and the guard is a no-op.
+          env: |
+            DEVFLOWS_BASE_SHA=${{ github.event.pull_request.base.sha }}
           runCmd: |
             pixi install
+            git config --global --add safe.directory "$PWD"
             task lint
             task test
+            task propagation-check

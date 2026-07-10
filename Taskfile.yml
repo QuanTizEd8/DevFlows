@@ -66,8 +66,15 @@ tasks:
   lint:workflows:
     desc: Lint GitHub Actions workflows with actionlint and zizmor.
     cmds:
+      # actionlint scans the generated, runnable workflows. Source workflows
+      # reference the generator-injected `devflows-runtime` step, so actionlint
+      # cannot type-check them standalone; the sync drift check guarantees the
+      # generated output faithfully reflects the sources it does scan.
       - pixi run -- actionlint .github/workflows/*.yaml
-      - pixi run -- zizmor .
+      # zizmor's security audits do not depend on injected steps, so it scans
+      # BOTH the generated workflows and the source workflows, catching template
+      # injection or unpinned-uses in sources before they are ever generated.
+      - pixi run -- zizmor . workflows/*/workflow.yaml
 
   lint:yaml:
     desc: Lint YAML files with yamllint.
