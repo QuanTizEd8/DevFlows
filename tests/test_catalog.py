@@ -18,6 +18,7 @@ def test_catalog_loads_active_workflows() -> None:
         "python-lint",
         "python-test",
         "writeback",
+        "zenodo-release",
     ]
     assert (
         workflows_by_id["pandoc"].workflow_call["inputs"]["pandoc-image"]["default"]

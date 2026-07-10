@@ -1,0 +1,56 @@
+name: Release to GitHub and Zenodo from a tag
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# zenodo-release requests contents: write and discussions: write on its release
+# job (GitHub validates nested job permissions at startup, before any `if:`), and
+# actions: read on the jobs that host the artifact-download channel. Grant the full
+# union even for a Zenodo-only or release-only call, or the run fails at startup.
+permissions: {}
+
+jobs:
+  build:
+    name: Build distributions
+    permissions:
+      contents: read
+      actions: read
+    # Replace python-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-build.yaml@python-build/v0.1.0
+    with:
+      dist-artifact-prefix: myproject
+
+  release:
+    name: Cut the GitHub + Zenodo release
+    needs: build
+    # Chaining convention: run only when the upstream distributions exist.
+    if: ${{ !cancelled() && needs.build.outputs.sdist-artifact-name != '' }}
+    permissions:
+      contents: write
+      discussions: write
+      actions: read
+    # Replace zenodo-release/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/zenodo-release.yaml@zenodo-release/v0.1.0
+    # Store zenodo-token / zenodo-sandbox-token as environment secrets on the bound
+    # zenodo-environment-name and pass them through with secrets: inherit.
+    secrets: inherit
+    with:
+      release-tag: ${{ github.ref_name }}
+      release-enabled: true
+      release-asset-globs: |
+        *.tar.gz
+        *.whl
+      zenodo-enabled: true
+      zenodo-environment-name: zenodo
+      zenodo-metadata-cff-path: CITATION.cff
+      zenodo-asset-globs: |
+        *.tar.gz
+        *.whl
+      publish-dist-manifest: ${{ needs.build.outputs.dist-manifest }}
+      checkout-enabled: true
+      artifact-download-enabled: true
+      artifact-download-pattern: myproject-{sdist,wheels}
+      artifact-download-merge-multiple: true
+      artifact-download-path: dist

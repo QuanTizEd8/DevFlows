@@ -1159,3 +1159,577 @@ jobs:
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: uv-cache-mode must be one of
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
+  zenodo_release_nothing_to_do_validate:
+    name: 'Zenodo Release: Neither target enabled fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'false'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_bad_tag_validate:
+    name: 'Zenodo Release: A non-ref-safe release-tag fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: bad tag..name
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: valid git ref
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_notes_mutually_exclusive_validate:
+    name: 'Zenodo Release: release-notes and release-notes-file together fail validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: Hand-written notes.
+          RELEASE_NOTES_FILE: NOTES.md
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: mutually exclusive
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_discussion_on_draft_validate:
+    name: 'Zenodo Release: A discussion category on a draft release fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'true'
+          RELEASE_DISCUSSION_CATEGORY: General
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: release-draft-enabled
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_bad_existing_mode_validate:
+    name: 'Zenodo Release: An invalid release-existing-mode fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: clobber
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_zenodo_missing_environment_validate:
+    name: 'Zenodo Release: zenodo-enabled with an empty environment name fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-environment-name is required
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_zenodo_missing_metadata_validate:
+    name: 'Zenodo Release: zenodo-enabled without a CFF path and metadata fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: zenodo
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: '*.tar.gz'
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: deposition metadata
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_zenodo_no_assets_validate:
+    name: 'Zenodo Release: zenodo-enabled with empty zenodo-asset-globs fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: zenodo
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-asset-globs is required
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_publish_confirm_mismatch_validate:
+    name: 'Zenodo Release: A real publish without a matching confirm fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'false'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'true'
+          ZENODO_PUBLISH_CONFIRM: v9.9.9
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: zenodo
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: Fixture
+          ZENODO_CREATORS: Doe, Jane
+          ZENODO_DESCRIPTION: A fixture deposition.
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: '*.tar.gz'
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-publish-confirm must equal release-tag
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_globs_without_download_validate:
+    name: 'Zenodo Release: Asset globs with artifact-download disabled fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: '*.tar.gz'
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'false'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: artifact-download channel
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_unsafe_notes_path_validate:
+    name: 'Zenodo Release: A release-notes-file escaping the workspace fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ../secrets.txt
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'false'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: ''
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: ''
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: workspace-relative
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_malformed_manifest_validate:
+    name: 'Zenodo Release: An unparseable publish-dist-manifest fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: zenodo
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: Fixture
+          ZENODO_CREATORS: Doe, Jane
+          ZENODO_DESCRIPTION: A fixture deposition.
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: ''
+          ZENODO_ASSET_GLOBS: '*.tar.gz'
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: '{not json'
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: not valid JSON
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_metadata_extra_owned_key_validate:
+    name: 'Zenodo Release: An owned key in zenodo-metadata-extra fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: zenodo
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: '{"doi": "10.5281/zenodo.1"}'
+          ZENODO_ASSET_GLOBS: '*.tar.gz'
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  zenodo_release_metadata_extra_not_object_validate:
+    name: 'Zenodo Release: A non-object zenodo-metadata-extra fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/zenodo-release/scripts/validate-inputs.py
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUBLISH_TIMEOUT_MINUTES: '15'
+          RELEASE_ENABLED: 'true'
+          RELEASE_TAG: v1.0.0
+          RELEASE_NOTES: ''
+          RELEASE_NOTES_FILE: ''
+          RELEASE_DRAFT_ENABLED: 'false'
+          RELEASE_DISCUSSION_CATEGORY: ''
+          RELEASE_EXISTING_MODE: fail
+          RELEASE_ASSET_GLOBS: ''
+          RELEASE_ASSET_SOURCE_PATH: ''
+          RELEASE_ASSET_IF_NO_FILES_FOUND: error
+          RELEASE_ENVIRONMENT_NAME: ''
+          ZENODO_ENABLED: 'true'
+          ZENODO_SANDBOX_ENABLED: 'false'
+          ZENODO_PUBLISH_ENABLED: 'false'
+          ZENODO_PUBLISH_CONFIRM: ''
+          ZENODO_NEW_VERSION_FILE_MODE: replace
+          ZENODO_ENVIRONMENT_NAME: zenodo
+          ZENODO_UPLOAD_TYPE: software
+          ZENODO_TITLE: ''
+          ZENODO_CREATORS: ''
+          ZENODO_DESCRIPTION: ''
+          ZENODO_METADATA_CFF_PATH: ''
+          ZENODO_METADATA_EXTRA: '["not", "an", "object"]'
+          ZENODO_ASSET_GLOBS: '*.tar.gz'
+          ZENODO_ASSET_SOURCE_PATH: ''
+          ZENODO_ASSET_IF_NO_FILES_FOUND: error
+          PUBLISH_DIST_MANIFEST: ''
+          ARTIFACT_DOWNLOAD_ENABLED: 'true'
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be a JSON object
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
