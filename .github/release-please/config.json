@@ -16,6 +16,12 @@
       "package-name": "pandoc",
       "changelog-path": "CHANGELOG.md"
     },
+    "workflows/python-lint": {
+      "component": "python-lint",
+      "release-type": "simple",
+      "package-name": "python-lint",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/writeback": {
       "component": "writeback",
       "release-type": "simple",

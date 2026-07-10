@@ -1,0 +1,30 @@
+name: Python Lint advisory caller
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  lint:
+    # Replace python-lint/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-lint.yaml@python-lint/v0.1.0
+    with:
+      # Advisory mode: findings are reported (summary, annotations, outputs, and
+      # the uploaded report) but do not fail the run while the project adopts the
+      # gate gradually.
+      lint-enforce: false
+      lint-report-directory: .lint-report
+      uv-sync-enabled: true
+      uv-sync-arguments: --all-extras --group typing
+      ruff-version: 0.14.2
+      typecheck-tool: pyright
+      typecheck-with: |
+        types-requests
+        pydantic
+      artifact-upload-enabled: true
+      artifact-upload-name: python-lint-report
+      artifact-upload-path: .lint-report
+      artifact-upload-if-no-files-found: error
