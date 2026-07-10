@@ -1,12 +1,8 @@
 """Tokenless per-job credential preflight.
 
-validate cannot check secrets (its env maps only inputs.*), so each credentialed
-job asserts the publishing credential is present BEFORE it reaches any CLI step.
-This step is deliberately tokenless: it receives only a boolean
-``ANACONDA_TOKEN_PRESENT`` (``${{ secrets.anaconda-token != '' }}``), never the
-token value, so the token stays confined to the single CLI step. The environment-
-bound jobs are already gated to skip in dry-run, so PUBLISH_DRY_RUN_ENABLED is a
-belt-and-suspenders guard.
+Each credentialed job asserts the publishing credential is present before any CLI
+step (validate cannot check secrets). Tokenless by design: it receives only the
+boolean ANACONDA_TOKEN_PRESENT, never the token value.
 """
 
 from __future__ import annotations

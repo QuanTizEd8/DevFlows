@@ -1,10 +1,9 @@
 """Stage verified conda packages onto anaconda.org under the staging label.
 
-The ONLY step in the upload job that carries ANACONDA_API_TOKEN. It re-verifies
-every file against the caller-supplied manifest one more time (a TOCTOU guard),
-then runs ``anaconda upload`` for each verified file via an argv built by the
-materialized sibling modules (env + shlex, never a shell string). anaconda-client
-reads the token from the inherited ANACONDA_API_TOKEN env, never a process arg.
+The ONLY step in the upload job that carries ANACONDA_API_TOKEN. Re-verifies every
+file against the caller manifest (TOCTOU guard), then runs ``anaconda upload`` per
+file via an argv built by the sibling modules (env + shlex, never a shell string);
+anaconda-client reads the token from the inherited env, never a process arg.
 """
 
 from __future__ import annotations

@@ -4,106 +4,106 @@ name: '[Reusable]: Anaconda Publish'
   workflow_call:
     inputs:
       publish-owner:
-        description: anaconda.org user or organization every operation targets. The ONLY source of the owner segment - anaconda upload --user, and the <owner>/ prefix prepended to every promote and maintain spec - so a call can never touch another namespace via a smuggled spec. Validated non-empty and charset-safe.
+        description: anaconda.org user or organization every operation targets; the only source of the owner segment, so no spec can reach another namespace. Validated non-empty and charset-safe.
         type: string
         required: true
       publish-dry-run-enabled:
-        description: When true, the verify job runs fully (digest verification plus plan computation) and the upload, promote, and maintain jobs are SKIPPED at the job level - no environment is bound, no deployment record is created, no reviewer is pinged, and the anaconda-token secret is not required. The plan (versions, specs, exact argv) is reported through the outputs and the job summary. The credential-free rehearsal mode.
+        description: Credential-free rehearsal mode -- verify runs fully (digest verification plus plan computation) while upload, promote, and maintain are skipped at the job level and no token is required; the plan is reported through the outputs and job summary.
         type: boolean
         required: false
         default: false
       publish-client-version:
-        description: Exact anaconda-client version to install (ephemerally, via a pinned uv). Empty installs the workflow's pinned default. Pin for reproducible release pipelines (mirrors build-tool-version).
+        description: Exact anaconda-client version to install ephemerally; empty installs the pinned default. Pin for reproducible release pipelines.
         type: string
         required: false
         default: ''
       publish-server-url:
-        description: Alternate anaconda API server URL (anaconda-client -s/--site) for on-prem Anaconda repositories or a staging/mock index in end-to-end tests. Empty uses anaconda.org. Environment-mediated, never shell-interpolated.
+        description: Alternate anaconda API server URL (anaconda-client -s/--site) for on-prem repositories or an e2e mock index; empty uses anaconda.org. Environment-mediated, never shell-interpolated.
         type: string
         required: false
         default: ''
       publish-timeout-minutes:
-        description: Maximum minutes applied as timeout-minutes on every job. Uploads are light; raise for very large channels.
+        description: Maximum minutes applied as timeout-minutes on every job; raise for very large channels.
         type: number
         required: false
         default: 15
       publish-expected-version:
-        description: Optional exact-match version guard. When non-empty, verification fails unless every verified .conda package parses to this exact version, making tag/artifact skew impossible before an irreversible upload. The internal single-consistent-version check always runs regardless.
+        description: Optional exact-match version guard -- verification fails unless every verified .conda parses to this version. The internal single-consistent-version check always runs regardless.
         type: string
         required: false
         default: ''
       publish-dist-manifest:
-        description: The dist-manifest JSON output of python-build (schema 1, a files array of name/sha256/size/kind objects, and an artifacts map of sdist/wheels/conda-channel). Required when upload-enabled - publishing without a digest manifest is refused by design. Every kind=conda entry must match a downloaded file byte-for-byte (sha256 AND size) and vice versa, and artifacts.conda-channel must equal artifact-download-name.
+        description: python-build's schema-1 dist-manifest JSON; required when upload-enabled. Every kind=conda entry is verified byte-for-byte (sha256 and size) against the downloaded files, and artifacts.conda-channel must equal artifact-download-name.
         type: string
         required: false
         default: ''
       publish-dist-path:
-        description: Workspace-relative directory the conda channel is downloaded into and verified from; callers typically set it equal to artifact-download-path. Validated workspace-contained. Required when upload-enabled.
+        description: Workspace-relative directory the conda channel is downloaded into and verified from (typically equal to artifact-download-path); required when upload-enabled. Validated workspace-contained.
         type: string
         required: false
         default: ''
       upload-enabled:
-        description: Whether to run the verify and upload jobs (stage packages under upload-label). Requires publish-dist-manifest, publish-dist-path, and the artifact-download channel. Set false for a promote-only or maintain call.
+        description: Whether to run the verify and upload jobs (stage packages under upload-label). Set false for a promote-only or maintain call.
         type: boolean
         required: false
         default: true
       upload-label:
-        description: anaconda.org label packages are uploaded under (anaconda upload --label). The staged-publish safety net - nothing lands on the default install label until promote relabels it. Validated non-empty, label-safe, and distinct from promote-label when promote-enabled.
+        description: anaconda.org label packages are uploaded under (anaconda upload --label) -- the staging safety net before promote relabels them. Validated label-safe and distinct from promote-label.
         type: string
         required: false
         default: staging
       upload-existing-mode:
-        description: What to do when a file already exists on the channel. 'fail' (default - pass neither flag, anaconda-client errors loudly), 'skip' (--skip-existing, for idempotent re-runs of a partially-failed publish), or 'overwrite' (--force). Maps onto anaconda-client's mutually-exclusive mode group; 'overwrite' is the only route to --force. Validated.
+        description: Collision handling when a file already exists -- 'fail' (default, anaconda-client errors), 'skip' (--skip-existing), or 'overwrite' (--force, the only route to --force). Validated.
         type: string
         required: false
         default: fail
       upload-arguments:
-        description: Extra arguments appended to anaconda upload. Passed through an environment variable and shlex-split by a DevFlows script; never shell-interpolated. Guarded by a strict allowlist rather than a denylist (which argparse defeats via attached short values, long-flag abbreviations, and bare positionals). Only the cosmetic/metadata flags --no-progress, --no-register, --register, --keep-basename, --summary=VALUE, and --description=VALUE are accepted, each as --flag or --flag=value. Everything else - the owner, label, version, collision mode, token, site, and file paths - is owned by typed inputs and rejected here.
+        description: Extra anaconda upload arguments, shlex-split and guarded by a strict allowlist -- only the cosmetic/metadata flags --no-progress, --no-register, --register, --keep-basename, --summary=VALUE, and --description=VALUE are accepted. Everything DevFlows owns is rejected.
         type: string
         required: false
         default: ''
       upload-environment-name:
-        description: GitHub environment the upload job binds to. Deployment protection rules and required reviewers on this environment gate staging uploads; store the token as an environment secret here (pass it with `secrets inherit`) for tightest scoping.
+        description: GitHub environment the upload job binds to; put staging protection rules and the token secret here.
         type: string
         required: false
         default: anaconda-staging
       promote-enabled:
-        description: Whether to run the promote job relabeling packages from upload-label to promote-label (anaconda move). Chained mode (with upload-enabled) derives specs from the verified upload set and never runs on a partial upload; standalone mode (upload-enabled false) requires explicit promote-specs.
+        description: Whether to run the promote job relabeling packages from upload-label to promote-label. Chained mode derives specs from the verified upload set; standalone mode requires promote-specs.
         type: boolean
         required: false
         default: false
       promote-label:
-        description: Final label packages are promoted to (anaconda move --to-label). 'main' is what plain 'conda install -c <owner>' resolves - promotion is the real publish event. Must differ from upload-label.
+        description: Final label packages are promoted to (anaconda move --to-label); must differ from upload-label.
         type: string
         required: false
         default: main
       promote-specs:
-        description: Newline-separated package specs to promote, each 'package/version' (all files of the version) or 'package/version/filename' (one file), WITHOUT an owner segment - publish-owner is prepended. Empty in chained mode (derived from this run's verified uploads); required for a promote-only call, typically fed from a previous run's staged-specs output.
+        description: Newline-separated 'package/version' or 'package/version/filename' specs to promote, without an owner segment (publish-owner is prepended). Empty in chained mode; required for a promote-only call.
         type: string
         required: false
         default: ''
       promote-environment-name:
-        description: GitHub environment the promote job binds to. This is the irreversible public-release gate - configure required reviewers here even if staging is unreviewed.
+        description: GitHub environment the promote job binds to; the irreversible public-release gate, so configure required reviewers here.
         type: string
         required: false
         default: anaconda-release
       maintain-enabled:
-        description: Whether to run the destructive maintain job (anaconda remove --force per spec). Mutually exclusive with upload-enabled and promote-enabled - a call either publishes or destroys, never both. Requires maintain-remove-specs and (unless dry-run) maintain-confirm.
+        description: Whether to run the destructive maintain job (anaconda remove --force). Mutually exclusive with upload-enabled and promote-enabled; requires maintain-remove-specs and (unless dry-run) maintain-confirm.
         type: boolean
         required: false
         default: false
       maintain-remove-specs:
-        description: Newline-separated specs to remove, each 'package/version' or 'package/version/filename', without an owner segment (publish-owner is prepended). Removal on anaconda.org is irreversible; run with publish-dry-run-enabled first to print the exact removals.
+        description: Newline-separated 'package/version' or 'package/version/filename' specs to remove, without an owner segment. Removal is irreversible; rehearse with publish-dry-run-enabled first.
         type: string
         required: false
         default: ''
       maintain-confirm:
-        description: Arm switch for destructive removal - must equal publish-owner exactly (the type-the-name-to- delete pattern) or validation fails. Not required in dry-run. Replaces the interactive confirmation prompt the cm draft relied on (which hangs and dies in CI).
+        description: Arm switch for destructive removal -- must equal publish-owner exactly (type-the-name-to-delete) or validation fails. Not required in dry-run.
         type: string
         required: false
         default: ''
       maintain-environment-name:
-        description: GitHub environment the maintain job binds to. Give it the strictest protection rules - this job deletes published packages.
+        description: GitHub environment the maintain job binds to; give it the strictest protection rules.
         type: string
         required: false
         default: anaconda-maintain
@@ -159,17 +159,17 @@ name: '[Reusable]: Anaconda Publish'
         default: error
     secrets:
       anaconda-token:
-        description: anaconda.org API token (scope api:write for upload/move/remove on the target owner). Declared required:false because dry-run needs no credential; every credentialed job runs a tokenless preflight that fails loudly when it is empty and publish-dry-run-enabled is false. Exposed as ANACONDA_API_TOKEN only on the single CLI step of each credentialed job, never to a third-party action.
+        description: anaconda.org API token (api:write on the target owner) for upload/move/remove. required false because dry-run needs none; exposed as ANACONDA_API_TOKEN only on each credentialed job's single CLI step.
         required: false
       artifact-download-token:
         description: Token used to download artifacts from another repository or run.
         required: false
     outputs:
       package-version:
-        description: Version parsed from the verified .conda filenames, cross-checked for consistency (empty for promote-only/maintain calls where no upload is verified). Mirrors python-build's package-version for pipeline assertions; honest in dry-run (the version that would be published).
+        description: Version parsed from the verified .conda filenames (empty for promote-only/maintain calls); mirrors python-build's package-version and is honest in dry-run.
         value: ${{ jobs.verify.outputs.package-version }}
       staged-specs:
-        description: Newline-separated owner/package/version specs uploaded (or, in dry-run, planned) to upload-label. Feed into a later promote-only call's promote-specs (strip the owner segment) after a staging soak - the two-phase-release path. Empty when upload-enabled is false; consumers guard on non-empty.
+        description: Newline-separated owner/package/version specs uploaded (or, in dry-run, planned) to upload-label; feed a later promote-only call's promote-specs. Empty when upload-enabled is false.
         value: ${{ jobs.verify.outputs.staged-specs }}
       uploaded-files:
         description: Newline-separated .conda file names that passed digest verification and were uploaded (or would be, in dry-run). Empty when upload-enabled is false.
@@ -201,12 +201,9 @@ jobs:
 
           import re
 
-          # anaconda.org owners (users/orgs). The single blast-radius control: no spec ever
-          # carries an owner, so this is the only value that selects a namespace.
+          # Owner is the only value that selects an anaconda.org namespace; no spec carries one.
           _OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-          # Channel labels (upload --label / move --to-label). No slashes/spaces/metachars.
           _LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-          # conda package name and version segment grammars.
           _PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
           _VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!-]*$")
           _CONDA_EXTENSIONS = (".conda", ".tar.bz2")
@@ -222,9 +219,8 @@ jobs:
                   raise SpecError("publish-owner is required and must be non-empty.")
               if not _OWNER_RE.match(owner):
                   raise SpecError(
-                      "publish-owner must be an anaconda.org user or organization "
-                      "(letters, digits, '_', '-', leading alphanumeric); got "
-                      f"{owner!r}."
+                      "publish-owner must be an anaconda.org user/org (letters, digits, "
+                      f"'_', '-', leading alphanumeric); got {owner!r}."
                   )
               return owner
 
@@ -235,19 +231,14 @@ jobs:
                   raise SpecError(f"{field} is required and must be non-empty.")
               if not _LABEL_RE.match(label):
                   raise SpecError(
-                      f"{field} must be a safe channel label "
-                      "(letters, digits, '.', '_', '-', leading alphanumeric); got "
-                      f"{label!r}."
+                      f"{field} must be a safe channel label (letters, digits, '.', '_', '-', "
+                      f"leading alphanumeric); got {label!r}."
                   )
               return label
 
 
           def parse_spec(spec: str) -> tuple[str, ...]:
-              """Validate a caller spec (``package/version[/filename]``, never an owner).
-
-              A three-segment spec is accepted only when its third segment is a conda
-              filename; any other three-segment shape is rejected as a smuggled owner.
-              """
+              """Validate a caller spec (``package/version[/filename]``, never an owner)."""
               raw = spec.strip()
               if not raw:
                   raise SpecError("spec must be non-empty.")
@@ -267,8 +258,8 @@ jobs:
                   if not filename.endswith(_CONDA_EXTENSIONS):
                       raise SpecError(
                           f"spec {spec!r} must be package/version[/filename] without an owner "
-                          "segment; a three-segment spec is only valid when the third segment "
-                          "is a package filename ending in .conda or .tar.bz2."
+                          "segment; a three-segment spec's third segment must be a "
+                          ".conda/.tar.bz2 filename."
                       )
                   if not _conda_filename_re().match(filename):
                       raise SpecError(f"spec {spec!r} has an invalid filename segment {filename!r}.")
@@ -276,12 +267,10 @@ jobs:
 
 
           def parse_spec_list(raw: str) -> list[str]:
-              """Split a newline-separated spec block into non-empty, stripped specs."""
               return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
           def validate_spec_list(raw: str, *, field: str) -> list[str]:
-              """Validate every spec in a newline block; return the cleaned specs."""
               specs = parse_spec_list(raw)
               if not specs:
                   raise SpecError(f"{field} is required and must list at least one spec.")
@@ -294,7 +283,6 @@ jobs:
 
 
           def owner_qualified(owner: str, spec: str) -> str:
-              """Prepend the (already validated) owner to a (validated) spec."""
               return f"{owner}/{spec}"
 
 
@@ -303,11 +291,7 @@ jobs:
 
 
           def parse_conda_filename(filename: str) -> tuple[str, str]:
-              """Return ``(package, version)`` parsed from a conda package filename.
-
-              conda filenames are ``<name>-<version>-<build>.<ext>``; the name itself may
-              contain hyphens, so the version and build are split from the right.
-              """
+              """Return ``(package, version)`` from ``<name>-<version>-<build>.<ext>``."""
               if filename.endswith(".conda"):
                   stem = filename[: -len(".conda")]
               elif filename.endswith(".tar.bz2"):
@@ -335,12 +319,9 @@ jobs:
           from parsing import SpecError
 
           # upload-arguments is guarded by a strict ALLOWLIST, never a denylist: argparse
-          # defeats denylists via attached short values (``-lmain`` -> ``-l main``), long-flag
-          # abbreviations (``--lab main`` -> ``--label main``), and bare positional file paths.
-          # Only cosmetic / package-metadata flags that cannot change the upload's namespace,
-          # identity, collision handling, or file selection are accepted. Everything DevFlows
-          # owns (owner, label, version, package, collision mode, token, site, paths) is
-          # rejected here and supplied from typed inputs and the anaconda-token secret.
+          # defeats denylists via attached short values, long-flag abbreviations, and bare
+          # positionals. Only cosmetic/metadata flags that cannot change the upload's
+          # namespace, identity, collision handling, or file selection are accepted.
           _ALLOWED_UPLOAD_BOOL_FLAGS = frozenset(
               {"--no-progress", "--no-register", "--register", "--keep-basename"}
           )
@@ -351,11 +332,7 @@ jobs:
 
 
           def parse_extra_arguments(raw: str, *, field: str) -> list[str]:
-              """shlex-split upload-arguments and accept ONLY allowlisted metadata flags.
-
-              Every token must be exactly ``--flag`` (a known boolean) or ``--flag=value`` (a
-              known value flag with a non-empty value). Anything else is rejected.
-              """
+              """shlex-split upload-arguments and accept ONLY allowlisted metadata flags."""
               try:
                   args = shlex.split(raw)
               except ValueError as error:
@@ -369,16 +346,18 @@ jobs:
               return ", ".join(sorted(_ALLOWED_UPLOAD_BOOL_FLAGS | _ALLOWED_UPLOAD_VALUE_FLAGS))
 
 
+          def _reject(arg: str, *, field: str) -> None:
+              raise SpecError(
+                  f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
+                  f"({_allowed_upload_flags_display()}) are accepted (--flag or --flag=value). "
+                  "The owner, label, version, collision mode, token, site, and file paths are "
+                  "owned by typed inputs, never this input."
+              )
+
+
           def _validate_upload_argument(arg: str, *, field: str) -> None:
               if not arg.startswith("--"):
-                  raise SpecError(
-                      f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-                      f"({_allowed_upload_flags_display()}) are accepted, each written as --flag "
-                      "or --flag=value. Bare file paths, single-dash short options, and attached "
-                      "short values are rejected because the owner, label, version, collision "
-                      "mode, token, site, and file paths are owned by typed inputs and supplied "
-                      "by DevFlows, never through this input."
-                  )
+                  _reject(arg, field=field)
               flag, sep, value = arg.partition("=")
               if flag in _ALLOWED_UPLOAD_BOOL_FLAGS:
                   if sep:
@@ -390,12 +369,7 @@ jobs:
                           f"{field}: {flag} requires a value written as {flag}=VALUE; got {arg!r}."
                       )
                   return
-              raise SpecError(
-                  f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-                  f"({_allowed_upload_flags_display()}) are accepted. The owner, label, version, "
-                  "collision mode, token, site, and file paths are owned by typed inputs and "
-                  "supplied by DevFlows, never through this input."
-              )
+              _reject(arg, field=field)
 
 
           def validate_existing_mode(mode: str) -> str:
@@ -447,10 +421,8 @@ jobs:
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/validate-inputs.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Fail-fast input validation for anaconda-publish (validate job).
 
-          Runs with an env block that maps ONLY ``inputs.*`` (secret-presence checks live in
-          the per-job tokenless preflight). Imports the materialized sibling modules
-          parsing / arguments / manifest (declared by ``# imports`` comments in the step run
-          body so the sync step inlines them alongside this script).
+          Env maps ONLY ``inputs.*`` (secret-presence checks live in the per-job tokenless
+          preflight). Imports the sibling modules parsing / arguments / manifest.
           """
 
           from __future__ import annotations
@@ -472,29 +444,25 @@ jobs:
               maintain_enabled = _bool("MAINTAIN_ENABLED")
               dry_run = _bool("PUBLISH_DRY_RUN_ENABLED")
 
-              # A call either publishes (upload/promote) or destroys (maintain), never both.
               if maintain_enabled and (upload_enabled or promote_enabled):
                   raise SystemExit(
                       "maintain-enabled is mutually exclusive with upload-enabled and "
-                      "promote-enabled; a call either publishes or destroys, never both."
+                      "promote-enabled (a call publishes or destroys, never both)."
                   )
               if not (upload_enabled or promote_enabled or maintain_enabled):
                   raise SystemExit(
-                      "Nothing to do: enable at least one of upload-enabled, promote-enabled, "
-                      "or maintain-enabled. This workflow never silently no-ops."
+                      "Nothing to do: enable at least one of upload-enabled, "
+                      "promote-enabled, or maintain-enabled."
                   )
 
               upload_label = _validate_label("UPLOAD_LABEL", "upload-label")
 
               if upload_enabled:
                   _validate_upload(owner)
-
               if promote_enabled:
                   _validate_promote(upload_enabled, upload_label)
-
               if maintain_enabled:
                   _validate_maintain(owner, dry_run)
-
               return 0
 
 
@@ -525,14 +493,12 @@ jobs:
 
 
           def _validate_upload(owner: str) -> None:
-              # Distributions can only arrive through the artifact-download channel; a build
-              # from source would bypass digest verification and coexist with the credential.
+              # Distributions can only arrive through the artifact-download channel (a source
+              # build would bypass digest verification and coexist with the credential).
               if not _bool("ARTIFACT_DOWNLOAD_ENABLED"):
                   raise SystemExit(
                       "upload-enabled is true but artifact-download-enabled is false; conda "
-                      "distributions can only arrive through the artifact-download channel. "
-                      "Set artifact-download-enabled: true and artifact-download-name to the "
-                      "python-build conda-artifact-name output."
+                      "distributions can only arrive through the artifact-download channel."
                   )
 
               _validate_dist_path()
@@ -540,8 +506,7 @@ jobs:
               manifest_raw = os.environ.get("PUBLISH_DIST_MANIFEST", "").strip()
               if not manifest_raw:
                   raise SystemExit(
-                      "publish-dist-manifest is required when upload-enabled is true; "
-                      "publishing without a digest manifest is refused by design. Pass "
+                      "publish-dist-manifest is required when upload-enabled is true; pass "
                       "python-build's dist-manifest output."
                   )
               try:
@@ -557,12 +522,11 @@ jobs:
                   raise SystemExit(f"publish-dist-manifest is malformed: {error}") from error
               if not conda_entries:
                   raise SystemExit(
-                      "publish-dist-manifest contains no conda packages (no kind=conda file "
-                      "entries); nothing to upload to anaconda.org."
+                      "publish-dist-manifest contains no conda packages (no kind=conda entries)."
                   )
 
-              # Loud chaining-misconfig catch: the manifest's declared conda-channel artifact
-              # must be the one this call downloads.
+              # Chaining-misconfig catch: the manifest's conda-channel artifact must be the
+              # one this call downloads.
               download_name = os.environ.get("ARTIFACT_DOWNLOAD_NAME", "").strip()
               artifacts = manifest_data.get("artifacts")
               manifest_channel = ""
@@ -570,9 +534,8 @@ jobs:
                   manifest_channel = str(artifacts.get("conda-channel") or "")
               if download_name and manifest_channel and download_name != manifest_channel:
                   raise SystemExit(
-                      f"publish-dist-manifest artifacts.conda-channel {manifest_channel!r} "
-                      f"does not match artifact-download-name {download_name!r}; the manifest "
-                      "and the downloaded artifact are from different builds."
+                      f"publish-dist-manifest artifacts.conda-channel {manifest_channel!r} does "
+                      f"not match artifact-download-name {download_name!r}."
                   )
 
               _validate_extra_arguments()
@@ -584,7 +547,7 @@ jobs:
               if not raw:
                   raise SystemExit(
                       "publish-dist-path is required when upload-enabled is true; set it to "
-                      "the artifact-download-path the conda channel is downloaded into."
+                      "the artifact-download-path."
                   )
               if os.path.isabs(raw) or ".." in raw.replace("\\", "/").split("/"):
                   raise SystemExit(
@@ -611,10 +574,7 @@ jobs:
           def _validate_promote(upload_enabled: bool, upload_label: str) -> None:
               promote_label = _validate_label("PROMOTE_LABEL", "promote-label")
               if promote_label == upload_label:
-                  raise SystemExit(
-                      f"upload-label and promote-label must differ (both {promote_label!r}); "
-                      "promotion relabels packages from the staging label to the final label."
-                  )
+                  raise SystemExit(f"upload-label and promote-label must differ (both {promote_label!r}).")
               promote_specs = os.environ.get("PROMOTE_SPECS", "")
               if not upload_enabled:
                   # Standalone promote-only call: specs must be explicit.
@@ -623,14 +583,12 @@ jobs:
                   except parsing.SpecError as error:
                       if not parsing.parse_spec_list(promote_specs):
                           raise SystemExit(
-                              "promote-specs is required for a promote-only call "
-                              "(upload-enabled is false); list the package/version specs to "
-                              "relabel, typically from a previous run's staged-specs output."
+                              "promote-specs is required for a promote-only call (upload-enabled is false)."
                           ) from error
                       raise SystemExit(str(error)) from error
               elif parsing.parse_spec_list(promote_specs):
-                  # Chained mode derives specs from the verified upload set; still validate any
-                  # explicit override so a smuggled owner is rejected before an irreversible run.
+                  # Chained mode derives specs from the verified set; still validate an explicit
+                  # override so a smuggled owner is rejected before an irreversible run.
                   try:
                       parsing.validate_spec_list(promote_specs, field="promote-specs")
                   except parsing.SpecError as error:
@@ -650,8 +608,7 @@ jobs:
               if confirm != owner:
                   raise SystemExit(
                       "maintain-confirm must equal publish-owner exactly to arm a destructive "
-                      "removal (the type-the-name-to-destroy guard). Set maintain-confirm to "
-                      f"{owner!r}, or run with publish-dry-run-enabled to rehearse."
+                      f"removal (type-the-name guard). Set it to {owner!r}, or use dry-run."
                   )
 
 
@@ -732,12 +689,9 @@ jobs:
 
           import re
 
-          # anaconda.org owners (users/orgs). The single blast-radius control: no spec ever
-          # carries an owner, so this is the only value that selects a namespace.
+          # Owner is the only value that selects an anaconda.org namespace; no spec carries one.
           _OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-          # Channel labels (upload --label / move --to-label). No slashes/spaces/metachars.
           _LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-          # conda package name and version segment grammars.
           _PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
           _VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!-]*$")
           _CONDA_EXTENSIONS = (".conda", ".tar.bz2")
@@ -753,9 +707,8 @@ jobs:
                   raise SpecError("publish-owner is required and must be non-empty.")
               if not _OWNER_RE.match(owner):
                   raise SpecError(
-                      "publish-owner must be an anaconda.org user or organization "
-                      "(letters, digits, '_', '-', leading alphanumeric); got "
-                      f"{owner!r}."
+                      "publish-owner must be an anaconda.org user/org (letters, digits, "
+                      f"'_', '-', leading alphanumeric); got {owner!r}."
                   )
               return owner
 
@@ -766,19 +719,14 @@ jobs:
                   raise SpecError(f"{field} is required and must be non-empty.")
               if not _LABEL_RE.match(label):
                   raise SpecError(
-                      f"{field} must be a safe channel label "
-                      "(letters, digits, '.', '_', '-', leading alphanumeric); got "
-                      f"{label!r}."
+                      f"{field} must be a safe channel label (letters, digits, '.', '_', '-', "
+                      f"leading alphanumeric); got {label!r}."
                   )
               return label
 
 
           def parse_spec(spec: str) -> tuple[str, ...]:
-              """Validate a caller spec (``package/version[/filename]``, never an owner).
-
-              A three-segment spec is accepted only when its third segment is a conda
-              filename; any other three-segment shape is rejected as a smuggled owner.
-              """
+              """Validate a caller spec (``package/version[/filename]``, never an owner)."""
               raw = spec.strip()
               if not raw:
                   raise SpecError("spec must be non-empty.")
@@ -798,8 +746,8 @@ jobs:
                   if not filename.endswith(_CONDA_EXTENSIONS):
                       raise SpecError(
                           f"spec {spec!r} must be package/version[/filename] without an owner "
-                          "segment; a three-segment spec is only valid when the third segment "
-                          "is a package filename ending in .conda or .tar.bz2."
+                          "segment; a three-segment spec's third segment must be a "
+                          ".conda/.tar.bz2 filename."
                       )
                   if not _conda_filename_re().match(filename):
                       raise SpecError(f"spec {spec!r} has an invalid filename segment {filename!r}.")
@@ -807,12 +755,10 @@ jobs:
 
 
           def parse_spec_list(raw: str) -> list[str]:
-              """Split a newline-separated spec block into non-empty, stripped specs."""
               return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
           def validate_spec_list(raw: str, *, field: str) -> list[str]:
-              """Validate every spec in a newline block; return the cleaned specs."""
               specs = parse_spec_list(raw)
               if not specs:
                   raise SpecError(f"{field} is required and must list at least one spec.")
@@ -825,7 +771,6 @@ jobs:
 
 
           def owner_qualified(owner: str, spec: str) -> str:
-              """Prepend the (already validated) owner to a (validated) spec."""
               return f"{owner}/{spec}"
 
 
@@ -834,11 +779,7 @@ jobs:
 
 
           def parse_conda_filename(filename: str) -> tuple[str, str]:
-              """Return ``(package, version)`` parsed from a conda package filename.
-
-              conda filenames are ``<name>-<version>-<build>.<ext>``; the name itself may
-              contain hyphens, so the version and build are split from the right.
-              """
+              """Return ``(package, version)`` from ``<name>-<version>-<build>.<ext>``."""
               if filename.endswith(".conda"):
                   stem = filename[: -len(".conda")]
               elif filename.endswith(".tar.bz2"):
@@ -854,88 +795,6 @@ jobs:
                       "(expected <name>-<version>-<build>)."
                   )
               return segments[0], segments[1]
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
-          cat > "$RUNNER_TEMP/devflows/anaconda-publish/arguments.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """upload-arguments hardening: a strict allowlist over ``anaconda upload`` flags."""
-
-          from __future__ import annotations
-
-          import shlex
-
-          from parsing import SpecError
-
-          # upload-arguments is guarded by a strict ALLOWLIST, never a denylist: argparse
-          # defeats denylists via attached short values (``-lmain`` -> ``-l main``), long-flag
-          # abbreviations (``--lab main`` -> ``--label main``), and bare positional file paths.
-          # Only cosmetic / package-metadata flags that cannot change the upload's namespace,
-          # identity, collision handling, or file selection are accepted. Everything DevFlows
-          # owns (owner, label, version, package, collision mode, token, site, paths) is
-          # rejected here and supplied from typed inputs and the anaconda-token secret.
-          _ALLOWED_UPLOAD_BOOL_FLAGS = frozenset(
-              {"--no-progress", "--no-register", "--register", "--keep-basename"}
-          )
-          _ALLOWED_UPLOAD_VALUE_FLAGS = frozenset({"--summary", "--description"})
-
-          # upload-existing-mode enum. 'fail' passes neither flag (anaconda-client errors).
-          EXISTING_MODES = ("fail", "skip", "overwrite")
-
-
-          def parse_extra_arguments(raw: str, *, field: str) -> list[str]:
-              """shlex-split upload-arguments and accept ONLY allowlisted metadata flags.
-
-              Every token must be exactly ``--flag`` (a known boolean) or ``--flag=value`` (a
-              known value flag with a non-empty value). Anything else is rejected.
-              """
-              try:
-                  args = shlex.split(raw)
-              except ValueError as error:
-                  raise SpecError(f"{field} could not be parsed as shell arguments: {error}.") from error
-              for arg in args:
-                  _validate_upload_argument(arg, field=field)
-              return args
-
-
-          def _allowed_upload_flags_display() -> str:
-              return ", ".join(sorted(_ALLOWED_UPLOAD_BOOL_FLAGS | _ALLOWED_UPLOAD_VALUE_FLAGS))
-
-
-          def _validate_upload_argument(arg: str, *, field: str) -> None:
-              if not arg.startswith("--"):
-                  raise SpecError(
-                      f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-                      f"({_allowed_upload_flags_display()}) are accepted, each written as --flag "
-                      "or --flag=value. Bare file paths, single-dash short options, and attached "
-                      "short values are rejected because the owner, label, version, collision "
-                      "mode, token, site, and file paths are owned by typed inputs and supplied "
-                      "by DevFlows, never through this input."
-                  )
-              flag, sep, value = arg.partition("=")
-              if flag in _ALLOWED_UPLOAD_BOOL_FLAGS:
-                  if sep:
-                      raise SpecError(f"{field}: {flag} is a boolean flag and takes no value; got {arg!r}.")
-                  return
-              if flag in _ALLOWED_UPLOAD_VALUE_FLAGS:
-                  if not sep or not value:
-                      raise SpecError(
-                          f"{field}: {flag} requires a value written as {flag}=VALUE; got {arg!r}."
-                      )
-                  return
-              raise SpecError(
-                  f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-                  f"({_allowed_upload_flags_display()}) are accepted. The owner, label, version, "
-                  "collision mode, token, site, and file paths are owned by typed inputs and "
-                  "supplied by DevFlows, never through this input."
-              )
-
-
-          def validate_existing_mode(mode: str) -> str:
-              mode = mode.strip()
-              if mode not in EXISTING_MODES:
-                  raise SpecError(
-                      f"upload-existing-mode must be one of {', '.join(EXISTING_MODES)}; got {mode!r}."
-                  )
-              return mode
           DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/manifest.py" <<'DEVFLOWS_SCRIPT_EOF'
@@ -1018,10 +877,8 @@ jobs:
           def verify_files_against_manifest(dist_path: Path, manifest: dict[str, object]) -> list[CondaFile]:
               """Bidirectionally verify the on-disk conda files against the manifest.
 
-              Every kind=conda manifest entry must have a file on disk whose recomputed
-              sha256 AND size match, and every conda file on disk must be a kind=conda
-              manifest entry. Any missing/unlisted/wrong-kind file or digest/size mismatch
-              fails loudly naming the offending file.
+              Every kind=conda entry must match a file on disk (sha256 AND size) and every
+              conda file on disk must be a kind=conda entry; any mismatch fails loudly.
               """
               if not dist_path.is_dir():
                   raise SpecError(f"distribution path {dist_path} does not exist or is not a directory.")
@@ -1095,84 +952,15 @@ jobs:
               return version
           DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
-          cat > "$RUNNER_TEMP/devflows/anaconda-publish/commands.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """anaconda-client argv builders (pure; every mutation is an explicit argv list)."""
-
-          from __future__ import annotations
-
-          # Pinned default anaconda-client version installed ephemerally (``uvx --from``) when
-          # publish-client-version is empty. Registered for Renovate via a custom pep440
-          # manager in renovate.json5 keyed on the inline comment below; a unit test asserts
-          # the manager regex still matches this constant so the pin stays auto-updated.
-          # renovate: datasource=pypi depName=anaconda-client
-          ANACONDA_CLIENT_VERSION = "1.13.0"
-
-          # upload-existing-mode enum mapped onto anaconda-client's mutually-exclusive group.
-          _EXISTING_MODE_FLAGS = {"fail": [], "skip": ["--skip-existing"], "overwrite": ["--force"]}
-
-
-          def anaconda_base(server_url: str) -> list[str]:
-              argv = ["anaconda"]
-              server_url = server_url.strip()
-              if server_url:
-                  argv += ["-s", server_url]
-              return argv
-
-
-          def build_upload_argv(
-              *,
-              server_url: str,
-              owner: str,
-              label: str,
-              mode: str,
-              extra_arguments: list[str],
-              file_path: str,
-          ) -> list[str]:
-              return (
-                  anaconda_base(server_url)
-                  + ["upload", "--user", owner, "--label", label]
-                  + list(_EXISTING_MODE_FLAGS[mode])
-                  + list(extra_arguments)
-                  + [file_path]
-              )
-
-
-          def build_move_argv(*, server_url: str, from_label: str, to_label: str, target: str) -> list[str]:
-              return anaconda_base(server_url) + [
-                  "move",
-                  "--from-label",
-                  from_label,
-                  "--to-label",
-                  to_label,
-                  target,
-              ]
-
-
-          def build_remove_argv(*, server_url: str, target: str) -> list[str]:
-              return anaconda_base(server_url) + ["remove", "--force", target]
-
-
-          def uvx_wrap(client_version: str, argv: list[str]) -> list[str]:
-              """Wrap an anaconda-client argv in an ephemeral, pinned ``uvx --from`` runner."""
-              return ["uvx", "--from", f"anaconda-client=={client_version}", *argv]
-
-
-          def resolve_client_version(override: str) -> str:
-              """The anaconda-client version to install: an explicit override or the pin."""
-              override = override.strip()
-              return override or ANACONDA_CLIENT_VERSION
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/verify-dist.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """Credential-free supply-chain guard and dry-run plan computation.
+          """Credential-free supply-chain guard and dry-run plan computation (verify job).
 
-          Runs in the ``verify`` job (and again, with EMIT_PLAN=false, as the tokenless
-          re-verification step inside the ``upload`` job). Recomputes the sha256 AND size of
-          every ``.conda`` file and matches them bidirectionally against the caller-supplied
-          dist manifest, then derives the staged/promote/remove plans and emits them as
-          outputs plus a job summary of the exact argv each credentialed job would run -- the
-          whole publish plan, produced without a token. Imports the materialized sibling
-          modules parsing / arguments / digest / commands (declared by ``# imports`` comments).
+          Recomputes the sha256 AND size of every ``.conda`` file and matches them
+          bidirectionally against the caller-supplied dist manifest, then derives the
+          staged / promote / remove plans and emits them as step outputs plus a job-summary
+          of the planned versions and specs -- the whole publish plan, without a token. The
+          exact anaconda-client argv is (re-)built by each credentialed job. Imports the
+          sibling modules parsing / digest / manifest.
           """
 
           from __future__ import annotations
@@ -1182,8 +970,6 @@ jobs:
           import secrets
           from pathlib import Path
 
-          import arguments
-          import commands
           import digest
           import parsing
 
@@ -1197,90 +983,32 @@ jobs:
 
           def _run() -> int:
               owner = os.environ["PUBLISH_OWNER"].strip()
-              server_url = os.environ.get("PUBLISH_SERVER_URL", "")
-              # The plan's argv reflect the version each credentialed job resolves the same
-              # way (override or the pin), so the dry-run summary is faithful.
-              client_version = commands.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
-              emit_plan = _bool("EMIT_PLAN", default=True)
-
               upload_enabled = _bool("UPLOAD_ENABLED")
               promote_enabled = _bool("PROMOTE_ENABLED")
               maintain_enabled = _bool("MAINTAIN_ENABLED")
 
               version = ""
-              verified: list[digest.CondaFile] = []
+              staged_specs: list[str] = []
+              uploaded_files: list[str] = []
               if upload_enabled:
-                  verified = _verify(owner, server_url)
+                  verified = _verify()
                   version = digest.resolve_version(
                       verified, expected=os.environ.get("PUBLISH_EXPECTED_VERSION", "")
                   )
-
-              if not emit_plan:
-                  # Re-verification pass inside the credentialed job: digests and version are
-                  # checked above; there is nothing to emit or plan.
-                  return 0
-
-              staged_specs: list[str] = []
-              uploaded_files: list[str] = []
-              upload_plan: list[list[str]] = []
-              if upload_enabled:
                   uploaded_files = [item.name for item in verified]
                   staged_specs = sorted(
                       {parsing.owner_qualified(owner, f"{item.package}/{item.version}") for item in verified}
                   )
-                  mode = arguments.validate_existing_mode(os.environ.get("UPLOAD_EXISTING_MODE", "fail"))
-                  extra = arguments.parse_extra_arguments(
-                      os.environ.get("UPLOAD_ARGUMENTS", ""), field="upload-arguments"
-                  )
-                  upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-                  upload_plan = [
-                      commands.uvx_wrap(
-                          client_version,
-                          commands.build_upload_argv(
-                              server_url=server_url,
-                              owner=owner,
-                              label=upload_label,
-                              mode=mode,
-                              extra_arguments=extra,
-                              file_path=str(item.path),
-                          ),
-                      )
-                      for item in verified
-                  ]
 
-              promoted_specs: list[str] = []
-              promote_plan: list[list[str]] = []
-              if promote_enabled:
-                  promoted_specs = _promote_targets(owner, staged_specs)
-                  upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-                  promote_label = parsing.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
-                  promote_plan = [
-                      commands.uvx_wrap(
-                          client_version,
-                          commands.build_move_argv(
-                              server_url=server_url,
-                              from_label=upload_label,
-                              to_label=promote_label,
-                              target=target,
-                          ),
-                      )
-                      for target in promoted_specs
-                  ]
+              promoted_specs = _promote_targets(owner, staged_specs) if promote_enabled else []
 
               removed_specs: list[str] = []
-              remove_plan: list[list[str]] = []
               if maintain_enabled:
                   removed_specs = [
                       parsing.owner_qualified(owner, spec)
                       for spec in parsing.validate_spec_list(
                           os.environ.get("MAINTAIN_REMOVE_SPECS", ""), field="maintain-remove-specs"
                       )
-                  ]
-                  remove_plan = [
-                      commands.uvx_wrap(
-                          client_version, commands.build_remove_argv(server_url=server_url, target=target)
-                      )
-                      for target in removed_specs
                   ]
 
               _write_outputs(
@@ -1294,14 +1022,14 @@ jobs:
               )
               _write_summary(
                   version=version,
-                  upload_plan=upload_plan,
-                  promote_plan=promote_plan,
-                  remove_plan=remove_plan,
+                  staged_specs=staged_specs,
+                  promoted_specs=promoted_specs,
+                  removed_specs=removed_specs,
               )
               return 0
 
 
-          def _verify(owner: str, server_url: str) -> list[digest.CondaFile]:
+          def _verify() -> list[digest.CondaFile]:
               dist_path = Path(os.environ["PUBLISH_DIST_PATH"]).resolve()
               workspace = Path(os.environ.get("GITHUB_WORKSPACE", ".")).resolve()
               if workspace != dist_path and workspace not in dist_path.parents:
@@ -1320,12 +1048,10 @@ jobs:
 
 
           def _promote_targets(owner: str, staged_specs: list[str]) -> list[str]:
-              explicit = parsing.parse_spec_list(os.environ.get("PROMOTE_SPECS", ""))
-              if explicit:
+              raw = os.environ.get("PROMOTE_SPECS", "")
+              if parsing.parse_spec_list(raw):
                   try:
-                      validated = parsing.validate_spec_list(
-                          os.environ.get("PROMOTE_SPECS", ""), field="promote-specs"
-                      )
+                      validated = parsing.validate_spec_list(raw, field="promote-specs")
                   except parsing.SpecError as error:
                       raise SystemExit(str(error)) from error
                   return [parsing.owner_qualified(owner, spec) for spec in validated]
@@ -1352,9 +1078,9 @@ jobs:
           def _write_summary(
               *,
               version: str,
-              upload_plan: list[list[str]],
-              promote_plan: list[list[str]],
-              remove_plan: list[list[str]],
+              staged_specs: list[str],
+              promoted_specs: list[str],
+              removed_specs: list[str],
           ) -> None:
               summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
               if not summary_path:
@@ -1362,27 +1088,24 @@ jobs:
               lines = ["## anaconda-publish plan", ""]
               if version:
                   lines += [f"Package version: `{version}`", ""]
-              for title, plan in (
-                  ("Upload", upload_plan),
-                  ("Promote", promote_plan),
-                  ("Remove", remove_plan),
+              for title, specs in (
+                  ("Upload (stage)", staged_specs),
+                  ("Promote", promoted_specs),
+                  ("Remove", removed_specs),
               ):
-                  if not plan:
+                  if not specs:
                       continue
-                  lines += [f"### {title}", "", "```"]
-                  lines += [" ".join(argv) for argv in plan]
-                  lines += ["```", ""]
+                  lines += [f"### {title}", ""]
+                  lines += [f"- `{spec}`" for spec in specs]
+                  lines += [""]
               if len(lines) == 2:
                   lines += ["No operations planned.", ""]
               with Path(summary_path).open("a", encoding="utf-8") as handle:
                   handle.write("\n".join(lines) + "\n")
 
 
-          def _bool(name: str, *, default: bool = False) -> bool:
-              raw = os.environ.get(name, "").strip().lower()
-              if not raw:
-                  return default
-              return raw in {"1", "true", "yes", "on"}
+          def _bool(name: str) -> bool:
+              return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
           if __name__ == "__main__":
@@ -1395,26 +1118,18 @@ jobs:
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           PUBLISH_OWNER: ${{ inputs.publish-owner }}
-          PUBLISH_SERVER_URL: ${{ inputs.publish-server-url }}
-          PUBLISH_CLIENT_VERSION: ${{ inputs.publish-client-version }}
           PUBLISH_DIST_PATH: ${{ inputs.publish-dist-path }}
           PUBLISH_DIST_MANIFEST: ${{ inputs.publish-dist-manifest }}
           PUBLISH_EXPECTED_VERSION: ${{ inputs.publish-expected-version }}
           UPLOAD_ENABLED: ${{ inputs.upload-enabled }}
-          UPLOAD_LABEL: ${{ inputs.upload-label }}
-          UPLOAD_EXISTING_MODE: ${{ inputs.upload-existing-mode }}
-          UPLOAD_ARGUMENTS: ${{ inputs.upload-arguments }}
           PROMOTE_ENABLED: ${{ inputs.promote-enabled }}
-          PROMOTE_LABEL: ${{ inputs.promote-label }}
           PROMOTE_SPECS: ${{ inputs.promote-specs }}
           MAINTAIN_ENABLED: ${{ inputs.maintain-enabled }}
           MAINTAIN_REMOVE_SPECS: ${{ inputs.maintain-remove-specs }}
         run: |
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/arguments.py
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/digest.py
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/verify-dist.py"
   upload:
     name: Upload to anaconda.org
@@ -1459,12 +1174,9 @@ jobs:
 
           import re
 
-          # anaconda.org owners (users/orgs). The single blast-radius control: no spec ever
-          # carries an owner, so this is the only value that selects a namespace.
+          # Owner is the only value that selects an anaconda.org namespace; no spec carries one.
           _OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-          # Channel labels (upload --label / move --to-label). No slashes/spaces/metachars.
           _LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-          # conda package name and version segment grammars.
           _PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
           _VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!-]*$")
           _CONDA_EXTENSIONS = (".conda", ".tar.bz2")
@@ -1480,9 +1192,8 @@ jobs:
                   raise SpecError("publish-owner is required and must be non-empty.")
               if not _OWNER_RE.match(owner):
                   raise SpecError(
-                      "publish-owner must be an anaconda.org user or organization "
-                      "(letters, digits, '_', '-', leading alphanumeric); got "
-                      f"{owner!r}."
+                      "publish-owner must be an anaconda.org user/org (letters, digits, "
+                      f"'_', '-', leading alphanumeric); got {owner!r}."
                   )
               return owner
 
@@ -1493,19 +1204,14 @@ jobs:
                   raise SpecError(f"{field} is required and must be non-empty.")
               if not _LABEL_RE.match(label):
                   raise SpecError(
-                      f"{field} must be a safe channel label "
-                      "(letters, digits, '.', '_', '-', leading alphanumeric); got "
-                      f"{label!r}."
+                      f"{field} must be a safe channel label (letters, digits, '.', '_', '-', "
+                      f"leading alphanumeric); got {label!r}."
                   )
               return label
 
 
           def parse_spec(spec: str) -> tuple[str, ...]:
-              """Validate a caller spec (``package/version[/filename]``, never an owner).
-
-              A three-segment spec is accepted only when its third segment is a conda
-              filename; any other three-segment shape is rejected as a smuggled owner.
-              """
+              """Validate a caller spec (``package/version[/filename]``, never an owner)."""
               raw = spec.strip()
               if not raw:
                   raise SpecError("spec must be non-empty.")
@@ -1525,8 +1231,8 @@ jobs:
                   if not filename.endswith(_CONDA_EXTENSIONS):
                       raise SpecError(
                           f"spec {spec!r} must be package/version[/filename] without an owner "
-                          "segment; a three-segment spec is only valid when the third segment "
-                          "is a package filename ending in .conda or .tar.bz2."
+                          "segment; a three-segment spec's third segment must be a "
+                          ".conda/.tar.bz2 filename."
                       )
                   if not _conda_filename_re().match(filename):
                       raise SpecError(f"spec {spec!r} has an invalid filename segment {filename!r}.")
@@ -1534,12 +1240,10 @@ jobs:
 
 
           def parse_spec_list(raw: str) -> list[str]:
-              """Split a newline-separated spec block into non-empty, stripped specs."""
               return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
           def validate_spec_list(raw: str, *, field: str) -> list[str]:
-              """Validate every spec in a newline block; return the cleaned specs."""
               specs = parse_spec_list(raw)
               if not specs:
                   raise SpecError(f"{field} is required and must list at least one spec.")
@@ -1552,7 +1256,6 @@ jobs:
 
 
           def owner_qualified(owner: str, spec: str) -> str:
-              """Prepend the (already validated) owner to a (validated) spec."""
               return f"{owner}/{spec}"
 
 
@@ -1561,11 +1264,7 @@ jobs:
 
 
           def parse_conda_filename(filename: str) -> tuple[str, str]:
-              """Return ``(package, version)`` parsed from a conda package filename.
-
-              conda filenames are ``<name>-<version>-<build>.<ext>``; the name itself may
-              contain hyphens, so the version and build are split from the right.
-              """
+              """Return ``(package, version)`` from ``<name>-<version>-<build>.<ext>``."""
               if filename.endswith(".conda"):
                   stem = filename[: -len(".conda")]
               elif filename.endswith(".tar.bz2"):
@@ -1581,88 +1280,6 @@ jobs:
                       "(expected <name>-<version>-<build>)."
                   )
               return segments[0], segments[1]
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
-          cat > "$RUNNER_TEMP/devflows/anaconda-publish/arguments.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """upload-arguments hardening: a strict allowlist over ``anaconda upload`` flags."""
-
-          from __future__ import annotations
-
-          import shlex
-
-          from parsing import SpecError
-
-          # upload-arguments is guarded by a strict ALLOWLIST, never a denylist: argparse
-          # defeats denylists via attached short values (``-lmain`` -> ``-l main``), long-flag
-          # abbreviations (``--lab main`` -> ``--label main``), and bare positional file paths.
-          # Only cosmetic / package-metadata flags that cannot change the upload's namespace,
-          # identity, collision handling, or file selection are accepted. Everything DevFlows
-          # owns (owner, label, version, package, collision mode, token, site, paths) is
-          # rejected here and supplied from typed inputs and the anaconda-token secret.
-          _ALLOWED_UPLOAD_BOOL_FLAGS = frozenset(
-              {"--no-progress", "--no-register", "--register", "--keep-basename"}
-          )
-          _ALLOWED_UPLOAD_VALUE_FLAGS = frozenset({"--summary", "--description"})
-
-          # upload-existing-mode enum. 'fail' passes neither flag (anaconda-client errors).
-          EXISTING_MODES = ("fail", "skip", "overwrite")
-
-
-          def parse_extra_arguments(raw: str, *, field: str) -> list[str]:
-              """shlex-split upload-arguments and accept ONLY allowlisted metadata flags.
-
-              Every token must be exactly ``--flag`` (a known boolean) or ``--flag=value`` (a
-              known value flag with a non-empty value). Anything else is rejected.
-              """
-              try:
-                  args = shlex.split(raw)
-              except ValueError as error:
-                  raise SpecError(f"{field} could not be parsed as shell arguments: {error}.") from error
-              for arg in args:
-                  _validate_upload_argument(arg, field=field)
-              return args
-
-
-          def _allowed_upload_flags_display() -> str:
-              return ", ".join(sorted(_ALLOWED_UPLOAD_BOOL_FLAGS | _ALLOWED_UPLOAD_VALUE_FLAGS))
-
-
-          def _validate_upload_argument(arg: str, *, field: str) -> None:
-              if not arg.startswith("--"):
-                  raise SpecError(
-                      f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-                      f"({_allowed_upload_flags_display()}) are accepted, each written as --flag "
-                      "or --flag=value. Bare file paths, single-dash short options, and attached "
-                      "short values are rejected because the owner, label, version, collision "
-                      "mode, token, site, and file paths are owned by typed inputs and supplied "
-                      "by DevFlows, never through this input."
-                  )
-              flag, sep, value = arg.partition("=")
-              if flag in _ALLOWED_UPLOAD_BOOL_FLAGS:
-                  if sep:
-                      raise SpecError(f"{field}: {flag} is a boolean flag and takes no value; got {arg!r}.")
-                  return
-              if flag in _ALLOWED_UPLOAD_VALUE_FLAGS:
-                  if not sep or not value:
-                      raise SpecError(
-                          f"{field}: {flag} requires a value written as {flag}=VALUE; got {arg!r}."
-                      )
-                  return
-              raise SpecError(
-                  f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-                  f"({_allowed_upload_flags_display()}) are accepted. The owner, label, version, "
-                  "collision mode, token, site, and file paths are owned by typed inputs and "
-                  "supplied by DevFlows, never through this input."
-              )
-
-
-          def validate_existing_mode(mode: str) -> str:
-              mode = mode.strip()
-              if mode not in EXISTING_MODES:
-                  raise SpecError(
-                      f"upload-existing-mode must be one of {', '.join(EXISTING_MODES)}; got {mode!r}."
-                  )
-              return mode
           DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/manifest.py" <<'DEVFLOWS_SCRIPT_EOF'
@@ -1745,10 +1362,8 @@ jobs:
           def verify_files_against_manifest(dist_path: Path, manifest: dict[str, object]) -> list[CondaFile]:
               """Bidirectionally verify the on-disk conda files against the manifest.
 
-              Every kind=conda manifest entry must have a file on disk whose recomputed
-              sha256 AND size match, and every conda file on disk must be a kind=conda
-              manifest entry. Any missing/unlisted/wrong-kind file or digest/size mismatch
-              fails loudly naming the offending file.
+              Every kind=conda entry must match a file on disk (sha256 AND size) and every
+              conda file on disk must be a kind=conda entry; any mismatch fails loudly.
               """
               if not dist_path.is_dir():
                   raise SpecError(f"distribution path {dist_path} does not exist or is not a directory.")
@@ -1822,19 +1437,162 @@ jobs:
               return version
           DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
+          cat > "$RUNNER_TEMP/devflows/anaconda-publish/reverify.py" <<'DEVFLOWS_SCRIPT_EOF'
+          """Tokenless TOCTOU re-verify immediately before the credentialed upload step.
+
+          Re-hashes the files-to-upload against the caller-supplied dist manifest (the same
+          bidirectional sha256/size check the verify job ran) so an artifact swapped between
+          the verify and upload downloads cannot ride the credentialed upload. Runs before
+          the single ANACONDA_API_TOKEN-bearing step. Imports only digest (plus its
+          manifest/parsing helpers) -- no plan/argv machinery.
+          """
+
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          import digest
+          import parsing
+
+
+          def main() -> int:
+              dist_path = Path(os.environ["PUBLISH_DIST_PATH"]).resolve()
+              try:
+                  manifest = json.loads(os.environ["PUBLISH_DIST_MANIFEST"])
+              except json.JSONDecodeError as error:
+                  raise SystemExit(f"publish-dist-manifest is not valid JSON: {error}.") from error
+              try:
+                  verified = digest.verify_files_against_manifest(dist_path, manifest)
+                  digest.resolve_version(verified, expected=os.environ.get("PUBLISH_EXPECTED_VERSION", ""))
+              except parsing.SpecError as error:
+                  raise SystemExit(f"re-verification failed before upload: {error}") from error
+              print(f"re-verified {len(verified)} file(s) against the dist manifest before upload.")
+              return 0
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          DEVFLOWS_SCRIPT_EOF
+          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
+          cat > "$RUNNER_TEMP/devflows/anaconda-publish/preflight-token.py" <<'DEVFLOWS_SCRIPT_EOF'
+          """Tokenless per-job credential preflight.
+
+          Each credentialed job asserts the publishing credential is present before any CLI
+          step (validate cannot check secrets). Tokenless by design: it receives only the
+          boolean ANACONDA_TOKEN_PRESENT, never the token value.
+          """
+
+          from __future__ import annotations
+
+          import os
+
+
+          def _bool(name: str) -> bool:
+              return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+          def main() -> int:
+              if _bool("PUBLISH_DRY_RUN_ENABLED"):
+                  return 0
+              if not _bool("ANACONDA_TOKEN_PRESENT"):
+                  raise SystemExit(
+                      "The anaconda-token secret is empty. anaconda.org has no OIDC/trusted "
+                      "publishing, so a real publish needs a token. Store it as an environment "
+                      "secret on the bound environment and pass it with `secrets: inherit`, or "
+                      "run with publish-dry-run-enabled to rehearse without a credential."
+                  )
+              return 0
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          DEVFLOWS_SCRIPT_EOF
+          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
+          cat > "$RUNNER_TEMP/devflows/anaconda-publish/arguments.py" <<'DEVFLOWS_SCRIPT_EOF'
+          """upload-arguments hardening: a strict allowlist over ``anaconda upload`` flags."""
+
+          from __future__ import annotations
+
+          import shlex
+
+          from parsing import SpecError
+
+          # upload-arguments is guarded by a strict ALLOWLIST, never a denylist: argparse
+          # defeats denylists via attached short values, long-flag abbreviations, and bare
+          # positionals. Only cosmetic/metadata flags that cannot change the upload's
+          # namespace, identity, collision handling, or file selection are accepted.
+          _ALLOWED_UPLOAD_BOOL_FLAGS = frozenset(
+              {"--no-progress", "--no-register", "--register", "--keep-basename"}
+          )
+          _ALLOWED_UPLOAD_VALUE_FLAGS = frozenset({"--summary", "--description"})
+
+          # upload-existing-mode enum. 'fail' passes neither flag (anaconda-client errors).
+          EXISTING_MODES = ("fail", "skip", "overwrite")
+
+
+          def parse_extra_arguments(raw: str, *, field: str) -> list[str]:
+              """shlex-split upload-arguments and accept ONLY allowlisted metadata flags."""
+              try:
+                  args = shlex.split(raw)
+              except ValueError as error:
+                  raise SpecError(f"{field} could not be parsed as shell arguments: {error}.") from error
+              for arg in args:
+                  _validate_upload_argument(arg, field=field)
+              return args
+
+
+          def _allowed_upload_flags_display() -> str:
+              return ", ".join(sorted(_ALLOWED_UPLOAD_BOOL_FLAGS | _ALLOWED_UPLOAD_VALUE_FLAGS))
+
+
+          def _reject(arg: str, *, field: str) -> None:
+              raise SpecError(
+                  f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
+                  f"({_allowed_upload_flags_display()}) are accepted (--flag or --flag=value). "
+                  "The owner, label, version, collision mode, token, site, and file paths are "
+                  "owned by typed inputs, never this input."
+              )
+
+
+          def _validate_upload_argument(arg: str, *, field: str) -> None:
+              if not arg.startswith("--"):
+                  _reject(arg, field=field)
+              flag, sep, value = arg.partition("=")
+              if flag in _ALLOWED_UPLOAD_BOOL_FLAGS:
+                  if sep:
+                      raise SpecError(f"{field}: {flag} is a boolean flag and takes no value; got {arg!r}.")
+                  return
+              if flag in _ALLOWED_UPLOAD_VALUE_FLAGS:
+                  if not sep or not value:
+                      raise SpecError(
+                          f"{field}: {flag} requires a value written as {flag}=VALUE; got {arg!r}."
+                      )
+                  return
+              _reject(arg, field=field)
+
+
+          def validate_existing_mode(mode: str) -> str:
+              mode = mode.strip()
+              if mode not in EXISTING_MODES:
+                  raise SpecError(
+                      f"upload-existing-mode must be one of {', '.join(EXISTING_MODES)}; got {mode!r}."
+                  )
+              return mode
+          DEVFLOWS_SCRIPT_EOF
+          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/commands.py" <<'DEVFLOWS_SCRIPT_EOF'
           """anaconda-client argv builders (pure; every mutation is an explicit argv list)."""
 
           from __future__ import annotations
 
-          # Pinned default anaconda-client version installed ephemerally (``uvx --from``) when
-          # publish-client-version is empty. Registered for Renovate via a custom pep440
-          # manager in renovate.json5 keyed on the inline comment below; a unit test asserts
-          # the manager regex still matches this constant so the pin stays auto-updated.
+          # Pinned default anaconda-client, installed ephemerally via ``uvx --from`` when
+          # publish-client-version is empty. Kept current by Renovate (custom pep440 manager
+          # in renovate.json5); a unit test asserts the manager regex still matches this line.
           # renovate: datasource=pypi depName=anaconda-client
           ANACONDA_CLIENT_VERSION = "1.13.0"
 
-          # upload-existing-mode enum mapped onto anaconda-client's mutually-exclusive group.
           _EXISTING_MODE_FLAGS = {"fail": [], "skip": ["--skip-existing"], "overwrite": ["--force"]}
 
 
@@ -1880,288 +1638,21 @@ jobs:
 
 
           def uvx_wrap(client_version: str, argv: list[str]) -> list[str]:
-              """Wrap an anaconda-client argv in an ephemeral, pinned ``uvx --from`` runner."""
               return ["uvx", "--from", f"anaconda-client=={client_version}", *argv]
 
 
           def resolve_client_version(override: str) -> str:
-              """The anaconda-client version to install: an explicit override or the pin."""
               override = override.strip()
               return override or ANACONDA_CLIENT_VERSION
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
-          cat > "$RUNNER_TEMP/devflows/anaconda-publish/verify-dist.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """Credential-free supply-chain guard and dry-run plan computation.
-
-          Runs in the ``verify`` job (and again, with EMIT_PLAN=false, as the tokenless
-          re-verification step inside the ``upload`` job). Recomputes the sha256 AND size of
-          every ``.conda`` file and matches them bidirectionally against the caller-supplied
-          dist manifest, then derives the staged/promote/remove plans and emits them as
-          outputs plus a job summary of the exact argv each credentialed job would run -- the
-          whole publish plan, produced without a token. Imports the materialized sibling
-          modules parsing / arguments / digest / commands (declared by ``# imports`` comments).
-          """
-
-          from __future__ import annotations
-
-          import json
-          import os
-          import secrets
-          from pathlib import Path
-
-          import arguments
-          import commands
-          import digest
-          import parsing
-
-
-          def main() -> int:
-              try:
-                  return _run()
-              except parsing.SpecError as error:
-                  raise SystemExit(str(error)) from error
-
-
-          def _run() -> int:
-              owner = os.environ["PUBLISH_OWNER"].strip()
-              server_url = os.environ.get("PUBLISH_SERVER_URL", "")
-              # The plan's argv reflect the version each credentialed job resolves the same
-              # way (override or the pin), so the dry-run summary is faithful.
-              client_version = commands.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
-              emit_plan = _bool("EMIT_PLAN", default=True)
-
-              upload_enabled = _bool("UPLOAD_ENABLED")
-              promote_enabled = _bool("PROMOTE_ENABLED")
-              maintain_enabled = _bool("MAINTAIN_ENABLED")
-
-              version = ""
-              verified: list[digest.CondaFile] = []
-              if upload_enabled:
-                  verified = _verify(owner, server_url)
-                  version = digest.resolve_version(
-                      verified, expected=os.environ.get("PUBLISH_EXPECTED_VERSION", "")
-                  )
-
-              if not emit_plan:
-                  # Re-verification pass inside the credentialed job: digests and version are
-                  # checked above; there is nothing to emit or plan.
-                  return 0
-
-              staged_specs: list[str] = []
-              uploaded_files: list[str] = []
-              upload_plan: list[list[str]] = []
-              if upload_enabled:
-                  uploaded_files = [item.name for item in verified]
-                  staged_specs = sorted(
-                      {parsing.owner_qualified(owner, f"{item.package}/{item.version}") for item in verified}
-                  )
-                  mode = arguments.validate_existing_mode(os.environ.get("UPLOAD_EXISTING_MODE", "fail"))
-                  extra = arguments.parse_extra_arguments(
-                      os.environ.get("UPLOAD_ARGUMENTS", ""), field="upload-arguments"
-                  )
-                  upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-                  upload_plan = [
-                      commands.uvx_wrap(
-                          client_version,
-                          commands.build_upload_argv(
-                              server_url=server_url,
-                              owner=owner,
-                              label=upload_label,
-                              mode=mode,
-                              extra_arguments=extra,
-                              file_path=str(item.path),
-                          ),
-                      )
-                      for item in verified
-                  ]
-
-              promoted_specs: list[str] = []
-              promote_plan: list[list[str]] = []
-              if promote_enabled:
-                  promoted_specs = _promote_targets(owner, staged_specs)
-                  upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-                  promote_label = parsing.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
-                  promote_plan = [
-                      commands.uvx_wrap(
-                          client_version,
-                          commands.build_move_argv(
-                              server_url=server_url,
-                              from_label=upload_label,
-                              to_label=promote_label,
-                              target=target,
-                          ),
-                      )
-                      for target in promoted_specs
-                  ]
-
-              removed_specs: list[str] = []
-              remove_plan: list[list[str]] = []
-              if maintain_enabled:
-                  removed_specs = [
-                      parsing.owner_qualified(owner, spec)
-                      for spec in parsing.validate_spec_list(
-                          os.environ.get("MAINTAIN_REMOVE_SPECS", ""), field="maintain-remove-specs"
-                      )
-                  ]
-                  remove_plan = [
-                      commands.uvx_wrap(
-                          client_version, commands.build_remove_argv(server_url=server_url, target=target)
-                      )
-                      for target in removed_specs
-                  ]
-
-              _write_outputs(
-                  {
-                      "package-version": version,
-                      "staged-specs": "\n".join(staged_specs),
-                      "uploaded-files": "\n".join(uploaded_files),
-                      "promoted-specs": "\n".join(promoted_specs),
-                      "removed-specs": "\n".join(removed_specs),
-                  }
-              )
-              _write_summary(
-                  version=version,
-                  upload_plan=upload_plan,
-                  promote_plan=promote_plan,
-                  remove_plan=remove_plan,
-              )
-              return 0
-
-
-          def _verify(owner: str, server_url: str) -> list[digest.CondaFile]:
-              dist_path = Path(os.environ["PUBLISH_DIST_PATH"]).resolve()
-              workspace = Path(os.environ.get("GITHUB_WORKSPACE", ".")).resolve()
-              if workspace != dist_path and workspace not in dist_path.parents:
-                  raise SystemExit(f"publish-dist-path {dist_path} must stay inside the workspace.")
-              manifest_raw = os.environ.get("PUBLISH_DIST_MANIFEST", "").strip()
-              try:
-                  manifest = json.loads(manifest_raw)
-              except json.JSONDecodeError as error:
-                  raise SystemExit(f"publish-dist-manifest is not valid JSON: {error}.") from error
-              if not isinstance(manifest, dict):
-                  raise SystemExit("publish-dist-manifest must be a JSON object.")
-              try:
-                  return digest.verify_files_against_manifest(dist_path, manifest)
-              except parsing.SpecError as error:
-                  raise SystemExit(str(error)) from error
-
-
-          def _promote_targets(owner: str, staged_specs: list[str]) -> list[str]:
-              explicit = parsing.parse_spec_list(os.environ.get("PROMOTE_SPECS", ""))
-              if explicit:
-                  try:
-                      validated = parsing.validate_spec_list(
-                          os.environ.get("PROMOTE_SPECS", ""), field="promote-specs"
-                      )
-                  except parsing.SpecError as error:
-                      raise SystemExit(str(error)) from error
-                  return [parsing.owner_qualified(owner, spec) for spec in validated]
-              # Chained mode: promote exactly the staging specs derived from the verified set.
-              return list(staged_specs)
-
-
-          def _write_outputs(outputs: dict[str, str]) -> None:
-              github_output = os.environ.get("GITHUB_OUTPUT")
-              if not github_output:
-                  raise SystemExit("GITHUB_OUTPUT is not set.")
-              with Path(github_output).open("a", encoding="utf-8") as handle:
-                  for name, value in outputs.items():
-                      handle.write(_render_output(name, value))
-
-
-          def _render_output(name: str, value: str) -> str:
-              delimiter = f"ghadelim_{secrets.token_hex(16)}"
-              if delimiter in value:  # pragma: no cover - astronomically unlikely
-                  raise SystemExit("output delimiter collision; retry.")
-              return f"{name}<<{delimiter}\n{value}\n{delimiter}\n"
-
-
-          def _write_summary(
-              *,
-              version: str,
-              upload_plan: list[list[str]],
-              promote_plan: list[list[str]],
-              remove_plan: list[list[str]],
-          ) -> None:
-              summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-              if not summary_path:
-                  return
-              lines = ["## anaconda-publish plan", ""]
-              if version:
-                  lines += [f"Package version: `{version}`", ""]
-              for title, plan in (
-                  ("Upload", upload_plan),
-                  ("Promote", promote_plan),
-                  ("Remove", remove_plan),
-              ):
-                  if not plan:
-                      continue
-                  lines += [f"### {title}", "", "```"]
-                  lines += [" ".join(argv) for argv in plan]
-                  lines += ["```", ""]
-              if len(lines) == 2:
-                  lines += ["No operations planned.", ""]
-              with Path(summary_path).open("a", encoding="utf-8") as handle:
-                  handle.write("\n".join(lines) + "\n")
-
-
-          def _bool(name: str, *, default: bool = False) -> bool:
-              raw = os.environ.get(name, "").strip().lower()
-              if not raw:
-                  return default
-              return raw in {"1", "true", "yes", "on"}
-
-
-          if __name__ == "__main__":
-              raise SystemExit(main())
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
-          cat > "$RUNNER_TEMP/devflows/anaconda-publish/preflight-token.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """Tokenless per-job credential preflight.
-
-          validate cannot check secrets (its env maps only inputs.*), so each credentialed
-          job asserts the publishing credential is present BEFORE it reaches any CLI step.
-          This step is deliberately tokenless: it receives only a boolean
-          ``ANACONDA_TOKEN_PRESENT`` (``${{ secrets.anaconda-token != '' }}``), never the
-          token value, so the token stays confined to the single CLI step. The environment-
-          bound jobs are already gated to skip in dry-run, so PUBLISH_DRY_RUN_ENABLED is a
-          belt-and-suspenders guard.
-          """
-
-          from __future__ import annotations
-
-          import os
-
-
-          def _bool(name: str) -> bool:
-              return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-          def main() -> int:
-              if _bool("PUBLISH_DRY_RUN_ENABLED"):
-                  return 0
-              if not _bool("ANACONDA_TOKEN_PRESENT"):
-                  raise SystemExit(
-                      "The anaconda-token secret is empty. anaconda.org has no OIDC/trusted "
-                      "publishing, so a real publish needs a token. Store it as an environment "
-                      "secret on the bound environment and pass it with `secrets: inherit`, or "
-                      "run with publish-dry-run-enabled to rehearse without a credential."
-                  )
-              return 0
-
-
-          if __name__ == "__main__":
-              raise SystemExit(main())
           DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/upload.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Stage verified conda packages onto anaconda.org under the staging label.
 
-          The ONLY step in the upload job that carries ANACONDA_API_TOKEN. It re-verifies
-          every file against the caller-supplied manifest one more time (a TOCTOU guard),
-          then runs ``anaconda upload`` for each verified file via an argv built by the
-          materialized sibling modules (env + shlex, never a shell string). anaconda-client
-          reads the token from the inherited ANACONDA_API_TOKEN env, never a process arg.
+          The ONLY step in the upload job that carries ANACONDA_API_TOKEN. Re-verifies every
+          file against the caller manifest (TOCTOU guard), then runs ``anaconda upload`` per
+          file via an argv built by the sibling modules (env + shlex, never a shell string);
+          anaconda-client reads the token from the inherited env, never a process arg.
           """
 
           from __future__ import annotations
@@ -2234,21 +1725,14 @@ jobs:
         shell: bash
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
-          EMIT_PLAN: 'false'
-          PUBLISH_OWNER: ${{ inputs.publish-owner }}
-          PUBLISH_SERVER_URL: ${{ inputs.publish-server-url }}
-          PUBLISH_CLIENT_VERSION: ${{ inputs.publish-client-version }}
           PUBLISH_DIST_PATH: ${{ inputs.publish-dist-path }}
           PUBLISH_DIST_MANIFEST: ${{ inputs.publish-dist-manifest }}
           PUBLISH_EXPECTED_VERSION: ${{ inputs.publish-expected-version }}
-          UPLOAD_ENABLED: ${{ inputs.upload-enabled }}
         run: |
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/arguments.py
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/digest.py
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
-          python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/verify-dist.py"
+          python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/reverify.py"
       - name: Set up uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
         with:
@@ -2306,13 +1790,9 @@ jobs:
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/preflight-token.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Tokenless per-job credential preflight.
 
-          validate cannot check secrets (its env maps only inputs.*), so each credentialed
-          job asserts the publishing credential is present BEFORE it reaches any CLI step.
-          This step is deliberately tokenless: it receives only a boolean
-          ``ANACONDA_TOKEN_PRESENT`` (``${{ secrets.anaconda-token != '' }}``), never the
-          token value, so the token stays confined to the single CLI step. The environment-
-          bound jobs are already gated to skip in dry-run, so PUBLISH_DRY_RUN_ENABLED is a
-          belt-and-suspenders guard.
+          Each credentialed job asserts the publishing credential is present before any CLI
+          step (validate cannot check secrets). Tokenless by design: it receives only the
+          boolean ANACONDA_TOKEN_PRESENT, never the token value.
           """
 
           from __future__ import annotations
@@ -2341,150 +1821,17 @@ jobs:
               raise SystemExit(main())
           DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
-          cat > "$RUNNER_TEMP/devflows/anaconda-publish/parsing.py" <<'DEVFLOWS_SCRIPT_EOF'
-          """Charset, spec, and filename parsing for anaconda-publish (no I/O, no argv)."""
-
-          from __future__ import annotations
-
-          import re
-
-          # anaconda.org owners (users/orgs). The single blast-radius control: no spec ever
-          # carries an owner, so this is the only value that selects a namespace.
-          _OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-          # Channel labels (upload --label / move --to-label). No slashes/spaces/metachars.
-          _LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-          # conda package name and version segment grammars.
-          _PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-          _VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!-]*$")
-          _CONDA_EXTENSIONS = (".conda", ".tar.bz2")
-
-
-          class SpecError(ValueError):
-              """A caller-supplied spec, owner, label, or argument failed validation."""
-
-
-          def validate_owner(owner: str) -> str:
-              owner = owner.strip()
-              if not owner:
-                  raise SpecError("publish-owner is required and must be non-empty.")
-              if not _OWNER_RE.match(owner):
-                  raise SpecError(
-                      "publish-owner must be an anaconda.org user or organization "
-                      "(letters, digits, '_', '-', leading alphanumeric); got "
-                      f"{owner!r}."
-                  )
-              return owner
-
-
-          def validate_label(label: str, *, field: str) -> str:
-              label = label.strip()
-              if not label:
-                  raise SpecError(f"{field} is required and must be non-empty.")
-              if not _LABEL_RE.match(label):
-                  raise SpecError(
-                      f"{field} must be a safe channel label "
-                      "(letters, digits, '.', '_', '-', leading alphanumeric); got "
-                      f"{label!r}."
-                  )
-              return label
-
-
-          def parse_spec(spec: str) -> tuple[str, ...]:
-              """Validate a caller spec (``package/version[/filename]``, never an owner).
-
-              A three-segment spec is accepted only when its third segment is a conda
-              filename; any other three-segment shape is rejected as a smuggled owner.
-              """
-              raw = spec.strip()
-              if not raw:
-                  raise SpecError("spec must be non-empty.")
-              segments = raw.split("/")
-              if len(segments) not in (2, 3):
-                  raise SpecError(
-                      f"spec {spec!r} must be package/version[/filename] without an owner "
-                      "segment (2 or 3 segments only)."
-                  )
-              package, version = segments[0], segments[1]
-              if not _PKG_RE.match(package):
-                  raise SpecError(f"spec {spec!r} has an invalid package segment {package!r}.")
-              if not _VERSION_RE.match(version):
-                  raise SpecError(f"spec {spec!r} has an invalid version segment {version!r}.")
-              if len(segments) == 3:
-                  filename = segments[2]
-                  if not filename.endswith(_CONDA_EXTENSIONS):
-                      raise SpecError(
-                          f"spec {spec!r} must be package/version[/filename] without an owner "
-                          "segment; a three-segment spec is only valid when the third segment "
-                          "is a package filename ending in .conda or .tar.bz2."
-                      )
-                  if not _conda_filename_re().match(filename):
-                      raise SpecError(f"spec {spec!r} has an invalid filename segment {filename!r}.")
-              return tuple(segments)
-
-
-          def parse_spec_list(raw: str) -> list[str]:
-              """Split a newline-separated spec block into non-empty, stripped specs."""
-              return [line.strip() for line in raw.splitlines() if line.strip()]
-
-
-          def validate_spec_list(raw: str, *, field: str) -> list[str]:
-              """Validate every spec in a newline block; return the cleaned specs."""
-              specs = parse_spec_list(raw)
-              if not specs:
-                  raise SpecError(f"{field} is required and must list at least one spec.")
-              for spec in specs:
-                  try:
-                      parse_spec(spec)
-                  except SpecError as error:
-                      raise SpecError(f"{field}: {error}") from error
-              return specs
-
-
-          def owner_qualified(owner: str, spec: str) -> str:
-              """Prepend the (already validated) owner to a (validated) spec."""
-              return f"{owner}/{spec}"
-
-
-          def _conda_filename_re() -> re.Pattern[str]:
-              return re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!-]*\.(conda|tar\.bz2)$")
-
-
-          def parse_conda_filename(filename: str) -> tuple[str, str]:
-              """Return ``(package, version)`` parsed from a conda package filename.
-
-              conda filenames are ``<name>-<version>-<build>.<ext>``; the name itself may
-              contain hyphens, so the version and build are split from the right.
-              """
-              if filename.endswith(".conda"):
-                  stem = filename[: -len(".conda")]
-              elif filename.endswith(".tar.bz2"):
-                  stem = filename[: -len(".tar.bz2")]
-              else:
-                  raise SpecError(
-                      f"{filename!r} is not a conda package (expected a .conda or .tar.bz2 file)."
-                  )
-              segments = stem.rsplit("-", 2)
-              if len(segments) != 3 or not all(segments):
-                  raise SpecError(
-                      f"cannot parse name and version from conda filename {filename!r} "
-                      "(expected <name>-<version>-<build>)."
-                  )
-              return segments[0], segments[1]
-          DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/anaconda-publish"
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/commands.py" <<'DEVFLOWS_SCRIPT_EOF'
           """anaconda-client argv builders (pure; every mutation is an explicit argv list)."""
 
           from __future__ import annotations
 
-          # Pinned default anaconda-client version installed ephemerally (``uvx --from``) when
-          # publish-client-version is empty. Registered for Renovate via a custom pep440
-          # manager in renovate.json5 keyed on the inline comment below; a unit test asserts
-          # the manager regex still matches this constant so the pin stays auto-updated.
+          # Pinned default anaconda-client, installed ephemerally via ``uvx --from`` when
+          # publish-client-version is empty. Kept current by Renovate (custom pep440 manager
+          # in renovate.json5); a unit test asserts the manager regex still matches this line.
           # renovate: datasource=pypi depName=anaconda-client
           ANACONDA_CLIENT_VERSION = "1.13.0"
 
-          # upload-existing-mode enum mapped onto anaconda-client's mutually-exclusive group.
           _EXISTING_MODE_FLAGS = {"fail": [], "skip": ["--skip-existing"], "overwrite": ["--force"]}
 
 
@@ -2530,12 +1877,10 @@ jobs:
 
 
           def uvx_wrap(client_version: str, argv: list[str]) -> list[str]:
-              """Wrap an anaconda-client argv in an ephemeral, pinned ``uvx --from`` runner."""
               return ["uvx", "--from", f"anaconda-client=={client_version}", *argv]
 
 
           def resolve_client_version(override: str) -> str:
-              """The anaconda-client version to install: an explicit override or the pin."""
               override = override.strip()
               return override or ANACONDA_CLIENT_VERSION
           DEVFLOWS_SCRIPT_EOF
@@ -2543,21 +1888,32 @@ jobs:
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/promote.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Relabel staged packages to the final label (the real public-release event).
 
-          Runs ``anaconda move --from-label <upload-label> --to-label <promote-label>
-          <owner>/<spec>`` for each owner-qualified target. Targets come from the verify
-          job's promoted-specs output (already validated and owner-prefixed there), so this
-          job only executes the plan. The single token-bearing step of the promote job.
-          Imports the materialized sibling modules parsing / commands.
+          Runs ``anaconda move`` per owner-qualified target from the verify job's
+          promoted-specs output (already validated and owner-prefixed there). The single
+          token-bearing step of the promote job. Imports only commands; labels are
+          re-validated in-module to avoid inlining the whole parsing module here.
           """
 
           from __future__ import annotations
 
           import os
+          import re
           import subprocess
           import sys
 
           import commands
-          import parsing
+
+          # Mirror of parsing._LABEL_RE (kept in sync by test_promote_label_regex_matches_parsing).
+          # The labels are already validated in the validate job; this is a defense-in-depth
+          # re-check on the credentialed job without pulling in all of parsing.py.
+          _LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+          def _validate_label(value: str, *, field: str) -> str:
+              value = value.strip()
+              if not value or not _LABEL_RE.match(value):
+                  raise SystemExit(f"{field} must be a safe channel label; got {value!r}.")
+              return value
 
 
           def main() -> int:
@@ -2567,8 +1923,8 @@ jobs:
                       "(secrets: inherit) to promote on anaconda.org."
                   )
               server_url = os.environ.get("PUBLISH_SERVER_URL", "")
-              from_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-              to_label = parsing.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
+              from_label = _validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
+              to_label = _validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
               client_version = commands.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
 
               targets = [
@@ -2623,7 +1979,6 @@ jobs:
           PROMOTE_LABEL: ${{ inputs.promote-label }}
           PROMOTED_SPECS: ${{ needs.verify.outputs.promoted-specs }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/parsing.py
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/commands.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/promote.py"
   maintain:
@@ -2650,13 +2005,9 @@ jobs:
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/preflight-token.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Tokenless per-job credential preflight.
 
-          validate cannot check secrets (its env maps only inputs.*), so each credentialed
-          job asserts the publishing credential is present BEFORE it reaches any CLI step.
-          This step is deliberately tokenless: it receives only a boolean
-          ``ANACONDA_TOKEN_PRESENT`` (``${{ secrets.anaconda-token != '' }}``), never the
-          token value, so the token stays confined to the single CLI step. The environment-
-          bound jobs are already gated to skip in dry-run, so PUBLISH_DRY_RUN_ENABLED is a
-          belt-and-suspenders guard.
+          Each credentialed job asserts the publishing credential is present before any CLI
+          step (validate cannot check secrets). Tokenless by design: it receives only the
+          boolean ANACONDA_TOKEN_PRESENT, never the token value.
           """
 
           from __future__ import annotations
@@ -2690,14 +2041,12 @@ jobs:
 
           from __future__ import annotations
 
-          # Pinned default anaconda-client version installed ephemerally (``uvx --from``) when
-          # publish-client-version is empty. Registered for Renovate via a custom pep440
-          # manager in renovate.json5 keyed on the inline comment below; a unit test asserts
-          # the manager regex still matches this constant so the pin stays auto-updated.
+          # Pinned default anaconda-client, installed ephemerally via ``uvx --from`` when
+          # publish-client-version is empty. Kept current by Renovate (custom pep440 manager
+          # in renovate.json5); a unit test asserts the manager regex still matches this line.
           # renovate: datasource=pypi depName=anaconda-client
           ANACONDA_CLIENT_VERSION = "1.13.0"
 
-          # upload-existing-mode enum mapped onto anaconda-client's mutually-exclusive group.
           _EXISTING_MODE_FLAGS = {"fail": [], "skip": ["--skip-existing"], "overwrite": ["--force"]}
 
 
@@ -2743,12 +2092,10 @@ jobs:
 
 
           def uvx_wrap(client_version: str, argv: list[str]) -> list[str]:
-              """Wrap an anaconda-client argv in an ephemeral, pinned ``uvx --from`` runner."""
               return ["uvx", "--from", f"anaconda-client=={client_version}", *argv]
 
 
           def resolve_client_version(override: str) -> str:
-              """The anaconda-client version to install: an explicit override or the pin."""
               override = override.strip()
               return override or ANACONDA_CLIENT_VERSION
           DEVFLOWS_SCRIPT_EOF
@@ -2756,12 +2103,10 @@ jobs:
           cat > "$RUNNER_TEMP/devflows/anaconda-publish/maintain.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Destructive channel maintenance: remove versions/files from anaconda.org.
 
-          Runs ``anaconda remove --force <owner>/<spec>`` for each owner-qualified target
-          (``--force`` is anaconda-client's do-not-prompt flag; the human gate is the
-          type-the-name maintain-confirm input plus the strict maintain environment's
-          reviewers). Targets come from the verify job's removed-specs output (validated and
-          owner-prefixed there). The single token-bearing step of the maintain job. Imports
-          the materialized sibling module commands.
+          Runs ``anaconda remove --force`` per owner-qualified target from the verify job's
+          removed-specs output (validated and owner-prefixed there); the human gate is the
+          type-the-name maintain-confirm input plus the maintain environment's reviewers.
+          The single token-bearing step of the maintain job. Imports sibling module commands.
           """
 
           from __future__ import annotations

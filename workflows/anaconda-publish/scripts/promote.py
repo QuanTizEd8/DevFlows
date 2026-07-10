@@ -1,20 +1,31 @@
 """Relabel staged packages to the final label (the real public-release event).
 
-Runs ``anaconda move --from-label <upload-label> --to-label <promote-label>
-<owner>/<spec>`` for each owner-qualified target. Targets come from the verify
-job's promoted-specs output (already validated and owner-prefixed there), so this
-job only executes the plan. The single token-bearing step of the promote job.
-Imports the materialized sibling modules parsing / commands.
+Runs ``anaconda move`` per owner-qualified target from the verify job's
+promoted-specs output (already validated and owner-prefixed there). The single
+token-bearing step of the promote job. Imports only commands; labels are
+re-validated in-module to avoid inlining the whole parsing module here.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 
 import commands
-import parsing
+
+# Mirror of parsing._LABEL_RE (kept in sync by test_promote_label_regex_matches_parsing).
+# The labels are already validated in the validate job; this is a defense-in-depth
+# re-check on the credentialed job without pulling in all of parsing.py.
+_LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _validate_label(value: str, *, field: str) -> str:
+    value = value.strip()
+    if not value or not _LABEL_RE.match(value):
+        raise SystemExit(f"{field} must be a safe channel label; got {value!r}.")
+    return value
 
 
 def main() -> int:
@@ -24,8 +35,8 @@ def main() -> int:
             "(secrets: inherit) to promote on anaconda.org."
         )
     server_url = os.environ.get("PUBLISH_SERVER_URL", "")
-    from_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-    to_label = parsing.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
+    from_label = _validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
+    to_label = _validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
     client_version = commands.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
 
     targets = [

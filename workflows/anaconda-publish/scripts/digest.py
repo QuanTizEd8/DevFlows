@@ -40,10 +40,8 @@ def _scan_conda_files(dist_path: Path) -> dict[str, Path]:
 def verify_files_against_manifest(dist_path: Path, manifest: dict[str, object]) -> list[CondaFile]:
     """Bidirectionally verify the on-disk conda files against the manifest.
 
-    Every kind=conda manifest entry must have a file on disk whose recomputed
-    sha256 AND size match, and every conda file on disk must be a kind=conda
-    manifest entry. Any missing/unlisted/wrong-kind file or digest/size mismatch
-    fails loudly naming the offending file.
+    Every kind=conda entry must match a file on disk (sha256 AND size) and every
+    conda file on disk must be a kind=conda entry; any mismatch fails loudly.
     """
     if not dist_path.is_dir():
         raise SpecError(f"distribution path {dist_path} does not exist or is not a directory.")

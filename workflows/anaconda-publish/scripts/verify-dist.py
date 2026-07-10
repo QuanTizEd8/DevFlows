@@ -1,12 +1,11 @@
-"""Credential-free supply-chain guard and dry-run plan computation.
+"""Credential-free supply-chain guard and dry-run plan computation (verify job).
 
-Runs in the ``verify`` job (and again, with EMIT_PLAN=false, as the tokenless
-re-verification step inside the ``upload`` job). Recomputes the sha256 AND size of
-every ``.conda`` file and matches them bidirectionally against the caller-supplied
-dist manifest, then derives the staged/promote/remove plans and emits them as
-outputs plus a job summary of the exact argv each credentialed job would run -- the
-whole publish plan, produced without a token. Imports the materialized sibling
-modules parsing / arguments / digest / commands (declared by ``# imports`` comments).
+Recomputes the sha256 AND size of every ``.conda`` file and matches them
+bidirectionally against the caller-supplied dist manifest, then derives the
+staged / promote / remove plans and emits them as step outputs plus a job-summary
+of the planned versions and specs -- the whole publish plan, without a token. The
+exact anaconda-client argv is (re-)built by each credentialed job. Imports the
+sibling modules parsing / digest / manifest.
 """
 
 from __future__ import annotations
@@ -16,8 +15,6 @@ import os
 import secrets
 from pathlib import Path
 
-import arguments
-import commands
 import digest
 import parsing
 
@@ -31,90 +28,32 @@ def main() -> int:
 
 def _run() -> int:
     owner = os.environ["PUBLISH_OWNER"].strip()
-    server_url = os.environ.get("PUBLISH_SERVER_URL", "")
-    # The plan's argv reflect the version each credentialed job resolves the same
-    # way (override or the pin), so the dry-run summary is faithful.
-    client_version = commands.resolve_client_version(os.environ.get("PUBLISH_CLIENT_VERSION", ""))
-    emit_plan = _bool("EMIT_PLAN", default=True)
-
     upload_enabled = _bool("UPLOAD_ENABLED")
     promote_enabled = _bool("PROMOTE_ENABLED")
     maintain_enabled = _bool("MAINTAIN_ENABLED")
 
     version = ""
-    verified: list[digest.CondaFile] = []
+    staged_specs: list[str] = []
+    uploaded_files: list[str] = []
     if upload_enabled:
-        verified = _verify(owner, server_url)
+        verified = _verify()
         version = digest.resolve_version(
             verified, expected=os.environ.get("PUBLISH_EXPECTED_VERSION", "")
         )
-
-    if not emit_plan:
-        # Re-verification pass inside the credentialed job: digests and version are
-        # checked above; there is nothing to emit or plan.
-        return 0
-
-    staged_specs: list[str] = []
-    uploaded_files: list[str] = []
-    upload_plan: list[list[str]] = []
-    if upload_enabled:
         uploaded_files = [item.name for item in verified]
         staged_specs = sorted(
             {parsing.owner_qualified(owner, f"{item.package}/{item.version}") for item in verified}
         )
-        mode = arguments.validate_existing_mode(os.environ.get("UPLOAD_EXISTING_MODE", "fail"))
-        extra = arguments.parse_extra_arguments(
-            os.environ.get("UPLOAD_ARGUMENTS", ""), field="upload-arguments"
-        )
-        upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-        upload_plan = [
-            commands.uvx_wrap(
-                client_version,
-                commands.build_upload_argv(
-                    server_url=server_url,
-                    owner=owner,
-                    label=upload_label,
-                    mode=mode,
-                    extra_arguments=extra,
-                    file_path=str(item.path),
-                ),
-            )
-            for item in verified
-        ]
 
-    promoted_specs: list[str] = []
-    promote_plan: list[list[str]] = []
-    if promote_enabled:
-        promoted_specs = _promote_targets(owner, staged_specs)
-        upload_label = parsing.validate_label(os.environ["UPLOAD_LABEL"], field="upload-label")
-        promote_label = parsing.validate_label(os.environ["PROMOTE_LABEL"], field="promote-label")
-        promote_plan = [
-            commands.uvx_wrap(
-                client_version,
-                commands.build_move_argv(
-                    server_url=server_url,
-                    from_label=upload_label,
-                    to_label=promote_label,
-                    target=target,
-                ),
-            )
-            for target in promoted_specs
-        ]
+    promoted_specs = _promote_targets(owner, staged_specs) if promote_enabled else []
 
     removed_specs: list[str] = []
-    remove_plan: list[list[str]] = []
     if maintain_enabled:
         removed_specs = [
             parsing.owner_qualified(owner, spec)
             for spec in parsing.validate_spec_list(
                 os.environ.get("MAINTAIN_REMOVE_SPECS", ""), field="maintain-remove-specs"
             )
-        ]
-        remove_plan = [
-            commands.uvx_wrap(
-                client_version, commands.build_remove_argv(server_url=server_url, target=target)
-            )
-            for target in removed_specs
         ]
 
     _write_outputs(
@@ -128,14 +67,14 @@ def _run() -> int:
     )
     _write_summary(
         version=version,
-        upload_plan=upload_plan,
-        promote_plan=promote_plan,
-        remove_plan=remove_plan,
+        staged_specs=staged_specs,
+        promoted_specs=promoted_specs,
+        removed_specs=removed_specs,
     )
     return 0
 
 
-def _verify(owner: str, server_url: str) -> list[digest.CondaFile]:
+def _verify() -> list[digest.CondaFile]:
     dist_path = Path(os.environ["PUBLISH_DIST_PATH"]).resolve()
     workspace = Path(os.environ.get("GITHUB_WORKSPACE", ".")).resolve()
     if workspace != dist_path and workspace not in dist_path.parents:
@@ -154,12 +93,10 @@ def _verify(owner: str, server_url: str) -> list[digest.CondaFile]:
 
 
 def _promote_targets(owner: str, staged_specs: list[str]) -> list[str]:
-    explicit = parsing.parse_spec_list(os.environ.get("PROMOTE_SPECS", ""))
-    if explicit:
+    raw = os.environ.get("PROMOTE_SPECS", "")
+    if parsing.parse_spec_list(raw):
         try:
-            validated = parsing.validate_spec_list(
-                os.environ.get("PROMOTE_SPECS", ""), field="promote-specs"
-            )
+            validated = parsing.validate_spec_list(raw, field="promote-specs")
         except parsing.SpecError as error:
             raise SystemExit(str(error)) from error
         return [parsing.owner_qualified(owner, spec) for spec in validated]
@@ -186,9 +123,9 @@ def _render_output(name: str, value: str) -> str:
 def _write_summary(
     *,
     version: str,
-    upload_plan: list[list[str]],
-    promote_plan: list[list[str]],
-    remove_plan: list[list[str]],
+    staged_specs: list[str],
+    promoted_specs: list[str],
+    removed_specs: list[str],
 ) -> None:
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not summary_path:
@@ -196,27 +133,24 @@ def _write_summary(
     lines = ["## anaconda-publish plan", ""]
     if version:
         lines += [f"Package version: `{version}`", ""]
-    for title, plan in (
-        ("Upload", upload_plan),
-        ("Promote", promote_plan),
-        ("Remove", remove_plan),
+    for title, specs in (
+        ("Upload (stage)", staged_specs),
+        ("Promote", promoted_specs),
+        ("Remove", removed_specs),
     ):
-        if not plan:
+        if not specs:
             continue
-        lines += [f"### {title}", "", "```"]
-        lines += [" ".join(argv) for argv in plan]
-        lines += ["```", ""]
+        lines += [f"### {title}", ""]
+        lines += [f"- `{spec}`" for spec in specs]
+        lines += [""]
     if len(lines) == 2:
         lines += ["No operations planned.", ""]
     with Path(summary_path).open("a", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
 
 
-def _bool(name: str, *, default: bool = False) -> bool:
-    raw = os.environ.get(name, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "on"}
+def _bool(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 if __name__ == "__main__":

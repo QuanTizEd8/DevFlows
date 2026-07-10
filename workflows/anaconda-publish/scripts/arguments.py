@@ -7,12 +7,9 @@ import shlex
 from parsing import SpecError
 
 # upload-arguments is guarded by a strict ALLOWLIST, never a denylist: argparse
-# defeats denylists via attached short values (``-lmain`` -> ``-l main``), long-flag
-# abbreviations (``--lab main`` -> ``--label main``), and bare positional file paths.
-# Only cosmetic / package-metadata flags that cannot change the upload's namespace,
-# identity, collision handling, or file selection are accepted. Everything DevFlows
-# owns (owner, label, version, package, collision mode, token, site, paths) is
-# rejected here and supplied from typed inputs and the anaconda-token secret.
+# defeats denylists via attached short values, long-flag abbreviations, and bare
+# positionals. Only cosmetic/metadata flags that cannot change the upload's
+# namespace, identity, collision handling, or file selection are accepted.
 _ALLOWED_UPLOAD_BOOL_FLAGS = frozenset(
     {"--no-progress", "--no-register", "--register", "--keep-basename"}
 )
@@ -23,11 +20,7 @@ EXISTING_MODES = ("fail", "skip", "overwrite")
 
 
 def parse_extra_arguments(raw: str, *, field: str) -> list[str]:
-    """shlex-split upload-arguments and accept ONLY allowlisted metadata flags.
-
-    Every token must be exactly ``--flag`` (a known boolean) or ``--flag=value`` (a
-    known value flag with a non-empty value). Anything else is rejected.
-    """
+    """shlex-split upload-arguments and accept ONLY allowlisted metadata flags."""
     try:
         args = shlex.split(raw)
     except ValueError as error:
@@ -41,16 +34,18 @@ def _allowed_upload_flags_display() -> str:
     return ", ".join(sorted(_ALLOWED_UPLOAD_BOOL_FLAGS | _ALLOWED_UPLOAD_VALUE_FLAGS))
 
 
+def _reject(arg: str, *, field: str) -> None:
+    raise SpecError(
+        f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
+        f"({_allowed_upload_flags_display()}) are accepted (--flag or --flag=value). "
+        "The owner, label, version, collision mode, token, site, and file paths are "
+        "owned by typed inputs, never this input."
+    )
+
+
 def _validate_upload_argument(arg: str, *, field: str) -> None:
     if not arg.startswith("--"):
-        raise SpecError(
-            f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-            f"({_allowed_upload_flags_display()}) are accepted, each written as --flag "
-            "or --flag=value. Bare file paths, single-dash short options, and attached "
-            "short values are rejected because the owner, label, version, collision "
-            "mode, token, site, and file paths are owned by typed inputs and supplied "
-            "by DevFlows, never through this input."
-        )
+        _reject(arg, field=field)
     flag, sep, value = arg.partition("=")
     if flag in _ALLOWED_UPLOAD_BOOL_FLAGS:
         if sep:
@@ -62,12 +57,7 @@ def _validate_upload_argument(arg: str, *, field: str) -> None:
                 f"{field}: {flag} requires a value written as {flag}=VALUE; got {arg!r}."
             )
         return
-    raise SpecError(
-        f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
-        f"({_allowed_upload_flags_display()}) are accepted. The owner, label, version, "
-        "collision mode, token, site, and file paths are owned by typed inputs and "
-        "supplied by DevFlows, never through this input."
-    )
+    _reject(arg, field=field)
 
 
 def validate_existing_mode(mode: str) -> str:

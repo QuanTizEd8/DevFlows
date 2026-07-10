@@ -1,11 +1,9 @@
 """Destructive channel maintenance: remove versions/files from anaconda.org.
 
-Runs ``anaconda remove --force <owner>/<spec>`` for each owner-qualified target
-(``--force`` is anaconda-client's do-not-prompt flag; the human gate is the
-type-the-name maintain-confirm input plus the strict maintain environment's
-reviewers). Targets come from the verify job's removed-specs output (validated and
-owner-prefixed there). The single token-bearing step of the maintain job. Imports
-the materialized sibling module commands.
+Runs ``anaconda remove --force`` per owner-qualified target from the verify job's
+removed-specs output (validated and owner-prefixed there); the human gate is the
+type-the-name maintain-confirm input plus the maintain environment's reviewers.
+The single token-bearing step of the maintain job. Imports sibling module commands.
 """
 
 from __future__ import annotations

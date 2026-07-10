@@ -63,10 +63,10 @@ notes:
     upload, promote, and maintain jobs are SKIPPED at the job level: no GitHub
     environment is bound, no deployment record is created, no required reviewer is
     pinged, and no token is minted or needed. The verify job still downloads the
-    channel, recomputes every digest, and computes the full plan (versions, specs,
-    and the exact anaconda-client argv, printed to the job summary), which is
-    reported through the outputs. Rehearse an irreversible removal or promotion this
-    way before running it for real.
+    channel, recomputes every digest, and computes the full plan (versions and
+    specs, printed to the job summary and reported through the outputs); each
+    credentialed job builds the exact anaconda-client argv it runs. Rehearse an
+    irreversible removal or promotion this way before running it for real.
   - >-
     Staged-label publishing is the spine. upload always lands packages on
     upload-label (default 'staging'); nothing reaches the default install label

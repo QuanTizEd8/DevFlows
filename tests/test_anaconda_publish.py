@@ -11,7 +11,12 @@ from types import ModuleType
 import pytest
 
 from devflows.catalog import load_workflow
-from devflows.publish import build_published_workflow, caller_required_permissions
+from devflows.publish import (
+    MAX_GENERATED_WORKFLOW_BYTES,
+    build_published_workflow,
+    caller_required_permissions,
+    render_published_workflow,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT_DIR = REPO / "workflows" / "anaconda-publish" / "scripts"
@@ -632,7 +637,6 @@ def _verify_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "PROMOTE_SPECS": "",
         "MAINTAIN_ENABLED": "false",
         "MAINTAIN_REMOVE_SPECS": "",
-        "EMIT_PLAN": "true",
     }
     base.update(overrides)
     return base
@@ -715,34 +719,43 @@ def test_verify_expected_version_guard(monkeypatch, tmp_path: Path) -> None:
         module.main()
 
 
-def test_verify_reverify_mode_emits_nothing(monkeypatch, tmp_path: Path) -> None:
+# --------------------------------------------------------------------------- #
+# reverify.py: tokenless TOCTOU re-verify in the credentialed upload job        #
+# --------------------------------------------------------------------------- #
+def _run_reverify(monkeypatch, tmp_path: Path, **overrides: str) -> int:
+    module = _load_script("reverify.py")
+    env = {
+        "PUBLISH_DIST_PATH": str(tmp_path),
+        "PUBLISH_DIST_MANIFEST": "",
+        "PUBLISH_EXPECTED_VERSION": "",
+    }
+    env.update(overrides)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    return module.main()
+
+
+def test_reverify_passes_and_emits_no_outputs(monkeypatch, tmp_path: Path) -> None:
+    # The re-verify recomputes digests (would raise on mismatch) and never writes an
+    # output; it exists only to fail closed before the credentialed upload step.
     entry = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"payload")
-    output = tmp_path / "out.txt"
-    parsed = _run_verify(
-        monkeypatch,
-        tmp_path,
-        output,
-        EMIT_PLAN="false",
-        UPLOAD_ENABLED="true",
-        PUBLISH_DIST_MANIFEST=json.dumps(_manifest([entry])),
+    assert (
+        _run_reverify(monkeypatch, tmp_path, PUBLISH_DIST_MANIFEST=json.dumps(_manifest([entry])))
+        == 0
     )
-    # EMIT_PLAN=false still verifies (would raise on mismatch) but emits no outputs.
-    assert parsed == {}
 
 
-def test_verify_reverify_mode_still_fails_on_mismatch(monkeypatch, tmp_path: Path) -> None:
+def test_reverify_still_fails_on_mismatch(monkeypatch, tmp_path: Path) -> None:
     entry = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"payload")
     entry["sha256"] = "0" * 64
-    output = tmp_path / "out.txt"
-    module = _load_script("verify-dist.py")
-    for key, value in _verify_env(
-        tmp_path,
-        EMIT_PLAN="false",
-        UPLOAD_ENABLED="true",
-        PUBLISH_DIST_MANIFEST=json.dumps(_manifest([entry])),
-    ).items():
+    module = _load_script("reverify.py")
+    for key, value in {
+        "PUBLISH_DIST_PATH": str(tmp_path),
+        "PUBLISH_DIST_MANIFEST": json.dumps(_manifest([entry])),
+        "PUBLISH_EXPECTED_VERSION": "",
+    }.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     with pytest.raises(SystemExit, match="sha256 mismatch"):
         module.main()
 
@@ -877,6 +890,29 @@ def test_promote_executor_builds_move_argv_per_target(monkeypatch) -> None:
         assert "s3cret-token" not in " ".join(argv)
 
 
+def test_promote_label_regex_matches_parsing() -> None:
+    # promote.py re-validates its labels with an in-module regex (to avoid inlining
+    # all of parsing.py into the promote job); it must stay identical to the canonical
+    # parsing._LABEL_RE so the two copies cannot drift.
+    promote = _load_script("promote.py")
+    assert promote._LABEL_RE.pattern == parsing._LABEL_RE.pattern
+
+
+def test_promote_executor_rejects_bad_label(monkeypatch) -> None:
+    module = _load_script("promote.py")
+    for key, value in {
+        "ANACONDA_API_TOKEN": "tok",
+        "PUBLISH_SERVER_URL": "",
+        "PUBLISH_CLIENT_VERSION": "",
+        "UPLOAD_LABEL": "bad/label",
+        "PROMOTE_LABEL": "main",
+        "PROMOTED_SPECS": "devflows-fixture/pkg/1.0",
+    }.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(SystemExit, match="safe channel label"):
+        module.main()
+
+
 def test_promote_executor_requires_targets(monkeypatch) -> None:
     module = _load_script("promote.py")
     for key, value in {
@@ -995,6 +1031,16 @@ def _steps(job: dict) -> list[dict]:
     return [step for step in job.get("steps", []) if isinstance(step, dict)]
 
 
+def test_generated_workflow_stays_under_size_budget() -> None:
+    # anaconda-publish tripped GitHub's undocumented workflow-size limit at ~135 KB.
+    # Hold the generated file well under 100 KB (margin below devflows-scenarios'
+    # ~109 KB known-good) so a re-inlined shared module cannot silently reintroduce
+    # the startup failure, and keep the sync-time cap below the 135 KB-class regression.
+    rendered = render_published_workflow(load_workflow(REPO / "workflows" / "anaconda-publish"))
+    assert len(rendered.encode("utf-8")) < 100_000
+    assert MAX_GENERATED_WORKFLOW_BYTES == 115_000
+
+
 def test_caller_required_permissions_are_read_only() -> None:
     assert caller_required_permissions(_published()) == {"actions": "read", "contents": "read"}
 
@@ -1060,18 +1106,18 @@ def test_preflight_is_tokenless() -> None:
 
 
 def test_upload_job_reverifies_before_token_step() -> None:
-    # TOCTOU guard: the tokenless EMIT_PLAN=false re-verification (verify-dist.py)
-    # must run before the single ANACONDA_API_TOKEN-bearing upload step, so a swapped
-    # artifact cannot ride the credentialed upload. Pins the step ordering the
-    # workflow depends on.
+    # TOCTOU guard: the tokenless re-verification (reverify.py) must run before the
+    # single ANACONDA_API_TOKEN-bearing upload step, so a swapped artifact cannot ride
+    # the credentialed upload. Pins the step ordering the workflow depends on.
     steps = _steps(_published()["jobs"]["upload"])
     reverify = [
-        i for i, step in enumerate(steps) if (step.get("env") or {}).get("EMIT_PLAN") == "false"
+        i
+        for i, step in enumerate(steps)
+        if step.get("id") != "devflows-runtime" and "reverify.py" in str(step.get("run", ""))
     ]
     token = [i for i, step in enumerate(steps) if "ANACONDA_API_TOKEN" in (step.get("env") or {})]
-    assert len(reverify) == 1, "exactly one EMIT_PLAN=false re-verify step expected"
+    assert len(reverify) == 1, "exactly one reverify.py re-verify step expected"
     assert len(token) == 1, "exactly one token-bearing step expected"
     reverify_index, token_index = reverify[0], token[0]
-    assert "verify-dist.py" in str(steps[reverify_index].get("run", ""))
     assert "ANACONDA_API_TOKEN" not in (steps[reverify_index].get("env") or {})
     assert reverify_index < token_index
