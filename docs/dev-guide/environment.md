@@ -6,28 +6,26 @@ system tools and Docker access for local workflow tests.
 
 ## Tooling Layers
 
-- Pixi provides Python, pytest, Sphinx, actionlint, yamllint, prettier, taplo,
-  release-please, and Python package dependencies.
-- The devcontainer provides system-level tools such as Docker access and shell
-  tooling used by local checks.
-- Taskfile provides short command aliases for common workflows.
+- **Pixi** provides every project tool: ruff, shellcheck, shfmt, actionlint,
+  zizmor, taplo, yamllint, prettier, lefthook, pytest, Sphinx, release-please,
+  and the Python package dependencies. A contributor with only `pixi` and `task`
+  installed can run everything here except the Docker/`act`-dependent scenarios.
+- **The devcontainer** installs infrastructure only: pixi, `task` (go-task),
+  `act`, Docker, and shell/CLI niceties, plus `gitleaks` (the one lint tool that
+  has no conda-forge or PyPI package). Project tools come from Pixi, not
+  features.
+- **Taskfile** is the single task registry. Every task delegates to a
+  pixi-provided tool via `pixi run -- <tool>`; `task` itself stays outside Pixi
+  (install it from the devcontainer or with `brew install go-task`).
 
 ## Install And Check
 
-Inside the devcontainer:
+Inside the devcontainer (or any machine with `pixi` and `task`):
 
 ```bash
 pixi install
-pixi run lint
-pixi run test
-```
-
-To use Taskfile aliases:
-
-```bash
 task lint
 task test
-task docs
 ```
 
 ## Local Scenario Tests
@@ -35,7 +33,7 @@ task docs
 Local scenario tests use `act` and Docker:
 
 ```bash
-pixi run test-local
+task scenarios-local
 ```
 
 Local tests are for fast feedback. They should cover paths that can be run

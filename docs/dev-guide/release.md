@@ -21,9 +21,8 @@ Release Please is configured in manifest mode:
 - `.github/release-please/config.json`
 - `.github/release-please/manifest.json`
 
-Each active workflow must have a matching package entry.
-`pixi run release-dry-run` validates that release-please configuration matches
-the active catalog.
+Each active workflow must have a matching package entry. `task release-check`
+validates that release-please configuration matches the active catalog.
 
 ## Changelogs
 
@@ -49,7 +48,7 @@ Changes to shared tooling can use scopes such as `cli`, `docs`, `test`, or
 Before opening a release-related pull request:
 
 ```bash
-pixi run release-dry-run
+task release-check
 ```
 
 The hosted release workflow runs Release Please after the configuration lands on

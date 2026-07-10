@@ -28,20 +28,22 @@ task docs
 task release:dry-run
 ```
 
-Pixi task equivalents are available as `pixi run lint`, `pixi run test`,
-`pixi run test-local`, `pixi run docs`, and `pixi run release-dry-run`.
+`task` is the single entry point for every project command; each task runs the
+underlying tool from the Pixi environment (`pixi run -- <tool>`). Install `task`
+from the devcontainer or with `brew install go-task` (Pixi provides everything
+else).
 
 ### Command Map
 
-| command                    | purpose                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------- |
-| `pixi run fmt`             | Format Python, shell, YAML, Markdown, JSON, and TOML.                                         |
-| `pixi run lint`            | Validate metadata, generated files, Actions syntax, formatting, shell, and security findings. |
-| `pixi run test`            | Run Python unit tests.                                                                        |
-| `pixi run test-local`      | Generate and run local scenario tests through `act`.                                          |
-| `pixi run docs`            | Generate reference pages and build Sphinx HTML.                                               |
-| `pixi run docs-serve`      | Serve docs locally with live rebuilds.                                                        |
-| `pixi run release-dry-run` | Validate release-please configuration.                                                        |
+| command                | purpose                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `task fmt`             | Format Python, shell, YAML, Markdown, JSON, and TOML.                                         |
+| `task lint`            | Validate metadata, generated files, Actions syntax, formatting, shell, and security findings. |
+| `task test`            | Run Python unit tests.                                                                        |
+| `task scenarios-local` | Generate and run local scenario tests through `act`.                                          |
+| `task docs`            | Generate reference pages and build Sphinx HTML.                                               |
+| `task docs-serve`      | Serve docs locally with live rebuilds.                                                        |
+| `task release-check`   | Validate release-please configuration.                                                        |
 
 ### What To Read Next
 

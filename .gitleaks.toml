@@ -1,9 +1,13 @@
 title = "DevFlows gitleaks configuration"
 
+# Build on gitleaks' built-in ruleset instead of replacing it. Without this the
+# config below defines no rules, so a scan would trivially pass and detect nothing.
+[extend]
+useDefault = true
+
 [allowlist]
 description = "Repository examples may contain non-secret placeholder tokens."
 regexes = [
   '''example[_-]?token''',
-  '''ghp_example'''
+  '''ghp_example''',
 ]
-

@@ -1,37 +1,146 @@
 version: "3"
 
+# Taskfile is the single task registry for DevFlows. Every task body delegates to
+# a pixi-provided tool via `pixi run -- <tool>` (pixi owns the toolchain; see
+# pixi.toml). The only exceptions are gitleaks, which pixi cannot package and is
+# resolved from PATH (devcontainer / `brew install gitleaks`), and the shell-lint
+# helper scripts, which invoke pixi themselves.
+#
+# Requirements: `pixi` and `task` (this runner) must be installed. `task` is NOT a
+# pixi dependency — install it from the devcontainer or `brew install go-task`.
+# The `scenarios-local` task additionally needs docker + act.
+
 tasks:
+  # ---------------------------------------------------------------- formatting
   fmt:
-    desc: Format source, docs, and config files.
+    desc: Auto-format Python, shell, docs, and config files.
     cmds:
-      - pixi run fmt
+      - pixi run -- ruff format .
+      - bash scripts/fmt-shell.sh
+      - pixi run -- prettier --write .
+      - pixi run -- taplo format pixi.toml pyproject.toml
 
+  # ------------------------------------------------------------ generator tasks
+  validate:
+    desc: Validate workflow catalog metadata (devflow.yaml).
+    cmds:
+      - pixi run -- devflows validate
+
+  sync:
+    desc: Regenerate published .github/workflows from catalog sources.
+    cmds:
+      - pixi run -- devflows sync
+
+  test-generate:
+    desc: Regenerate hosted and local scenario test workflows.
+    cmds:
+      - pixi run -- devflows test-generate
+
+  # ------------------------------------------------------------------ linting
   lint:
-    desc: Run static validation and drift checks.
-    cmds:
-      - pixi run lint
+    desc: Run the full CI-parity lint suite.
+    deps:
+      - lint:generator
+      - lint:python
+      - lint:workflows
+      - lint:yaml
+      - lint:toml
+      - lint:shell
+      - lint:format
+      - lint:secrets
 
+  lint:generator:
+    desc: Validate metadata and check generated-file drift.
+    cmds:
+      - pixi run -- devflows validate
+      - pixi run -- devflows sync --check
+      - pixi run -- devflows docs --check
+      - pixi run -- devflows test-generate --check
+
+  lint:python:
+    desc: Lint and format-check Python sources with ruff.
+    cmds:
+      - pixi run -- ruff check .
+      - pixi run -- ruff format --check .
+
+  lint:workflows:
+    desc: Lint GitHub Actions workflows with actionlint and zizmor.
+    cmds:
+      - pixi run -- actionlint .github/workflows/*.yaml
+      - pixi run -- zizmor .
+
+  lint:yaml:
+    desc: Lint YAML files with yamllint.
+    cmds:
+      - pixi run -- yamllint .
+
+  lint:toml:
+    desc: Check TOML formatting with taplo.
+    cmds:
+      - pixi run -- taplo format --check pixi.toml pyproject.toml
+
+  lint:shell:
+    desc: Lint and format-check shell scripts (shellcheck + shfmt).
+    cmds:
+      - bash scripts/lint-shell.sh
+
+  lint:format:
+    desc: Check Prettier formatting of docs and config files.
+    cmds:
+      - pixi run -- prettier --check .
+
+  lint:secrets:
+    desc: Scan the repository for committed secrets with gitleaks.
+    cmds:
+      - |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks detect --no-banner --redact
+        else
+          echo "warning: gitleaks not found on PATH; skipping secret scan."
+          echo "         Provided by the devcontainer, or 'brew install gitleaks' locally."
+        fi
+
+  # -------------------------------------------------------------------- testing
   test:
-    desc: Run unit tests.
+    desc: Run the Python unit test suite.
     cmds:
-      - pixi run test
+      - pixi run -- pytest
 
-  test:local:
-    desc: Run local GitHub Actions scenario tests with act.
+  scenarios-local:
+    desc: Run local GitHub Actions scenarios with act (requires docker + act).
+    aliases:
+      - test-local
+      - test:local
     cmds:
-      - pixi run test-local
+      - pixi run -- devflows test-local
 
+  # ----------------------------------------------------------------------- docs
   docs:
-    desc: Generate and build Sphinx documentation.
+    desc: Generate reference pages and build the Sphinx site.
     cmds:
-      - pixi run docs
+      - pixi run -- devflows docs
+      - pixi run -- sphinx-build -b html docs docs/_build/html
 
-  docs:serve:
-    desc: Serve Sphinx documentation locally.
+  docs-serve:
+    desc: Serve the docs site locally with live rebuilds.
+    aliases:
+      - docs:serve
     cmds:
-      - pixi run docs-serve
+      - pixi run -- sphinx-autobuild docs docs/_build/html
 
-  release:dry-run:
-    desc: Preview release-please changes without publishing.
+  # -------------------------------------------------------------------- release
+  release-check:
+    desc: Validate release-please configuration against the catalog.
+    aliases:
+      - release:dry-run
+      - release-dry-run
     cmds:
-      - pixi run release-dry-run
+      - pixi run -- devflows release-check
+
+  # ---------------------------------------------------------------- maintenance
+  clean:
+    desc: Remove generated docs, build artifacts, and tool caches.
+    cmds:
+      - rm -rf docs/_build docs/reference
+      - rm -rf .pytest_cache .ruff_cache .coverage
+      - rm -rf .devflows-test .devflows-test-artifacts .act/artifacts

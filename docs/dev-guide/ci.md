@@ -8,8 +8,8 @@ DevFlows CI protects both the project tooling and the reusable workflows.
 
 ```bash
 pixi install
-pixi run lint
-pixi run test
+task lint
+task test
 ```
 
 This covers static checks, generated-file drift, unit tests, formatting,
@@ -31,7 +31,7 @@ then assertion jobs download those artifacts and inspect their contents.
 runs:
 
 ```bash
-pixi run test-local
+task scenarios-local
 ```
 
 Local scenarios are intended for fast feedback. They should avoid hosted-only

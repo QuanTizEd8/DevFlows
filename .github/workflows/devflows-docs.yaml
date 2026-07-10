@@ -28,7 +28,7 @@ jobs:
           configFile: .devcontainer/devcontainer.json
           runCmd: |
             pixi install
-            pixi run docs
+            task docs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
