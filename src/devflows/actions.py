@@ -107,10 +107,24 @@ ACTION_PINS: dict[str, ActionPin] = {
         "11f9893b081a58869d3b5fccaea48c9e9e46f990",
         "v8.3.2",
     ),
+    # GitHub Pages chain (docs-build packages the artifact; deploy-pages
+    # configures, packages, and deploys). Pinned together so the three actions
+    # stay on a coherent generation: upload-pages-artifact v5 adds the
+    # include-hidden-files input that v4 lacked (v4 always excluded dotfiles).
     "upload-pages-artifact": ActionPin(
         "actions/upload-pages-artifact",
-        "7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
-        "v4.0.0",
+        "fc324d3547104276b827a68afc52ff2a11cc49c9",
+        "v5.0.0",
+    ),
+    "configure-pages": ActionPin(
+        "actions/configure-pages",
+        "45bfe0192ca1faeb007ade9deae92b16b8254a0d",
+        "v6.0.0",
+    ),
+    "deploy-pages": ActionPin(
+        "actions/deploy-pages",
+        "cd2ce8fcbc39b97be8ca5fce6e763baed58fa128",
+        "v5.0.0",
     ),
 }
 

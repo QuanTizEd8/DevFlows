@@ -10,10 +10,11 @@ import pytest
 from devflows.catalog import load_catalog
 from devflows.publish import build_published_workflow
 
-# The GitHub Pages actions are pinned inline (not in the shared registry) because
-# convention item 20 makes the registry the single version-of-truth for every
-# internal workflow, and the repo's own devflows-docs.yaml pins older Pages action
-# versions that this workflow-scoped change must not touch.
+# The GitHub Pages chain actions now live in the shared registry (devflows.actions)
+# so every consumer -- docs-build, deploy-pages, and the internal devflows-docs
+# caller -- stays on one coherent generation (item 20): upload-pages-artifact
+# v5.0.0, configure-pages v6.0.0, and deploy-pages v5.0.0. These constants assert
+# the generated deploy-pages workflow pins those exact registry SHAs.
 UPLOAD_PAGES_ARTIFACT = "actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9"
 CONFIGURE_PAGES = "actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d"
 DEPLOY_PAGES = "actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128"
@@ -310,7 +311,7 @@ def test_deploy_job_holds_only_pages_and_id_token_write() -> None:
     assert deploy_step["with"]["artifact_name"] == "${{ inputs.pages-artifact-name }}"
 
 
-def test_pages_actions_are_sha_pinned_inline() -> None:
+def test_pages_actions_are_registry_pinned() -> None:
     published = _published()
     uses = {
         step["uses"]

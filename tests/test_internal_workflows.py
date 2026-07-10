@@ -58,6 +58,32 @@ def test_internal_callers_grant_required_permissions() -> None:
     assert checked > 0, "expected at least one internal caller of a catalog workflow"
 
 
+def test_devflows_docs_deploys_via_deploy_pages_call() -> None:
+    """devflows-docs dogfoods the catalog: its deploy job calls deploy-pages and
+    grants the full permission union that reusable workflow's job tree declares."""
+    catalog = {item.id: item for item in load_catalog()}
+    workflow = load_yaml(PUBLISHED_DIR / "devflows-docs.yaml")
+    deploy = (workflow.get("jobs") or {}).get("deploy")
+    assert isinstance(deploy, dict), "devflows-docs.yaml must have a deploy job"
+    assert deploy.get("uses") == "./.github/workflows/deploy-pages.yaml"
+    required = _required_call_permissions(catalog["deploy-pages"])
+    # The union deploy-pages declares (actions: read, contents: read,
+    # id-token: write, pages: write) must be granted, or the nested call
+    # startup-fails.
+    assert required == {
+        "actions": "read",
+        "contents": "read",
+        "id-token": "write",
+        "pages": "write",
+    }
+    granted = deploy.get("permissions")
+    assert isinstance(granted, dict), "the deploy job must declare permissions"
+    for name, level in required.items():
+        assert _RANK.get(str(granted.get(name, "none")), 0) >= _RANK[level], (
+            f"deploy job grants {name}: {granted.get(name, 'none')}, needs {level}"
+        )
+
+
 def test_internal_workflow_pins_match_registry() -> None:
     known = {pin.action: pin for pin in ACTION_PINS.values()}
     checked = 0

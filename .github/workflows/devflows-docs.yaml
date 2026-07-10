@@ -42,29 +42,45 @@ jobs:
           runCmd: |
             pixi install
             task docs
-      # Pages configuration/upload and deploy run only on main; pull requests
-      # build the docs to catch Sphinx errors but never touch Pages.
-      - name: Configure Pages
+      # Upload the built site as a PLAIN artifact; the deploy job hands it to the
+      # repository's own deploy-pages workflow, which packages it into the
+      # Pages-format artifact and deploys it. PRs build (to catch Sphinx errors)
+      # but skip the upload -- only main deploys consume it.
+      - name: Upload docs site artifact
         if: github.event_name != 'pull_request'
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
-      - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          name: devflows-docs-site
           path: docs/_build/html
+          if-no-files-found: error
+          retention-days: 1
 
+  # Dogfood the catalog: deploy to GitHub Pages by CALLING the repository's own
+  # reusable deploy-pages workflow (same pattern as devflows-devcontainer.yaml
+  # calling build-devcontainer), instead of hand-rolling configure/upload/deploy.
   deploy:
     name: Deploy
     needs: build
+    # PRs build the docs but never deploy; only pushes to main (and manual
+    # dispatch) reach the Pages deployment.
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    # Union of every permission deploy-pages' job tree declares. A nested
+    # reusable-workflow call cannot elevate the token, so the caller must grant the
+    # superset or GitHub fails the run at startup.
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy Pages
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+      actions: read # download the site artifact / read run metadata
+      contents: read
+      pages: write # deploy to GitHub Pages
+      id-token: write # OIDC token the Pages deployment requires
+    uses: ./.github/workflows/deploy-pages.yaml
+    with:
+      # No checkout needed: the site comes entirely from the downloaded artifact.
+      checkout-enabled: false
+      # Download the plain artifact the build job uploaded, then package that
+      # directory into the Pages-format artifact and deploy it.
+      artifact-download-enabled: true
+      artifact-download-name: devflows-docs-site
+      artifact-download-path: _site
+      pages-path: _site
+      pages-artifact-enabled: true
+      pages-deploy-enabled: true
