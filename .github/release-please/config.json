@@ -32,6 +32,13 @@
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
+    "workflows/pypi-publish": {
+      "component": "pypi-publish",
+      "release-type": "simple",
+      "package-name": "pypi-publish",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
     "workflows/python-build": {
       "component": "python-build",
       "release-type": "simple",

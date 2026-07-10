@@ -12,6 +12,7 @@ def test_catalog_loads_active_workflows() -> None:
         "deploy-pages",
         "docs-build",
         "pandoc",
+        "pypi-publish",
         "python-build",
         "python-lint",
         "python-test",
