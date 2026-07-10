@@ -184,8 +184,12 @@
         "name": { "type": "string" },
         "expect": {
           "type": "string",
-          "enum": ["success", "failure"],
-          "description": "Expected conclusion of the reusable-workflow call. 'success' (default) asserts the call succeeded. 'failure' is a negative-path scenario: the call job runs with continue-on-error so the run stays green while the assert job requires needs.<call>.result == 'failure' (RED if it unexpectedly succeeds). Expect-failure scenarios are hosted-only (act cannot reliably assert a failed reusable call) and declare no file/output assertions, because a failed call uploads no artifact. Matching a specific failure MESSAGE is intentionally unsupported: the failure originates in a nested reusable-call job whose logs cannot be reliably located (nested-job naming is undocumented) or fetched with the run's default actions:read token while the run is still in progress, so a log grep would be flaky. Assert specific validate-script messages with unit tests of the script instead."
+          "enum": ["success", "validation-failure"],
+          "description": "Expected outcome of the scenario. 'success' (default) calls the reusable workflow and asserts it succeeded. 'validation-failure' is a negative-path scenario that does NOT call the reusable workflow: instead the generated job checks the repository out and runs the target workflow's input-validation script (workflows/<id>/scripts/validate-inputs.py) directly, with the env the workflow's validate step would set (its inputs.* mapping, filled from this scenario's inputs and the workflow input defaults). The scenario passes when that script rejects the inputs (nonzero exit) and fails if it unexpectedly accepts them. This name is deliberately honest: it tests the input-validation script layer in CI, not a full reusable-call failure end to end (that is a future sandbox-repo capability). Because it is a plain job it runs under act, so it supports both local and hosted runs. It may not declare assertions, artifact, setup-artifact, mutation, writeback-payload, or cleanup."
+        },
+        "failure-message-contains": {
+          "type": "string",
+          "description": "Only valid with expect: validation-failure. When set, the scenario additionally requires that the rejected validation script's captured stdout/stderr contains this substring, so a scenario can pin the specific rejection message. Omit to accept any nonzero exit."
         },
         "runs": {
           "type": "array",

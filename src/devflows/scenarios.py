@@ -102,6 +102,139 @@ def _missing_mutation_inputs(workflow: Workflow) -> list[str]:
     return [name for name in MUTATION_REQUIRED_INPUTS if name not in call_inputs]
 
 
+# --- validation-failure scenario support -----------------------------------
+#
+# A validation-failure scenario does NOT call the reusable workflow. Instead the
+# generated job checks the repo out and runs the target workflow's
+# `validate-inputs.py` directly, with the env the workflow's own validate step
+# would set, so the *input-validation script layer* is exercised honestly in CI.
+# (A full reusable-call failure e2e is a future sandbox-repo capability.)
+
+VALIDATE_SCRIPT_NAME = "validate-inputs.py"
+# The runtime script-root the published workflow uses to LOCATE the validate
+# script (steps.devflows-runtime.outputs.script-root, materialized by the
+# injected io.runtime step). The harness invokes the script by its checkout path
+# instead, so an env entry bound to this expression is dropped, not reconstructed.
+_RUNTIME_SCRIPT_ROOT_EXPR = "steps.devflows-runtime.outputs.script-root"
+# Matches a ${{ ... }} expression and captures its inner text.
+_EXPRESSION = re.compile(r"\$\{\{\s*(?P<expr>.+?)\s*\}\}")
+# A bare reusable-workflow input reference, e.g. `inputs.docker-login-enabled`.
+_INPUT_REF = re.compile(r"^inputs\.(?P<name>[A-Za-z0-9][A-Za-z0-9_-]*)$")
+
+
+def _validate_step_run(workflow: Workflow) -> str:
+    """The `run` string a discoverable validate step must invoke for ``workflow``."""
+    return f"{workflow.id}/{VALIDATE_SCRIPT_NAME}"
+
+
+def _find_validate_step(workflow: Workflow) -> dict[str, Any] | None:
+    """Locate the source validate step, or None if the workflow has no such step.
+
+    Discovery matches the step whose ``run`` invokes
+    ``${DEVFLOWS_SCRIPT_ROOT}/<id>/validate-inputs.py`` (preferring a job keyed
+    ``validate``), which is the promotion-time contract for input validation.
+    """
+    needle = _validate_step_run(workflow)
+    jobs = workflow.workflow.get("jobs")
+    if not isinstance(jobs, dict):
+        return None
+
+    def _step_from(job: Any) -> dict[str, Any] | None:
+        if not isinstance(job, dict):
+            return None
+        for step in job.get("steps") or []:
+            if isinstance(step, dict) and needle in str(step.get("run") or ""):
+                return step
+        return None
+
+    # Prefer the conventional `validate` job, then fall back to any job.
+    ordered = list(jobs.items())
+    ordered.sort(key=lambda item: item[0] != "validate")
+    for _job_id, job in ordered:
+        step = _step_from(job)
+        if step is not None:
+            return step
+    return None
+
+
+def _serialize_input_value(value: Any) -> str:
+    """Render an input value the way GitHub presents it to a ${{ inputs.x }} ref.
+
+    GitHub hands booleans to expressions as the strings ``true``/``false`` and
+    numbers as their canonical decimal string; strings pass through. The
+    generated env values are plain strings, so the dumper quotes ``'true'`` /
+    ``'3'`` to keep them from reloading as bool/int — consistent with how the
+    call-job ``with:`` block feeds the same typed inputs to GitHub.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _workflow_input_defaults(workflow: Workflow) -> dict[str, Any]:
+    """Declared defaults for each ``on.workflow_call`` input (missing => absent)."""
+    inputs = workflow.workflow_call.get("inputs")
+    if not isinstance(inputs, dict):
+        return {}
+    return {
+        name: spec.get("default")
+        for name, spec in inputs.items()
+        if isinstance(spec, dict) and "default" in spec
+    }
+
+
+def _validate_env_errors(scenario: Scenario, step: dict[str, Any]) -> list[str]:
+    """Reasons the validate step's env cannot be reconstructed from inputs alone."""
+    errors: list[str] = []
+    env = step.get("env")
+    if env is not None and not isinstance(env, dict):
+        return ["validate step env must be a mapping."]
+    for key, raw in (env or {}).items():
+        value = str(raw)
+        if value.strip() == f"${{{{ {_RUNTIME_SCRIPT_ROOT_EXPR} }}}}":
+            continue  # DevFlows runtime script-root; supplied by checkout path.
+        for match in _EXPRESSION.finditer(value):
+            expr = match.group("expr")
+            if not _INPUT_REF.match(expr):
+                errors.append(
+                    f"validate step env {key!r} references {expr!r}; validation-failure "
+                    "scenarios can only reconstruct inputs.<name> expressions "
+                    "(github.*, steps.*, secrets.*, matrix.*, needs.* and compound "
+                    "expressions are unsupported so substitution stays total)."
+                )
+    return errors
+
+
+def _validation_failure_env(scenario: Scenario) -> dict[str, str]:
+    """Reconstruct the validate step's env from the scenario inputs and defaults.
+
+    Caller must have confirmed the step is discoverable and inputs-only via
+    ``_find_validate_step``/``_validate_env_errors``.
+    """
+    step = _find_validate_step(scenario.workflow) or {}
+    defaults = _workflow_input_defaults(scenario.workflow)
+    env: dict[str, str] = {}
+    for key, raw in (step.get("env") or {}).items():
+        value = str(raw)
+        if value.strip() == f"${{{{ {_RUNTIME_SCRIPT_ROOT_EXPR} }}}}":
+            continue
+
+        def _replace(match: re.Match[str]) -> str:
+            ref = _INPUT_REF.match(match.group("expr"))
+            # Guaranteed by _validate_env_errors, which runs before generation.
+            assert ref is not None, match.group("expr")
+            name = ref.group("name")
+            resolved = scenario.inputs[name] if name in scenario.inputs else defaults.get(name)
+            return _serialize_input_value(resolved)
+
+        env[key] = _EXPRESSION.sub(_replace, value)
+    return env
+
+
 @dataclass(frozen=True)
 class Scenario:
     workflow: Workflow
@@ -116,14 +249,15 @@ class Scenario:
     mutation: dict[str, Any]
     writeback_payload: dict[str, Any]
     expect: str
+    failure_message_contains: str
 
     @property
     def job_prefix(self) -> str:
         return f"{self.workflow.id}-{self.id}".replace("-", "_")
 
     @property
-    def expects_failure(self) -> bool:
-        return self.expect == "failure"
+    def is_validation_failure(self) -> bool:
+        return self.expect == "validation-failure"
 
 
 def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
@@ -148,6 +282,9 @@ def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
                     mutation=dict(raw_scenario.get("mutation") or {}),
                     writeback_payload=dict(raw_scenario.get("writeback-payload") or {}),
                     expect=str(raw_scenario.get("expect") or "success"),
+                    failure_message_contains=str(
+                        raw_scenario.get("failure-message-contains") or ""
+                    ),
                 )
             )
     return scenarios
@@ -183,30 +320,43 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 errors.append(f"{prefix}: unsupported runner {runner!r}.")
         if not isinstance(scenario.inputs, dict):
             errors.append(f"{prefix}: inputs must be a mapping.")
-        if scenario.expect not in {"success", "failure"}:
-            errors.append(f"{prefix}: expect must be 'success' or 'failure'.")
-        if scenario.expects_failure:
-            # act cannot reliably drive a failed reusable-workflow call into a
-            # result-asserting job, so expect-failure is hosted-only (mirrors the
-            # mutation-scenario restriction).
-            if "local" in scenario.runs:
-                errors.append(f"{prefix}: expect-failure scenarios are hosted-only.")
-            # The call fails, so it uploads no artifact and produces no outputs; the
-            # only meaningful check is that the call failed, which the assert job makes
-            # from needs.<call>.result. Reject inspection assertions/artifacts that
-            # would fail spuriously against a failed run.
-            if scenario.assertions:
+        if scenario.expect not in {"success", "validation-failure"}:
+            errors.append(f"{prefix}: expect must be 'success' or 'validation-failure'.")
+        if scenario.failure_message_contains and not scenario.is_validation_failure:
+            errors.append(
+                f"{prefix}: failure-message-contains is only valid with expect: validation-failure."
+            )
+        if scenario.is_validation_failure:
+            # This scenario runs the target workflow's validate-inputs.py directly
+            # (no reusable-workflow call), so it must NOT carry any of the machinery
+            # that only makes sense for a real call.
+            for field_name, present in (
+                ("assertions", bool(scenario.assertions)),
+                ("artifact", bool(scenario.artifact)),
+                ("setup-artifact", bool(scenario.setup_artifact)),
+                ("mutation", bool(scenario.mutation)),
+                ("writeback-payload", bool(scenario.writeback_payload)),
+                ("cleanup", bool(scenario.cleanup)),
+            ):
+                if present:
+                    errors.append(
+                        f"{prefix}: validation-failure scenarios test the validate script "
+                        f"only and cannot declare {field_name}."
+                    )
+            # The target must expose a discoverable validate step whose env can be
+            # rebuilt from inputs alone (else substitution would be incomplete).
+            step = _find_validate_step(scenario.workflow)
+            if step is None:
                 errors.append(
-                    f"{prefix}: expect-failure scenarios assert only that the call failed; "
-                    "remove file/output assertions."
+                    f"{prefix}: expect: validation-failure requires {scenario.workflow.id} to "
+                    f"have a validate step running ${{DEVFLOWS_SCRIPT_ROOT}}/"
+                    f"{scenario.workflow.id}/{VALIDATE_SCRIPT_NAME}; none was found."
                 )
-            if scenario.artifact:
-                errors.append(
-                    f"{prefix}: expect-failure scenarios cannot declare artifact metadata."
+            else:
+                errors.extend(
+                    f"{prefix}: {message}" for message in _validate_env_errors(scenario, step)
                 )
-            if scenario.mutation:
-                errors.append(f"{prefix}: expect-failure is not supported with mutation scenarios.")
-        if not scenario.assertions and not scenario.expects_failure:
+        if not scenario.assertions and not scenario.is_validation_failure:
             errors.append(f"{prefix}: assertions must not be empty.")
         if not scenario.mutation:
             for assertion in scenario.assertions:
@@ -387,6 +537,13 @@ def render_test_workflow(scenarios: list[Scenario], *, runner: str, name: str) -
         workflow["permissions"]["actions"] = "read"
     jobs = workflow["jobs"]
     for scenario in selected:
+        if scenario.is_validation_failure:
+            # A plain checkout + run-the-validate-script job; no reusable call, no
+            # write permission, so it needs no fork guard and runs under act too.
+            jobs[f"{scenario.job_prefix}_validate"] = _validation_failure_job(
+                scenario, runner=runner
+            )
+            continue
         # On hosted runners a write-requiring call cannot start on a fork PR, so
         # gate the whole scenario chain; read-only scenarios stay ungated and run
         # on every pull request. (Local runs never see fork PRs.)
@@ -643,12 +800,6 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     permissions = _required_call_permissions(scenario.workflow)
     if permissions:
         job["permissions"] = permissions
-    if scenario.expects_failure:
-        # The call is designed to fail. continue-on-error keeps the overall run
-        # green (the job is red on its own) while needs.<call>.result still reports
-        # 'failure', so the assert job can require it. Without this the whole run
-        # would fail even though the failure is the expected outcome.
-        job["continue-on-error"] = True
     if runner == "hosted" and scenario.mutation:
         setup_job_id = f"{scenario.job_prefix}_setup"
         job["with"] = {
@@ -661,18 +812,51 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     return job
 
 
+def _validation_failure_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
+    """A plain job that runs the target validate script and asserts it rejects.
+
+    No reusable-workflow call is made: the job runs
+    ``workflows/<id>/scripts/validate-inputs.py`` with the env the workflow's
+    validate step would set, reconstructed from the scenario inputs and the
+    workflow input defaults. The job stays green when the script rejects the
+    inputs (nonzero exit) and fails if it unexpectedly accepts them, or if the
+    required failure message is absent.
+
+    Hosted runs check the repository out first (a fresh runner has no content);
+    local (act) runs rely on the bind-mounted workspace, so a checkout is omitted
+    there exactly as the local assert job does.
+    """
+    script_path = (scenario.workflow.support_path / VALIDATE_SCRIPT_NAME).as_posix()
+    env: dict[str, str] = {
+        "DEVFLOWS_VALIDATE_SCRIPT": script_path,
+        **_validation_failure_env(scenario),
+    }
+    if scenario.failure_message_contains:
+        env["DEVFLOWS_FAILURE_MESSAGE_CONTAINS"] = scenario.failure_message_contains
+    steps: list[dict[str, Any]] = []
+    if runner == "hosted":
+        steps.append(_hosted_checkout_step())
+    steps.append(
+        {
+            "name": "Assert validation rejects the inputs",
+            "shell": "bash",
+            "env": env,
+            "run": f"python {_script('assert-validation-failure.py')}",
+        }
+    )
+    return {
+        "name": f"{scenario.workflow.name}: {scenario.name}",
+        "runs-on": "ubuntu-latest",
+        "steps": steps,
+    }
+
+
 def _assert_result_step(scenario: Scenario, call_job_id: str) -> dict[str, Any]:
     """Step asserting the call job reached the scenario's expected conclusion."""
-    env = {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"}
-    if scenario.expects_failure:
-        env["EXPECTED_RESULT"] = "failure"
-        name = "Assert scenario failed as expected"
-    else:
-        name = "Assert scenario succeeded"
     return {
-        "name": name,
+        "name": "Assert scenario succeeded",
         "shell": "bash",
-        "env": env,
+        "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
         "run": f"python {_script('assert-result.py')}",
     }
 
@@ -729,14 +913,11 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
         )
     for assertion in scenario.assertions:
         steps.extend(_assertion_steps(scenario, assertion, runner=runner))
-    # Expect-failure asserts run on !cancelled() so they observe the (continue-on-error)
-    # call's 'failure' result; success asserts stay on always() as before.
-    assert_if = "!cancelled()" if scenario.expects_failure else "always()"
     return {
         "name": f"{scenario.workflow.name}: {scenario.name} assertions",
         "runs-on": "ubuntu-latest",
         "needs": call_job_id,
-        "if": assert_if,
+        "if": "always()",
         "steps": steps,
     }
 
