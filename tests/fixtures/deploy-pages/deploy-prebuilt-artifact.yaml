@@ -1,0 +1,51 @@
+name: Deploy a pre-packaged Pages artifact
+
+on:
+  workflow_dispatch:
+
+# The full permission union is required even in deploy-only mode: deploy-pages'
+# deploy job statically declares pages: write and id-token: write, and its package
+# job still declares the checkout and artifact-download channel permissions.
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build the Pages artifact
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build static site into _site
+        run: ./scripts/build-site.sh
+      # This job runs upload-pages-artifact itself, producing an
+      # already-Pages-format artifact named github-pages.
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy the pre-packaged artifact
+    needs: package
+    # Replace deploy-pages/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/deploy-pages.yaml@deploy-pages/v0.1.0
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    with:
+      # Secondary mode: deploy the artifact produced above by name, without
+      # re-packaging. pages-path must stay empty when pages-artifact-enabled is false.
+      checkout-enabled: false
+      pages-artifact-enabled: false
+      pages-artifact-name: github-pages

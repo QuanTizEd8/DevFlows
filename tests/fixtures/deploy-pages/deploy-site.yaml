@@ -1,0 +1,58 @@
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+
+# deploy-pages' deploy job statically declares pages: write and id-token: write,
+# and its package job uses the checkout (contents: read) and artifact-download
+# (actions: read) channels. GitHub validates these nested permissions before the
+# run starts, so the calling job must grant the full union even when a feature is
+# disabled.
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+# A reusable workflow cannot impose caller-level concurrency, so serialize whole
+# deploys here to keep a single Pages deployment in flight at a time.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build static site into _site
+        run: ./scripts/build-site.sh
+      - name: Upload the built site
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: _site
+
+  deploy:
+    name: Package and deploy to Pages
+    needs: build
+    # Replace deploy-pages/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/deploy-pages.yaml@deploy-pages/v0.1.0
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    with:
+      # Ingest the plain build artifact through the artifact-download channel, then
+      # package that directory into the Pages artifact and deploy it.
+      checkout-enabled: false
+      artifact-download-enabled: true
+      artifact-download-name: site
+      artifact-download-path: _site
+      pages-path: _site

@@ -66,6 +66,124 @@ jobs:
           ASSERT_PATH: .devflows-test-artifacts/build-devcontainer/build-only/linux-amd64
           ASSERT_TEXT: 'sha256:'
         run: python harness/scenarios/assert-file-contains.py
+  deploy_pages_package_only_call:
+    name: 'Deploy Pages: Package a site directory into a Pages artifact without deploying'
+    uses: ./.github/workflows/deploy-pages.yaml
+    with:
+      pages-path: tests/scenarios/deploy-pages/site
+      pages-artifact-enabled: true
+      pages-deploy-enabled: false
+      pages-artifact-name: devflows-deploy-pages-package-only
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      pages: write
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  deploy_pages_package_only_assert:
+    name: 'Deploy Pages: Package a site directory into a Pages artifact without deploying assertions'
+    runs-on: ubuntu-latest
+    needs: deploy_pages_package_only_call
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.deploy_pages_package_only_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: devflows-deploy-pages-package-only
+          path: .devflows-test-artifacts/deploy-pages/package-only
+      - name: Assert output pages-url
+        shell: bash
+        env:
+          ASSERT_NAME: pages-url
+          EXPECTED: ''
+          ACTUAL: ${{ needs.deploy_pages_package_only_call.outputs.pages-url }}
+        run: python harness/scenarios/assert-equals.py
+      - name: 'Assert file exists: artifact.tar'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/deploy-pages/package-only/artifact.tar
+        run: python harness/scenarios/assert-file-exists.py
+  deploy_pages_package_from_artifact_setup:
+    name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact setup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Create setup files
+        shell: bash
+        env:
+          DEVFLOWS_SETUP_FILES: |-
+            [
+              {
+                "path": ".devflows-test/deploy-pages/from-artifact-input/index.html",
+                "content": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <title>DevFlows deploy-pages chained site</title>\n  </head>\n  <body>\n    <h1>Chained from a downloaded artifact</h1>\n  </body>\n</html>\n"
+              }
+            ]
+        run: python harness/scenarios/create-setup-files.py
+      - name: Upload setup artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: devflows-deploy-pages-input-site
+          path: .devflows-test/deploy-pages/from-artifact-input
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  deploy_pages_package_from_artifact_call:
+    name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact'
+    uses: ./.github/workflows/deploy-pages.yaml
+    with:
+      checkout-enabled: false
+      artifact-download-enabled: true
+      artifact-download-name: devflows-deploy-pages-input-site
+      artifact-download-path: site-input
+      pages-path: site-input
+      pages-artifact-enabled: true
+      pages-deploy-enabled: false
+      pages-artifact-name: devflows-deploy-pages-from-artifact
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      pages: write
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: deploy_pages_package_from_artifact_setup
+  deploy_pages_package_from_artifact_assert:
+    name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact assertions'
+    runs-on: ubuntu-latest
+    needs: deploy_pages_package_from_artifact_call
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.deploy_pages_package_from_artifact_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: devflows-deploy-pages-from-artifact
+          path: .devflows-test-artifacts/deploy-pages/from-artifact
+      - name: 'Assert file exists: artifact.tar'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/deploy-pages/from-artifact/artifact.tar
+        run: python harness/scenarios/assert-file-exists.py
   pandoc_markdown_html_artifact_call:
     name: 'Pandoc: Markdown to HTML with artifact upload'
     uses: ./.github/workflows/pandoc.yaml
