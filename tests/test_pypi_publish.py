@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+import urllib.error
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -31,6 +32,7 @@ _ENV_KEYS = (
     "INSTALL_CHECK_IMPORT_NAMES",
     "INSTALL_CHECK_TIMEOUT_MINUTES",
     "ARTIFACT_DOWNLOAD_ENABLED",
+    "ARTIFACT_DOWNLOAD_NAME",
     "DEVFLOWS_STAGE_DIR",
     "PACKAGE_NAME",
     "PACKAGE_VERSION",
@@ -234,19 +236,45 @@ def test_validate_rejects_install_check_in_dry_run(env) -> None:
 
 @pytest.mark.parametrize(
     "argument",
-    ["-i", "--index-url https://x/simple", "--extra-index-url https://x/simple", "-ihttps://x"],
+    [
+        # The full uv/pip index/source surface (item #3), including attached forms.
+        "-i",
+        "--index-url https://x/simple",
+        "--extra-index-url https://x/simple",
+        "-ihttps://x",
+        "--index https://x/simple",
+        "--default-index https://x/simple",
+        "-f https://x",
+        "--find-links https://x",
+        "-fhttps://x",
+        "--no-index",
+        "--index-strategy unsafe-best-match",
+        # Requirement files and bare positional package injection.
+        "-r requirements.txt",
+        "--requirement requirements.txt",
+        "evil-package",
+        "--no-deps evil-package",
+        # Mis-shaped allowlisted flags.
+        "--no-deps=1",
+        "--no-binary",
+        "--no-binary=",
+    ],
 )
-def test_validate_rejects_index_flags(env, argument: str) -> None:
+def test_validate_rejects_non_allowlisted_install_arguments(env, argument: str) -> None:
     _expect_validate_failure(
         env,
-        "install-check-arguments must not select a package index",
+        "install-check-arguments only accepts build-mode flags",
         INSTALL_CHECK_ARGUMENTS=argument,
     )
 
 
-def test_validate_accepts_benign_install_arguments(env) -> None:
+@pytest.mark.parametrize(
+    "argument",
+    ["--no-binary :all:", "--no-binary=:all:", "--only-binary :all:", "--no-deps", ""],
+)
+def test_validate_accepts_benign_install_arguments(env, argument: str) -> None:
     module = _load(VALIDATE)
-    env(**{**_valid_validate_env(), "INSTALL_CHECK_ARGUMENTS": "--no-binary :all:"})
+    env(**{**_valid_validate_env(), "INSTALL_CHECK_ARGUMENTS": argument})
     assert module.main() == 0
 
 
@@ -256,6 +284,23 @@ def test_validate_rejects_unparseable_install_arguments(env) -> None:
         "install-check-arguments is not valid shell syntax",
         INSTALL_CHECK_ARGUMENTS="'unbalanced",
     )
+
+
+def test_validate_rejects_artifact_download_name_mismatch(env) -> None:
+    # artifact-download-name must be one of the manifest's declared sdist/wheels
+    # artifacts (loud chaining-misconfig catch, mirrors anaconda-publish).
+    _expect_validate_failure(
+        env,
+        "are from different builds",
+        ARTIFACT_DOWNLOAD_NAME="some-other-artifact",
+    )
+
+
+def test_validate_accepts_matching_artifact_download_name(env) -> None:
+    module = _load(VALIDATE)
+    # _VALID_MANIFEST declares artifacts.sdist == "pkg-sdist".
+    env(**{**_valid_validate_env(), "ARTIFACT_DOWNLOAD_NAME": "pkg-sdist"})
+    assert module.main() == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -530,17 +575,50 @@ def test_install_check_parse_list() -> None:
     assert module._parse_list("") == []
 
 
-@pytest.mark.parametrize("argument", ["-i", "--index-url=x", "--extra-index-url", "-ihttps://x"])
-def test_install_check_rejects_index_flags(argument: str) -> None:
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "-i",
+        "--index-url=x",
+        "--extra-index-url",
+        "-ihttps://x",
+        "--index https://x",
+        "--default-index https://x",
+        "-f https://x",
+        "--find-links https://x",
+        "-fhttps://x",
+        "--no-index",
+        "--index-strategy unsafe-best-match",
+        "-r requirements.txt",
+        "--requirement requirements.txt",
+        "evil-package",
+        "--no-deps evil-package",
+        "--no-deps=1",
+        "--no-binary",
+        "--no-binary=",
+    ],
+)
+def test_install_check_rejects_non_allowlisted(argument: str) -> None:
     module = _load(INSTALL_CHECK)
     with pytest.raises(SystemExit) as excinfo:
         module._parse_arguments(argument)
-    assert "must not select a package index" in str(excinfo.value)
+    assert "only accepts build-mode flags" in str(excinfo.value)
 
 
-def test_install_check_accepts_benign_arguments() -> None:
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ("--no-binary :all:", ["--no-binary", ":all:"]),
+        ("--no-binary=:all:", ["--no-binary=:all:"]),
+        ("--only-binary :all:", ["--only-binary", ":all:"]),
+        ("--no-deps", ["--no-deps"]),
+        ("--no-binary :all: --no-deps", ["--no-binary", ":all:", "--no-deps"]),
+        ("", []),
+    ],
+)
+def test_install_check_accepts_allowlisted(argument: str, expected: list[str]) -> None:
     module = _load(INSTALL_CHECK)
-    assert module._parse_arguments("--no-binary :all:") == ["--no-binary", ":all:"]
+    assert module._parse_arguments(argument) == expected
 
 
 def test_install_check_parse_timeout() -> None:
@@ -550,6 +628,102 @@ def test_install_check_parse_timeout() -> None:
         module._parse_timeout("0")
     with pytest.raises(SystemExit):
         module._parse_timeout("abc")
+
+
+# --------------------------------------------------------------------------- #
+# install-check.py (version-propagation polling loop)
+# --------------------------------------------------------------------------- #
+
+
+class _FakeResponse:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+def _http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url="https://x/json", code=code, msg="e", hdrs=None, fp=None)
+
+
+def test_is_version_visible_true_on_2xx(monkeypatch) -> None:
+    module = _load(INSTALL_CHECK)
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *a, **k: _FakeResponse(200))
+    assert module._is_version_visible("https://pypi.org/pypi/foo/1.0/json") is True
+
+
+@pytest.mark.parametrize("code", [404, 429, 500, 502, 503])
+def test_is_version_visible_transient_returns_false(monkeypatch, code: int) -> None:
+    # 404 (not published yet) and transient CDN/rate-limit statuses keep polling.
+    module = _load(INSTALL_CHECK)
+
+    def _raise(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        raise _http_error(code)
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", _raise)
+    assert module._is_version_visible("https://pypi.org/pypi/foo/1.0/json") is False
+
+
+@pytest.mark.parametrize("code", [400, 401, 403])
+def test_is_version_visible_reraises_non_transient(monkeypatch, code: int) -> None:
+    module = _load(INSTALL_CHECK)
+
+    def _raise(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        raise _http_error(code)
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", _raise)
+    with pytest.raises(urllib.error.HTTPError):
+        module._is_version_visible("https://pypi.org/pypi/foo/1.0/json")
+
+
+def test_is_version_visible_false_on_urlerror(monkeypatch) -> None:
+    module = _load(INSTALL_CHECK)
+
+    def _raise(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        raise urllib.error.URLError("boom")
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", _raise)
+    assert module._is_version_visible("https://pypi.org/pypi/foo/1.0/json") is False
+
+
+def test_wait_for_version_immediate_success(monkeypatch) -> None:
+    module = _load(INSTALL_CHECK)
+    monkeypatch.setattr(module, "_is_version_visible", lambda url: True)
+    slept: list[float] = []
+    monkeypatch.setattr(module.time, "sleep", lambda s: slept.append(s))
+    module._wait_for_version("pypi", "foo", "1.0", deadline=1e9)
+    assert slept == []  # returned before ever sleeping
+
+
+def test_wait_for_version_success_after_polls(monkeypatch) -> None:
+    module = _load(INSTALL_CHECK)
+    visible_calls = {"n": 0}
+
+    def _visible(url: str) -> bool:
+        visible_calls["n"] += 1
+        return visible_calls["n"] >= 3
+
+    monkeypatch.setattr(module, "_is_version_visible", _visible)
+    slept: list[float] = []
+    monkeypatch.setattr(module.time, "sleep", lambda s: slept.append(s))
+    ticks = iter([0.0, 1.0, 2.0, 3.0])
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    module._wait_for_version("pypi", "foo", "1.0", deadline=100.0)
+    assert visible_calls["n"] == 3
+    assert slept == [module._POLL_INTERVAL_SECONDS, module._POLL_INTERVAL_SECONDS]
+
+
+def test_wait_for_version_deadline_expiry(monkeypatch) -> None:
+    module = _load(INSTALL_CHECK)
+    monkeypatch.setattr(module, "_is_version_visible", lambda url: False)
+    monkeypatch.setattr(module.time, "sleep", lambda s: None)
+    monkeypatch.setattr(module.time, "monotonic", lambda: 1000.0)
+    with pytest.raises(SystemExit, match="did not become visible"):
+        module._wait_for_version("pypi", "foo", "1.0", deadline=0.0)
 
 
 # --------------------------------------------------------------------------- #
@@ -603,3 +777,22 @@ def test_download_step_injected_in_verify_and_publish(published) -> None:
     for job_id in ("verify", "publish"):
         steps = published["jobs"][job_id]["steps"]
         assert any("download-artifact" in str(step.get("uses", "")) for step in steps)
+
+
+def test_publish_job_reverifies_before_upload(published) -> None:
+    # TOCTOU guard: the manifest re-verification (verify-dist.py) must run on the
+    # same runner immediately before the OIDC trusted-publishing upload step, so a
+    # swapped artifact cannot reach PyPI. Pins the step ordering the workflow depends on.
+    steps = [s for s in published["jobs"]["publish"]["steps"] if isinstance(s, dict)]
+    action_index = next(
+        i
+        for i, step in enumerate(steps)
+        if str(step.get("uses", "")).startswith("pypa/gh-action-pypi-publish")
+    )
+    reverify_index = next(
+        i
+        for i, step in enumerate(steps)
+        if step.get("name") == "Re-verify distributions against the manifest"
+    )
+    assert "verify-dist.py" in str(steps[reverify_index].get("run", ""))
+    assert reverify_index < action_index

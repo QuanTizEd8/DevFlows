@@ -107,10 +107,14 @@ notes:
     neither flag), 'skip' (--skip-existing, for idempotent retry of a partially
     failed publish), or 'overwrite' (--force). 'overwrite' is the only route to
     --force, replacing the cd draft's silent unconditional --force.
-    upload-arguments is environment-mediated and shlex-split, and validation rejects
-    flags owned by typed inputs (--force, --skip-existing, -l/--label, -u/--user,
-    -v/--version, -t/--token, -s/--site) so the safety inputs cannot be smuggled
-    past.
+    upload-arguments is environment-mediated and shlex-split, and validation applies
+    a strict allowlist rather than a denylist (which argparse defeats via attached
+    short values like -lmain, long-flag abbreviations like --lab, and bare positional
+    file paths): only the cosmetic/metadata flags --no-progress, --no-register,
+    --register, --keep-basename, --summary=VALUE, and --description=VALUE are
+    accepted. Every owned flag (--force/--skip-existing and the collision-mode group,
+    -l/--label, -u/--user, -v/--version, -p/--package, -t/--token, -s/--site) and any
+    bare positional is rejected, so the safety inputs cannot be smuggled past.
   - >-
     Digest verification runs twice against the caller-supplied publish-dist-manifest.
     First in the credential-free verify job, then again as a tokenless

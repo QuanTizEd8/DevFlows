@@ -98,9 +98,12 @@ on:
       upload-arguments:
         description:
           Extra arguments appended to anaconda upload. Passed through an environment variable and
-          shlex-split by a DevFlows script; never shell-interpolated. Validation rejects flags owned by
-          typed inputs (--force, --skip-existing, -l/--label, -u/--user, -v/--version, -t/--token,
-          -s/--site) so the safety inputs cannot be bypassed.
+          shlex-split by a DevFlows script; never shell-interpolated. Guarded by a strict allowlist
+          rather than a denylist (which argparse defeats via attached short values, long-flag
+          abbreviations, and bare positionals). Only the cosmetic/metadata flags --no-progress,
+          --no-register, --register, --keep-basename, --summary=VALUE, and --description=VALUE are
+          accepted, each as --flag or --flag=value. Everything else - the owner, label, version,
+          collision mode, token, site, and file paths - is owned by typed inputs and rejected here.
         type: string
         required: false
         default: ""

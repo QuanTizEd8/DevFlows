@@ -265,9 +265,21 @@ tests:
         - local
         - hosted
       expect: validation-failure
-      failure-message-contains: "install-check-arguments must not select a package index"
+      failure-message-contains: "install-check-arguments only accepts build-mode flags"
       inputs:
         artifact-download-enabled: true
         publish-dist-path: dist
         install-check-arguments: --extra-index-url https://pypi.org/simple
+        publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'
+    - id: manifest-artifact-mismatch
+      name: An artifact-download-name not listed in the manifest artifacts is rejected
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "are from different builds"
+      inputs:
+        artifact-download-enabled: true
+        artifact-download-name: some-other-artifact
+        publish-dist-path: dist
         publish-dist-manifest: '{"schema":1,"files":[{"name":"pkg-1.0.tar.gz","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":1,"kind":"sdist"}],"artifacts":{"sdist":"pkg-sdist","wheels":"","conda-channel":""}}'

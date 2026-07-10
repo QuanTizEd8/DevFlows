@@ -104,15 +104,72 @@ def test_validate_owner_and_label() -> None:
         specs.validate_label("bad/label", field="upload-label")
 
 
-def test_parse_extra_arguments_rejects_owned_flags() -> None:
-    assert specs.parse_extra_arguments("--no-register --summary hi", field="upload-arguments") == [
+def test_parse_extra_arguments_accepts_allowlisted_flags() -> None:
+    # Allowlisted boolean and --flag=value forms are accepted verbatim and in order,
+    # so the built argv is exactly what the caller wrote.
+    assert specs.parse_extra_arguments(
+        "--no-register --summary=hi --description='two words' --no-progress --keep-basename",
+        field="upload-arguments",
+    ) == [
         "--no-register",
-        "--summary",
-        "hi",
+        "--summary=hi",
+        "--description=two words",
+        "--no-progress",
+        "--keep-basename",
     ]
-    for smuggled in ["--force", "--skip-existing", "-l main", "--label=main", "-u org", "-t x"]:
-        with pytest.raises(specs.SpecError, match="owned by typed inputs"):
-            specs.parse_extra_arguments(smuggled, field="upload-arguments")
+    assert specs.parse_extra_arguments("", field="upload-arguments") == []
+    assert specs.parse_extra_arguments("--register", field="upload-arguments") == ["--register"]
+
+
+@pytest.mark.parametrize(
+    "smuggled",
+    [
+        # Owned long flags: namespace, label, version, package, collision mode, internal.
+        "--force",
+        "--skip-existing",
+        "--fail",
+        "--interactive",
+        "--force-metadata-update",
+        "--label=main",
+        "--channel=main",
+        "--user=org",
+        "--version=9.9",
+        "--package=evil",
+        "--build-id=x",
+        # Attached short-option forms argparse would silently accept as -l main, etc.
+        "-lmain",
+        "-umalicious",
+        "-tSECRET",
+        "-sX",
+        "-c main",
+        # Long-flag abbreviations argparse would expand to an owned flag.
+        "--lab main",
+        "--use org",
+        # Bare positionals: an unverified distribution file or any stray word.
+        "evil.conda",
+        "pkg-1.0-h0.tar.bz2",
+        "positional",
+        # A value flag without =VALUE would leave a bare positional value behind.
+        "--summary hi",
+        "--summary",
+        "--summary=",
+        # A boolean flag must not carry a value.
+        "--no-progress=1",
+        # Unknown long flag.
+        "--totally-unknown",
+    ],
+)
+def test_parse_extra_arguments_rejects_non_allowlisted(smuggled: str) -> None:
+    with pytest.raises(specs.SpecError):
+        specs.parse_extra_arguments(smuggled, field="upload-arguments")
+
+
+def test_parse_extra_arguments_owned_flag_message_mentions_typed_inputs() -> None:
+    # The scenario and validate-inputs test pin this substring for smuggled owned flags.
+    with pytest.raises(specs.SpecError, match="owned by typed inputs"):
+        specs.parse_extra_arguments("--force", field="upload-arguments")
+    with pytest.raises(specs.SpecError, match="owned by typed inputs"):
+        specs.parse_extra_arguments("evil.conda", field="upload-arguments")
 
 
 def test_validate_existing_mode() -> None:
@@ -251,6 +308,36 @@ def test_build_argv_shapes() -> None:
         "--from",
         "anaconda-client==1.13.0",
     ]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_mode_flags"),
+    [("fail", []), ("skip", ["--skip-existing"]), ("overwrite", ["--force"])],
+)
+def test_build_upload_argv_maps_existing_mode(mode: str, expected_mode_flags: list[str]) -> None:
+    # Pin the exact upload-existing-mode -> flag mapping so a silent remap (e.g.
+    # skip -> --force) cannot pass: 'fail' emits neither flag, 'skip' emits exactly
+    # --skip-existing, 'overwrite' emits exactly --force.
+    argv = specs.build_upload_argv(
+        server_url="",
+        owner="org",
+        label="staging",
+        mode=mode,
+        extra_arguments=[],
+        file_path="/x/p.conda",
+    )
+    assert argv == [
+        "anaconda",
+        "upload",
+        "--user",
+        "org",
+        "--label",
+        "staging",
+        *expected_mode_flags,
+        "/x/p.conda",
+    ]
+    assert ("--skip-existing" in argv) == (mode == "skip")
+    assert ("--force" in argv) == (mode == "overwrite")
 
 
 def test_resolve_client_version_uses_pin_or_override() -> None:
@@ -658,6 +745,200 @@ def test_verify_reverify_mode_still_fails_on_mismatch(monkeypatch, tmp_path: Pat
 
 
 # --------------------------------------------------------------------------- #
+# Credentialed executors: upload.py / promote.py / maintain.py                #
+# These carry ANACONDA_API_TOKEN; pin the exact argv they run and that the      #
+# token flows via the inherited environment, never on the command line.        #
+# --------------------------------------------------------------------------- #
+class _FakeCompleted:
+    def __init__(self, returncode: int = 0) -> None:
+        self.returncode = returncode
+
+
+def _capturing_run(calls: list[list[str]]):
+    def _fake_run(argv, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+        calls.append(list(argv))
+        return _FakeCompleted(0)
+
+    return _fake_run
+
+
+def _upload_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
+    base = {
+        "ANACONDA_API_TOKEN": "s3cret-token",
+        "PUBLISH_OWNER": "devflows-fixture",
+        "PUBLISH_SERVER_URL": "",
+        "PUBLISH_CLIENT_VERSION": "",
+        "PUBLISH_DIST_PATH": str(tmp_path),
+        "PUBLISH_EXPECTED_VERSION": "",
+        "UPLOAD_LABEL": "staging",
+        "UPLOAD_EXISTING_MODE": "fail",
+        "UPLOAD_ARGUMENTS": "",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_upload_executor_builds_expected_argv(monkeypatch, tmp_path: Path) -> None:
+    entry = _conda_file(tmp_path, "pkg-1.2.3-h0.conda", b"payload")
+    module = _load_script("upload.py")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(module.subprocess, "run", _capturing_run(calls))
+    env = _upload_env(
+        tmp_path,
+        UPLOAD_EXISTING_MODE="skip",
+        UPLOAD_ARGUMENTS="--summary=hi",
+        PUBLISH_DIST_MANIFEST=json.dumps(_manifest([entry])),
+    )
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    assert module.main() == 0
+    assert len(calls) == 1
+    argv = calls[0]
+    assert argv[:3] == ["uvx", "--from", f"anaconda-client=={specs.ANACONDA_CLIENT_VERSION}"]
+    assert argv[3:] == [
+        "anaconda",
+        "upload",
+        "--user",
+        "devflows-fixture",
+        "--label",
+        "staging",
+        "--skip-existing",
+        "--summary=hi",
+        str(tmp_path / "noarch" / "pkg-1.2.3-h0.conda"),
+    ]
+    # The token never lands in a process argument; anaconda-client reads it from env.
+    assert "s3cret-token" not in " ".join(argv)
+    assert "--token" not in argv and "-t" not in argv
+
+
+@pytest.mark.parametrize("mode", ["fail", "skip", "overwrite"])
+def test_upload_executor_maps_existing_mode(monkeypatch, tmp_path: Path, mode: str) -> None:
+    entry = _conda_file(tmp_path, "pkg-1.0-h0.conda", b"x")
+    module = _load_script("upload.py")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(module.subprocess, "run", _capturing_run(calls))
+    for key, value in _upload_env(
+        tmp_path,
+        UPLOAD_EXISTING_MODE=mode,
+        PUBLISH_DIST_MANIFEST=json.dumps(_manifest([entry])),
+    ).items():
+        monkeypatch.setenv(key, value)
+    assert module.main() == 0
+    argv = calls[0]
+    assert ("--skip-existing" in argv) == (mode == "skip")
+    assert ("--force" in argv) == (mode == "overwrite")
+
+
+def test_upload_executor_requires_token(monkeypatch) -> None:
+    module = _load_script("upload.py")
+    monkeypatch.setenv("ANACONDA_API_TOKEN", "  ")
+    with pytest.raises(SystemExit, match="ANACONDA_API_TOKEN is empty"):
+        module.main()
+
+
+def test_promote_executor_builds_move_argv_per_target(monkeypatch) -> None:
+    module = _load_script("promote.py")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(module.subprocess, "run", _capturing_run(calls))
+    for key, value in {
+        "ANACONDA_API_TOKEN": "s3cret-token",
+        "PUBLISH_SERVER_URL": "",
+        "PUBLISH_CLIENT_VERSION": "",
+        "UPLOAD_LABEL": "staging",
+        "PROMOTE_LABEL": "main",
+        "PROMOTED_SPECS": "devflows-fixture/pkg/1.0\ndevflows-fixture/other/2.0",
+    }.items():
+        monkeypatch.setenv(key, value)
+    assert module.main() == 0
+    assert [argv[3:] for argv in calls] == [
+        [
+            "anaconda",
+            "move",
+            "--from-label",
+            "staging",
+            "--to-label",
+            "main",
+            "devflows-fixture/pkg/1.0",
+        ],
+        [
+            "anaconda",
+            "move",
+            "--from-label",
+            "staging",
+            "--to-label",
+            "main",
+            "devflows-fixture/other/2.0",
+        ],
+    ]
+    for argv in calls:
+        assert "s3cret-token" not in " ".join(argv)
+
+
+def test_promote_executor_requires_targets(monkeypatch) -> None:
+    module = _load_script("promote.py")
+    for key, value in {
+        "ANACONDA_API_TOKEN": "tok",
+        "PUBLISH_SERVER_URL": "",
+        "PUBLISH_CLIENT_VERSION": "",
+        "UPLOAD_LABEL": "staging",
+        "PROMOTE_LABEL": "main",
+        "PROMOTED_SPECS": "",
+    }.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(SystemExit, match="no promote targets"):
+        module.main()
+
+
+def test_maintain_executor_builds_remove_argv_per_target(monkeypatch) -> None:
+    module = _load_script("maintain.py")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(module.subprocess, "run", _capturing_run(calls))
+    for key, value in {
+        "ANACONDA_API_TOKEN": "s3cret-token",
+        "PUBLISH_SERVER_URL": "https://anaconda.example",
+        "PUBLISH_CLIENT_VERSION": "2.0.0",
+        "REMOVED_SPECS": "devflows-fixture/pkg/1.0\ndevflows-fixture/pkg/0.9",
+    }.items():
+        monkeypatch.setenv(key, value)
+    assert module.main() == 0
+    # A publish-server-url and an explicit client version both flow through.
+    assert [argv[:3] for argv in calls] == [["uvx", "--from", "anaconda-client==2.0.0"]] * 2
+    assert [argv[3:] for argv in calls] == [
+        [
+            "anaconda",
+            "-s",
+            "https://anaconda.example",
+            "remove",
+            "--force",
+            "devflows-fixture/pkg/1.0",
+        ],
+        [
+            "anaconda",
+            "-s",
+            "https://anaconda.example",
+            "remove",
+            "--force",
+            "devflows-fixture/pkg/0.9",
+        ],
+    ]
+    for argv in calls:
+        assert "s3cret-token" not in " ".join(argv)
+
+
+def test_maintain_executor_requires_targets(monkeypatch) -> None:
+    module = _load_script("maintain.py")
+    for key, value in {
+        "ANACONDA_API_TOKEN": "tok",
+        "PUBLISH_SERVER_URL": "",
+        "PUBLISH_CLIENT_VERSION": "",
+        "REMOVED_SPECS": "",
+    }.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(SystemExit, match="no removal targets"):
+        module.main()
+
+
+# --------------------------------------------------------------------------- #
 # preflight-token.py                                                           #
 # --------------------------------------------------------------------------- #
 def test_preflight_requires_token_when_not_dry_run(monkeypatch) -> None:
@@ -682,18 +963,21 @@ def test_anaconda_client_pin_matches_renovate_manager() -> None:
     assert re.fullmatch(r"[0-9]+(\.[0-9]+)*", specs.ANACONDA_CLIENT_VERSION)
     renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
     assert "workflows/anaconda-publish/scripts/specs" in renovate
-    assert "depName=(?<depName>" in renovate  # the pep440 manager is registered
-    # The regex Renovate is configured with must actually match the constant so the
-    # pin keeps auto-updating; mirror it here (double-escapes collapse to one).
-    manager_regex = (
-        r"# renovate: datasource=(?P<datasource>\S+) depName=(?P<depName>\S+)\s+"
-        r'ANACONDA_CLIENT_VERSION = "(?P<currentValue>[^"]+)"'
-    )
+    # Pull Renovate's ACTUAL configured matchString (the one keyed on the constant)
+    # out of renovate.json5 rather than hand-mirroring it: decode the JSON5
+    # single-quoted escaping (\\S -> \S), translate the .NET-style (?<name>) capture
+    # groups to Python's (?P<name>), then apply THAT regex to specs.py. This proves
+    # the configured manager still matches the constant, so the pin keeps
+    # auto-updating; a hand-copied regex could silently drift from the real config.
+    match_strings = re.findall(r"'([^']*ANACONDA_CLIENT_VERSION[^']*)'", renovate)
+    assert len(match_strings) == 1, "expected exactly one anaconda-client matchString"
+    configured = match_strings[0].replace("\\\\", "\\")  # JSON5 unescape: \\S -> \S
+    python_pattern = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", configured)
     source = (SCRIPT_DIR / "specs.py").read_text(encoding="utf-8")
-    match = re.search(manager_regex, source)
-    assert match is not None
-    assert match.group("depName") == "anaconda-client"
+    match = re.search(python_pattern, source)
+    assert match is not None, python_pattern
     assert match.group("datasource") == "pypi"
+    assert match.group("depName") == "anaconda-client"
     assert match.group("currentValue") == specs.ANACONDA_CLIENT_VERSION
 
 
@@ -770,3 +1054,21 @@ def test_preflight_is_tokenless() -> None:
         env = preflight.get("env") or {}
         assert env["ANACONDA_TOKEN_PRESENT"] == "${{ secrets.anaconda-token != '' }}"
         assert "ANACONDA_API_TOKEN" not in env
+
+
+def test_upload_job_reverifies_before_token_step() -> None:
+    # TOCTOU guard: the tokenless EMIT_PLAN=false re-verification (verify-dist.py)
+    # must run before the single ANACONDA_API_TOKEN-bearing upload step, so a swapped
+    # artifact cannot ride the credentialed upload. Pins the step ordering the
+    # workflow depends on.
+    steps = _steps(_published()["jobs"]["upload"])
+    reverify = [
+        i for i, step in enumerate(steps) if (step.get("env") or {}).get("EMIT_PLAN") == "false"
+    ]
+    token = [i for i, step in enumerate(steps) if "ANACONDA_API_TOKEN" in (step.get("env") or {})]
+    assert len(reverify) == 1, "exactly one EMIT_PLAN=false re-verify step expected"
+    assert len(token) == 1, "exactly one token-bearing step expected"
+    reverify_index, token_index = reverify[0], token[0]
+    assert "verify-dist.py" in str(steps[reverify_index].get("run", ""))
+    assert "ANACONDA_API_TOKEN" not in (steps[reverify_index].get("env") or {})
+    assert reverify_index < token_index

@@ -118,10 +118,13 @@ on:
         default: ""
       install-check-arguments:
         description:
-          Extra arguments appended to the install command (for example, to force building from the
-          sdist). Environment-mediated and shlex-split by the DevFlows script, never interpolated into
-          shell text. Index-selection flags (-i, --index-url, --extra-index-url) are rejected - the
-          index is chosen by publish-index and the target version is exact-pinned.
+          Extra arguments appended to the install command (for example --no-binary to force building
+          from the sdist rather than a wheel). Environment-mediated and shlex-split by the DevFlows
+          script, never interpolated into shell text. Guarded by a strict allowlist of build-mode flags - only
+          --no-binary, --only-binary, and --no-deps are accepted. Index selection (-i/--index-url/
+          --extra-index-url/--index/--default-index/-f/--find-links/--no-index/--index-strategy),
+          --requirement/-r, and bare package names are rejected - the index is chosen by publish-index
+          and the target version is exact-pinned.
         type: string
         required: false
         default: ""
@@ -173,6 +176,7 @@ jobs:
           INSTALL_CHECK_ENABLED: ${{ inputs.install-check-enabled }}
           INSTALL_CHECK_ARGUMENTS: ${{ inputs.install-check-arguments }}
           ARTIFACT_DOWNLOAD_ENABLED: ${{ inputs.artifact-download-enabled }}
+          ARTIFACT_DOWNLOAD_NAME: ${{ inputs.artifact-download-name }}
         shell: bash
         run: python "${DEVFLOWS_SCRIPT_ROOT}/pypi-publish/validate-inputs.py"
 

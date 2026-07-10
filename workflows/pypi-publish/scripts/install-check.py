@@ -17,9 +17,16 @@ _INDEX_BASE = {
     "pypi": "https://pypi.org",
     "testpypi": "https://test.pypi.org",
 }
-# Mirrors validate-inputs.py: index-selecting flags are rejected here too, as a
-# defense-in-depth guard in case this script is ever invoked outside the workflow.
-_INDEX_SELECTION_FLAGS = {"-i", "--index-url", "--extra-index-url"}
+# install-check-arguments is a strict ALLOWLIST of pip/uv *build-mode* flags, kept
+# byte-identical to validate-inputs.py (defense-in-depth if this script is ever run
+# outside the workflow). The install target is exact-pinned ({name}=={version}) and
+# the index is chosen solely by publish-index, so a caller has no legitimate reason
+# to select an index, add a requirement file, or name another package. A denylist of
+# index flags is bypassable (uv/pip expose -i/--index-url/--extra-index-url/--index/
+# --default-index/-f/--find-links/--no-index/--index-strategy plus attached -i.../-f...
+# forms); only these build-mode flags are accepted, everything else is rejected.
+_ALLOWED_INSTALL_BOOL_FLAGS = frozenset({"--no-deps"})
+_ALLOWED_INSTALL_VALUE_FLAGS = frozenset({"--no-binary", "--only-binary"})
 _POLL_INTERVAL_SECONDS = 15
 
 
@@ -79,16 +86,48 @@ def _parse_arguments(raw: str) -> list[str]:
         tokens = shlex.split(raw)
     except ValueError as error:
         raise SystemExit(f"install-check-arguments is not valid shell syntax: {error}.") from None
-    for token in tokens:
-        name = token.split("=", 1)[0]
-        if name in _INDEX_SELECTION_FLAGS or (
-            token.startswith("-i") and not token.startswith("--")
-        ):
-            raise SystemExit(
-                "install-check-arguments must not select a package index "
-                f"(-i/--index-url/--extra-index-url). Offending argument: {token!r}."
-            )
+    _validate_install_arguments(tokens)
     return tokens
+
+
+def _install_arguments_error(token: str) -> str:
+    return (
+        "install-check-arguments only accepts build-mode flags "
+        f"(--no-binary, --only-binary, --no-deps); {token!r} is not allowed. Index "
+        "selection (-i/--index-url/--extra-index-url/--index/--default-index/-f/"
+        "--find-links/--no-index/--index-strategy), --requirement/-r, and bare package "
+        "names are rejected: the index is chosen by publish-index and the target "
+        "version is exact-pinned."
+    )
+
+
+def _validate_install_arguments(tokens: list[str]) -> None:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token.startswith("--"):
+            # Bare positional, single-dash short option, or attached short value (-ihttps,
+            # -f./dir): never legitimate build-mode input.
+            raise SystemExit(_install_arguments_error(token))
+        flag, sep, value = token.partition("=")
+        if flag in _ALLOWED_INSTALL_BOOL_FLAGS:
+            if sep:
+                raise SystemExit(_install_arguments_error(token))
+            index += 1
+            continue
+        if flag in _ALLOWED_INSTALL_VALUE_FLAGS:
+            if sep:
+                if not value:
+                    raise SystemExit(_install_arguments_error(token))
+                index += 1
+                continue
+            # Separate-token value form (e.g. --no-binary :all:): consume the next token
+            # as the value so a bare package name can never slip through as a positional.
+            if index + 1 >= len(tokens) or tokens[index + 1].startswith("-"):
+                raise SystemExit(_install_arguments_error(token))
+            index += 2
+            continue
+        raise SystemExit(_install_arguments_error(token))
 
 
 def _parse_timeout(raw: str) -> float:
@@ -110,7 +149,11 @@ def _is_version_visible(url: str) -> bool:
         with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
             return 200 <= response.status < 300
     except urllib.error.HTTPError as error:
-        if error.code == 404:
+        # 404 means "not published yet". Transient CDN / rate-limit responses (any
+        # 5xx, plus 429) are ALSO treated as not-yet-visible so a blip does not crash
+        # the whole install-check: the loop is deadline-bounded, so this cannot extend
+        # polling past the timeout. Only non-transient client errors (e.g. 403) fail fast.
+        if error.code == 404 or error.code == 429 or error.code >= 500:
             return False
         raise
     except urllib.error.URLError:

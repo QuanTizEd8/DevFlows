@@ -16,9 +16,16 @@ _REPOSITORY_URLS = {
 # Distributions to publish. A manifest carrying only conda-kind files is a
 # nothing-to-publish call for this workflow (anaconda-publish handles those).
 PUBLISHABLE_KINDS = {"sdist", "wheel"}
-# Flags in install-check-arguments that would select a package index and defeat
-# the typed publish-index target (the index is chosen by publish-index alone).
-_INDEX_SELECTION_FLAGS = {"-i", "--index-url", "--extra-index-url"}
+# install-check-arguments is a strict ALLOWLIST of pip/uv *build-mode* flags, kept
+# byte-identical to install-check.py. The install target is exact-pinned
+# ({name}=={version}) and the index is chosen solely by publish-index, so a caller
+# has no legitimate reason to select an index, add a requirement file, or name
+# another package. A denylist of index flags is bypassable (uv/pip expose
+# -i/--index-url/--extra-index-url/--index/--default-index/-f/--find-links/
+# --no-index/--index-strategy plus attached -i.../-f... forms); only these build-mode
+# flags are accepted, everything else is rejected.
+_ALLOWED_INSTALL_BOOL_FLAGS = frozenset({"--no-deps"})
+_ALLOWED_INSTALL_VALUE_FLAGS = frozenset({"--no-binary", "--only-binary"})
 
 
 def main() -> int:
@@ -32,7 +39,8 @@ def main() -> int:
     values for every input checked before it.
     """
     index = _validate_index()
-    _validate_manifest()
+    manifest = _validate_manifest()
+    _validate_artifact_download_name(manifest)
     _validate_dist_path()
     _validate_environment_name()
     _validate_ingestion()
@@ -54,7 +62,7 @@ def _validate_index() -> str:
     return index
 
 
-def _validate_manifest() -> None:
+def _validate_manifest() -> dict[str, object]:
     raw = os.environ.get("PUBLISH_DIST_MANIFEST", "").strip()
     if not raw:
         raise SystemExit(
@@ -84,6 +92,32 @@ def _validate_manifest() -> None:
         raise SystemExit(
             "publish-dist-manifest contains no sdist or wheel distributions to publish "
             "(pypi-publish uploads only sdist and wheel kinds)."
+        )
+    return manifest
+
+
+def _validate_artifact_download_name(manifest: dict[str, object]) -> None:
+    """Loud chaining-misconfig catch (mirrors anaconda-publish).
+
+    When a caller ingests a single named artifact (artifact-download-name) rather
+    than a brace pattern, that name must be one of the publishable artifact names
+    the manifest declares (artifacts.sdist / artifacts.wheels). A mismatch means the
+    manifest and the downloaded artifact came from different builds; refuse before
+    the credentialed publish rather than uploading a set the manifest never covered.
+    """
+    download_name = os.environ.get("ARTIFACT_DOWNLOAD_NAME", "").strip()
+    if not download_name:
+        return
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return
+    declared = {str(artifacts.get(key) or "") for key in ("sdist", "wheels")}
+    declared.discard("")
+    if declared and download_name not in declared:
+        raise SystemExit(
+            f"publish-dist-manifest artifacts (sdist/wheels) {sorted(declared)} do not "
+            f"include artifact-download-name {download_name!r}; the manifest and the "
+            "downloaded artifact are from different builds."
         )
 
 
@@ -133,21 +167,47 @@ def _validate_install_check_arguments() -> None:
         tokens = shlex.split(raw)
     except ValueError as error:
         raise SystemExit(f"install-check-arguments is not valid shell syntax: {error}.") from None
-    for token in tokens:
-        if _is_index_selection_flag(token):
-            raise SystemExit(
-                "install-check-arguments must not select a package index "
-                "(-i/--index-url/--extra-index-url); the index is chosen by publish-index "
-                f"and the target version is exact-pinned. Offending argument: {token!r}."
-            )
+    _validate_install_arguments(tokens)
 
 
-def _is_index_selection_flag(token: str) -> bool:
-    name = token.split("=", 1)[0]
-    if name in _INDEX_SELECTION_FLAGS:
-        return True
-    # Short form with an attached value, e.g. -ihttps://example/simple.
-    return token.startswith("-i") and not token.startswith("--")
+def _install_arguments_error(token: str) -> str:
+    return (
+        "install-check-arguments only accepts build-mode flags "
+        f"(--no-binary, --only-binary, --no-deps); {token!r} is not allowed. Index "
+        "selection (-i/--index-url/--extra-index-url/--index/--default-index/-f/"
+        "--find-links/--no-index/--index-strategy), --requirement/-r, and bare package "
+        "names are rejected: the index is chosen by publish-index and the target "
+        "version is exact-pinned."
+    )
+
+
+def _validate_install_arguments(tokens: list[str]) -> None:
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token.startswith("--"):
+            # Bare positional, single-dash short option, or attached short value (-ihttps,
+            # -f./dir): never legitimate build-mode input.
+            raise SystemExit(_install_arguments_error(token))
+        flag, sep, value = token.partition("=")
+        if flag in _ALLOWED_INSTALL_BOOL_FLAGS:
+            if sep:
+                raise SystemExit(_install_arguments_error(token))
+            index += 1
+            continue
+        if flag in _ALLOWED_INSTALL_VALUE_FLAGS:
+            if sep:
+                if not value:
+                    raise SystemExit(_install_arguments_error(token))
+                index += 1
+                continue
+            # Separate-token value form (e.g. --no-binary :all:): consume the next token
+            # as the value so a bare package name can never slip through as a positional.
+            if index + 1 >= len(tokens) or tokens[index + 1].startswith("-"):
+                raise SystemExit(_install_arguments_error(token))
+            index += 2
+            continue
+        raise SystemExit(_install_arguments_error(token))
 
 
 def _emit_repository_url(index: str) -> None:

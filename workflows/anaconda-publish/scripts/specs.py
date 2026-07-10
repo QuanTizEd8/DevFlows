@@ -39,24 +39,26 @@ _PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+!-]*$")
 _CONDA_EXTENSIONS = (".conda", ".tar.bz2")
 
-# Flags a caller must not smuggle through upload-arguments: they are owned by
-# typed inputs whose validation and safety guarantees would otherwise be bypassed.
-FORBIDDEN_UPLOAD_FLAGS = (
-    "-t",
-    "--token",
-    "-s",
-    "--site",
-    "-u",
-    "--user",
-    "-l",
-    "--label",
-    "-v",
-    "--version",
-    "--force",
-    "--skip-existing",
-    "--interactive",
-    "--no-progress",
+# upload-arguments is guarded by a strict ALLOWLIST, never a denylist. `anaconda
+# upload` is argparse-based, so a denylist of owned flags is inherently bypassable:
+# argparse accepts attached short values (``-lmain`` parses as ``-l main``), unique
+# long-flag abbreviations (``--lab main`` parses as ``--label main``), and bare
+# positional file paths (an unverified ``.conda`` would ride the credentialed
+# upload). Only cosmetic / package-metadata flags that cannot change the upload's
+# target namespace, package/version identity, collision handling, or file selection
+# are allowed. Everything DevFlows owns is rejected here and supplied from typed
+# inputs and the anaconda-token secret instead: the owner (-u/--user), label
+# (-l/--label, -c/--channel), version (-v/--version), package (-p/--package), the
+# collision-mode group (--force/--skip-existing/-f/--fail/-i/--interactive/
+# -m/--force-metadata-update), the internal --build-id, the global token (-t/--token)
+# and site (-s/--site), and the file paths. Audited against `anaconda upload --help`
+# at ANACONDA_CLIENT_VERSION (1.13.0): at the upload subparser -s is --summary and -t
+# is --package-type (the token/site short flags live on the global parser), a further
+# reason the old letter-based denylist was unsound.
+_ALLOWED_UPLOAD_BOOL_FLAGS = frozenset(
+    {"--no-progress", "--no-register", "--register", "--keep-basename"}
 )
+_ALLOWED_UPLOAD_VALUE_FLAGS = frozenset({"--summary", "--description"})
 
 # upload-existing-mode enum mapped onto anaconda-client's mutually-exclusive mode
 # group. 'fail' passes neither flag (anaconda-client errors on a collision).
@@ -207,20 +209,56 @@ def parse_conda_filename(filename: str) -> tuple[str, str]:
 # upload-arguments hardening                                                   #
 # --------------------------------------------------------------------------- #
 def parse_extra_arguments(raw: str, *, field: str) -> list[str]:
-    """shlex-split extra arguments and reject any flag owned by a typed input."""
+    """shlex-split upload-arguments and accept ONLY allowlisted metadata flags.
+
+    Strict allowlist form: every token must be exactly ``--flag`` (a known boolean
+    flag) or ``--flag=value`` (a known value-taking flag with a non-empty value). A
+    token that does not start with ``--`` (a bare positional, a single-dash short
+    option, or an attached short value such as ``-lmain``), an unknown or abbreviated
+    long flag, or a mis-shaped allowlisted flag is rejected: `anaconda upload`'s
+    argparse would otherwise let it override the owner/label/version/collision-mode
+    or ride an unverified file onto the credentialed upload.
+    """
     try:
         args = shlex.split(raw)
     except ValueError as error:
         raise SpecError(f"{field} could not be parsed as shell arguments: {error}.") from error
     for arg in args:
-        flag = arg.split("=", 1)[0]
-        if flag in FORBIDDEN_UPLOAD_FLAGS:
-            raise SpecError(
-                f"{field} may not contain {flag!r}: it is owned by typed inputs "
-                "(publish-owner, upload-label, upload-existing-mode, "
-                "publish-server-url, the anaconda-token secret). Use those inputs."
-            )
+        _validate_upload_argument(arg, field=field)
     return args
+
+
+def _allowed_upload_flags_display() -> str:
+    return ", ".join(sorted(_ALLOWED_UPLOAD_BOOL_FLAGS | _ALLOWED_UPLOAD_VALUE_FLAGS))
+
+
+def _validate_upload_argument(arg: str, *, field: str) -> None:
+    if not arg.startswith("--"):
+        raise SpecError(
+            f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
+            f"({_allowed_upload_flags_display()}) are accepted, each written as --flag "
+            "or --flag=value. Bare file paths, single-dash short options, and attached "
+            "short values are rejected because the owner, label, version, collision "
+            "mode, token, site, and file paths are owned by typed inputs and supplied "
+            "by DevFlows, never through this input."
+        )
+    flag, sep, value = arg.partition("=")
+    if flag in _ALLOWED_UPLOAD_BOOL_FLAGS:
+        if sep:
+            raise SpecError(f"{field}: {flag} is a boolean flag and takes no value; got {arg!r}.")
+        return
+    if flag in _ALLOWED_UPLOAD_VALUE_FLAGS:
+        if not sep or not value:
+            raise SpecError(
+                f"{field}: {flag} requires a value written as {flag}=VALUE; got {arg!r}."
+            )
+        return
+    raise SpecError(
+        f"{field} may not contain {arg!r}: only the allowlisted metadata flags "
+        f"({_allowed_upload_flags_display()}) are accepted. The owner, label, version, "
+        "collision mode, token, site, and file paths are owned by typed inputs and "
+        "supplied by DevFlows, never through this input."
+    )
 
 
 def validate_existing_mode(mode: str) -> str:
