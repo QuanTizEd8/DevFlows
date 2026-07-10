@@ -63,7 +63,11 @@ tests:
         paths:
           - generated
         delete-paths:
+          # remove.html exists on the branch; absent-on-branch.html never did.
+          # Deleting a path absent from the target must succeed (idempotent
+          # deletion), which this scenario now exercises end-to-end.
           - remove.html
+          - absent-on-branch.html
         files:
           - path: generated/index.html
             content: |
@@ -81,5 +85,7 @@ tests:
           path: generated/stale.html
         - type: branch-file-missing
           path: remove.html
+        - type: branch-file-missing
+          path: absent-on-branch.html
         - type: latest-commit-message-equals
           value: "test: writeback e2e"

@@ -11,7 +11,7 @@ use and maintain the project.
 Generated reference : Ignored pages under `docs/reference`. These pages come
 from workflow metadata and workflow YAML and are generated before Sphinx builds.
 
-Examples : Checked-in example workflows under `test/fixtures`. Generated
+Examples : Checked-in example workflows under `tests/fixtures`. Generated
 reference pages render these examples inline.
 
 ## Build Docs

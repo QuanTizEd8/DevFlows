@@ -676,7 +676,13 @@ ARTIFACT_UPLOAD_INPUTS: dict[str, dict[str, Any]] = {
 
 COMMIT_INPUTS: dict[str, dict[str, Any]] = {
     "commit-enabled": {
-        "description": "Whether to commit selected generated files back to a repository.",
+        "description": (
+            "Whether to commit selected generated files back to a repository. The "
+            "writeback commit runs in a nested job that statically requires "
+            "contents: write (and actions: read), so any job calling this workflow "
+            "must grant permissions: contents: write, actions: read even when this "
+            "is false — GitHub validates the nested permissions before the run starts."
+        ),
         "type": "boolean",
         "required": False,
         "default": False,

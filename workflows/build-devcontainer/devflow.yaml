@@ -61,6 +61,29 @@ notes:
     runner after checkout and artifact download.
 examples:
   - name: Build and publish GHCR image
-    path: test/fixtures/build-devcontainer/ghcr-publish.yaml
+    path: tests/fixtures/build-devcontainer/ghcr-publish.yaml
 tests:
-  scenarios: []
+  scenarios:
+    - id: build-only-minimal
+      name: Build a minimal devcontainer without pushing
+      # Build-only, no registry credentials: docker login is disabled, push is
+      # never, the multi-arch merge is off, and the registry build cache is
+      # opted out. This runs on any hosted trigger (including pull_request)
+      # because it needs no secrets. The build job produces the image locally;
+      # since the merge job is skipped, image-ref is empty, which the assertion
+      # confirms alongside the implicit "scenario succeeded" check.
+      runs:
+        - hosted
+      inputs:
+        image-name: devflows-e2e-devcontainer
+        image-tag: e2e
+        devcontainer-config-file: tests/scenarios/build-devcontainer/minimal/devcontainer.json
+        docker-login-enabled: false
+        devcontainer-push: never
+        devcontainer-cache-registry-enabled: false
+        merge-enabled: false
+        cache-enabled: false
+      assertions:
+        - type: workflow-output-equals
+          name: image-ref
+          value: ""

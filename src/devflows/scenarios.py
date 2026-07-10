@@ -11,11 +11,16 @@ from typing import Any
 
 from devflows.actions import ref as action_ref
 from devflows.catalog import Workflow
+from devflows.publish import build_published_workflow, published_workflow_call
 from devflows.yaml import dump_yaml
 
 GENERATED_HOSTED_PATH = Path(".github/workflows/devflows-scenarios.yaml")
 GENERATED_LOCAL_PATH = Path(".github/workflows/devflows-local-scenarios.yaml")
-GENERATED_SCRIPT_DIR = Path(".github/workflows/devflows-scenarios")
+# Harness scripts are real, lint-and-test-covered .py files. The generated
+# workflows check the repository out and invoke them from this committed
+# directory (they are no longer emitted as generated copies under
+# .github/workflows/), so there is a single source of truth for each script.
+HARNESS_SCRIPT_DIR = Path("harness/scenarios")
 LOCAL_EVENT_PATH = Path(".act/push.json")
 # SHA pins come from the central registry (devflows.actions) so they stay in
 # lockstep with the pins the publisher injects.
@@ -24,185 +29,55 @@ UPLOAD_ARTIFACT_REF = action_ref("upload-artifact")
 CHECKOUT_REF = action_ref("checkout")
 ACT_PLATFORM = "ubuntu-latest=catthehacker/ubuntu:act-latest"
 SCENARIO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-SCENARIO_SCRIPTS = {
-    "assert-result.py": """\
-from __future__ import annotations
-
-import os
-
-actual = os.environ["ACTUAL_RESULT"]
-if actual != "success":
-    raise SystemExit(f"Expected scenario job to succeed, got {actual!r}.")
-""",
-    "assert-equals.py": """\
-from __future__ import annotations
-
-import os
-
-name = os.environ["ASSERT_NAME"]
-expected = os.environ["EXPECTED"]
-actual = os.environ["ACTUAL"]
-if actual != expected:
-    raise SystemExit(f"{name}: expected {expected!r}, got {actual!r}.")
-""",
-    "assert-file-exists.py": """\
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-path = Path(os.environ["ASSERT_PATH"])
-if not path.is_file():
-    raise SystemExit(f"Expected file to exist: {path}")
-""",
-    "assert-file-contains.py": """\
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-path = Path(os.environ["ASSERT_PATH"])
-text = os.environ["ASSERT_TEXT"]
-if not path.is_file():
-    raise SystemExit(f"Expected file to exist: {path}")
-content = path.read_text(encoding="utf-8")
-if text not in content:
-    raise SystemExit(f"Expected {path} to contain {text!r}.")
-""",
-    "create-setup-files.py": """\
-from __future__ import annotations
-
-import json
-import os
-from pathlib import Path
-
-files = json.loads(os.environ["DEVFLOWS_SETUP_FILES"])
-for item in files:
-    path = Path(item["path"])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(item.get("content", "")), encoding="utf-8")
-""",
-    "setup-ephemeral-writeback.py": """\
-from __future__ import annotations
-
-import json
-import os
-import shutil
-import subprocess
-from pathlib import Path
-
-workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
-fixture_path = Path(os.environ["DEVFLOWS_FIXTURE_PATH"])
-payload_dir = workspace / ".devflows-writeback" / "payload"
-artifact_name = (
-    f"{os.environ['DEVFLOWS_ARTIFACT_NAME']}-"
-    f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-)
-branch = (
-    f"{os.environ['DEVFLOWS_BRANCH_PREFIX']}-"
-    f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-)
-initial_files = json.loads(os.environ["DEVFLOWS_INITIAL_FILES"])
-payload_files = json.loads(os.environ["DEVFLOWS_PAYLOAD_FILES"])
-payload_paths = json.loads(os.environ["DEVFLOWS_PAYLOAD_PATHS"])
-delete_paths = json.loads(os.environ["DEVFLOWS_DELETE_PATHS"])
-
-subprocess.run(["git", "config", "user.name", "DevFlows E2E"], check=True)
-subprocess.run(["git", "config", "user.email", "devflows-e2e@example.test"], check=True)
-subprocess.run(["git", "switch", "-c", branch], check=True)
-
-for item in initial_files:
-    path = workspace / fixture_path / item["path"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(item.get("content", "")), encoding="utf-8")
-
-subprocess.run(["git", "add", "--", fixture_path.as_posix()], check=True)
-subprocess.run(["git", "commit", "-m", "test: prepare writeback e2e branch"], check=True)
-subprocess.run(["git", "push", "origin", f"HEAD:{branch}"], check=True)
-base_sha = subprocess.run(
-    ["git", "rev-parse", "HEAD"],
-    check=True,
-    capture_output=True,
-    text=True,
-).stdout.strip()
-
-shutil.rmtree(workspace / fixture_path, ignore_errors=True)
-for item in payload_files:
-    path = workspace / fixture_path / item["path"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(str(item.get("content", "")), encoding="utf-8")
-
-create_payload_env = {
-    **os.environ,
-    "WRITEBACK_PAYLOAD_DIR": str(payload_dir),
-    "WRITEBACK_PATHS": "\\n".join((fixture_path / path).as_posix() for path in payload_paths),
-    "WRITEBACK_DELETE_PATHS": "\\n".join((fixture_path / path).as_posix() for path in delete_paths),
-    "WRITEBACK_SOURCE_REPOSITORY": os.environ["GITHUB_REPOSITORY"],
-    "WRITEBACK_SOURCE_REF": branch,
-    "WRITEBACK_SOURCE_SHA": base_sha,
-}
-subprocess.run(
-    ["python", ".github/workflows/writeback/create-payload.py"],
-    check=True,
-    env=create_payload_env,
+# Levels a caller can grant a nested reusable-workflow call, ranked so the
+# required permissions are the maximum requested anywhere in the called tree.
+_PERMISSION_RANK = {"none": 0, "read": 1, "write": 2}
+# Inputs the ephemeral-branch mutation harness drives on the call job. Any
+# workflow that exposes all of them is expressible as a mutation target, which
+# generalizes the harness beyond the writeback workflow.
+MUTATION_REQUIRED_INPUTS = (
+    "commit-branch",
+    "commit-expected-base-sha",
+    "commit-repository",
+    "writeback-artifact-name",
 )
 
-with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
-    output.write(f"branch={branch}\\n")
-    output.write(f"base-sha={base_sha}\\n")
-    output.write(f"artifact-name={artifact_name}\\n")
-""",
-    "assert-ephemeral-writeback.py": """\
-from __future__ import annotations
 
-import json
-import os
-import subprocess
-from pathlib import Path
+def _script(name: str) -> str:
+    return (HARNESS_SCRIPT_DIR / name).as_posix()
 
-fixture_path = Path(os.environ["DEVFLOWS_FIXTURE_PATH"])
-assertions = json.loads(os.environ["DEVFLOWS_ASSERTIONS"])
 
-for assertion in assertions:
-    assertion_type = assertion["type"]
-    if assertion_type == "branch-file-contains":
-        path = fixture_path / assertion["path"]
-        if not path.is_file():
-            raise SystemExit(f"Expected file to exist: {path}")
-        text = str(assertion["text"])
-        content = path.read_text(encoding="utf-8")
-        if text not in content:
-            raise SystemExit(f"Expected {path} to contain {text!r}.")
-    elif assertion_type == "branch-file-missing":
-        path = fixture_path / assertion["path"]
-        if path.exists():
-            raise SystemExit(f"Expected path to be absent: {path}")
-    elif assertion_type == "latest-commit-message-equals":
-        actual = subprocess.run(
-            ["git", "log", "-1", "--pretty=%s"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        expected = str(assertion["value"])
-        if actual != expected:
-            raise SystemExit(f"Expected latest commit message {expected!r}, got {actual!r}.")
-    else:
-        raise SystemExit(f"Unsupported branch assertion type: {assertion_type}")
-""",
-    "cleanup-ephemeral-branch.py": """\
-from __future__ import annotations
+def _required_call_permissions(workflow: Workflow) -> dict[str, str]:
+    """Permissions a caller must grant to invoke ``workflow`` as a reusable call.
 
-import os
-import subprocess
+    GitHub caps (never elevates) the GITHUB_TOKEN through a reusable-workflow
+    chain, and a nested call that declares more than the caller granted fails the
+    run at startup (the pandoc ``commit`` job that requests ``contents: write`` is
+    the canonical case). Granting the union of every permission the published
+    workflow declares (top level plus each job) guarantees the caller is a
+    superset, so no call startup-fails and writeback jobs can push at runtime.
+    """
+    published = build_published_workflow(workflow)
+    merged: dict[str, str] = {}
+    sources: list[Any] = [published.get("permissions")]
+    for job in (published.get("jobs") or {}).values():
+        if isinstance(job, dict):
+            sources.append(job.get("permissions"))
+    for perms in sources:
+        if not isinstance(perms, dict):
+            continue
+        for name, level in perms.items():
+            level_str = str(level)
+            current = merged.get(name, "none")
+            if _PERMISSION_RANK.get(level_str, 0) > _PERMISSION_RANK.get(current, 0):
+                merged[name] = level_str
+    return {name: level for name, level in sorted(merged.items()) if level != "none"}
 
-branch = os.environ.get("DEVFLOWS_BRANCH", "").strip()
-if not branch:
-    print("No ephemeral branch output was available; skipping cleanup.")
-else:
-    subprocess.run(["git", "push", "origin", "--delete", branch], check=True)
-""",
-}
+
+def _missing_mutation_inputs(workflow: Workflow) -> list[str]:
+    """Mutation-harness inputs the target workflow does not expose (empty = OK)."""
+    call_inputs = set(published_workflow_call(workflow).get("inputs") or {})
+    return [name for name in MUTATION_REQUIRED_INPUTS if name not in call_inputs]
 
 
 @dataclass(frozen=True)
@@ -252,10 +127,23 @@ def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
 
 def validate_scenarios(workflows: list[Workflow]) -> list[str]:
     errors: list[str] = []
+    # Guard against duplicate generated job prefixes. Scenario ids feed the job
+    # keys ({prefix}_call, {prefix}_assert, ...); a collision would silently
+    # overwrite the earlier scenario's jobs, so it is a hard validation error.
+    seen_prefixes: dict[str, Scenario] = {}
     for scenario in load_scenarios(workflows):
         prefix = f"{scenario.workflow.metadata_path}: tests.scenarios[{scenario.id or '?'}]"
         if not SCENARIO_ID_PATTERN.match(scenario.id):
             errors.append(f"{prefix}: id must match {SCENARIO_ID_PATTERN.pattern}.")
+        previous = seen_prefixes.get(scenario.job_prefix)
+        if previous is not None:
+            errors.append(
+                f"{prefix}: duplicate scenario id produces job prefix "
+                f"{scenario.job_prefix!r}, already used by {previous.workflow.id} "
+                f"scenario {previous.id!r}; scenario ids must be unique per workflow."
+            )
+        else:
+            seen_prefixes[scenario.job_prefix] = scenario
         if not scenario.runs:
             errors.append(f"{prefix}: runs must include local, hosted, or both.")
         for runner in scenario.runs:
@@ -312,9 +200,11 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 errors.append(f"{prefix}: mutation.branch-prefix is required.")
             if not isinstance(scenario.mutation.get("initial-files"), list):
                 errors.append(f"{prefix}: mutation.initial-files must be a list.")
-            if scenario.workflow.id != "writeback":
+            missing_inputs = _missing_mutation_inputs(scenario.workflow)
+            if missing_inputs:
                 errors.append(
-                    f"{prefix}: mutation scenarios are currently supported for writeback."
+                    f"{prefix}: mutation scenarios require the target workflow to accept "
+                    f"inputs {missing_inputs}; {scenario.workflow.id} does not expose them."
                 )
             if not scenario.writeback_payload:
                 errors.append(f"{prefix}: mutation scenarios require writeback-payload.")
@@ -358,9 +248,6 @@ def write_generated_test_workflows(workflows: list[Workflow], *, check: bool = F
             scenarios, runner="local", name="DevFlows Local Scenario Tests"
         ),
     }
-    outputs.update(
-        {GENERATED_SCRIPT_DIR / name: content for name, content in SCENARIO_SCRIPTS.items()}
-    )
     changed: list[Path] = []
     for path, content in outputs.items():
         normalized = content.rstrip() + "\n"
@@ -448,6 +335,21 @@ def _on_block(runner: str) -> dict[str, Any]:
     return {"workflow_dispatch": None}
 
 
+def _hosted_checkout_step(
+    *, name: str = "Checkout repository", ref: str | None = None
+) -> dict[str, Any]:
+    """A pinned, credential-free checkout so hosted jobs can run harness scripts.
+
+    Hosted assert/setup jobs run on fresh runners with no repository content, so
+    they must check the repo out before invoking any ``harness/scenarios`` script.
+    Read-only jobs use ``persist-credentials: false`` (they never push).
+    """
+    with_block: dict[str, Any] = {"persist-credentials": False}
+    if ref is not None:
+        with_block["ref"] = ref
+    return {"name": name, "uses": CHECKOUT_REF, "with": with_block}
+
+
 def _cleanup_job(scenario: Scenario) -> dict[str, Any]:
     script = "rm -rf " + " ".join(shlex.quote(path) for path in scenario.cleanup)
     return {
@@ -462,6 +364,7 @@ def _setup_artifact_job(scenario: Scenario) -> dict[str, Any]:
         "name": f"{scenario.workflow.name}: {scenario.name} setup",
         "runs-on": "ubuntu-latest",
         "steps": [
+            _hosted_checkout_step(),
             {
                 "name": "Create setup files",
                 "shell": "bash",
@@ -470,7 +373,7 @@ def _setup_artifact_job(scenario: Scenario) -> dict[str, Any]:
                         scenario.setup_artifact.get("files", []), indent=2
                     )
                 },
-                "run": f"python {GENERATED_SCRIPT_DIR / 'create-setup-files.py'}",
+                "run": f"python {_script('create-setup-files.py')}",
             },
             {
                 "name": "Upload setup artifact",
@@ -525,7 +428,7 @@ def _ephemeral_branch_setup_job(scenario: Scenario) -> dict[str, Any]:
                         scenario.writeback_payload.get("paths", []), indent=2
                     ),
                 },
-                "run": f"python {GENERATED_SCRIPT_DIR / 'setup-ephemeral-writeback.py'}",
+                "run": f"python {_script('setup-ephemeral-writeback.py')}",
             },
             {
                 "name": "Upload writeback payload",
@@ -543,14 +446,21 @@ def _ephemeral_branch_setup_job(scenario: Scenario) -> dict[str, Any]:
 
 
 def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
-    job = {
+    job: dict[str, Any] = {
         "name": f"{scenario.workflow.name}: {scenario.name}",
         "uses": f"./.github/workflows/{scenario.workflow.id}.yaml",
         "with": scenario.inputs,
     }
+    # Grant the permissions the called workflow's job tree declares. A read-only
+    # caller of a writeback-capable workflow (e.g. pandoc, whose published form
+    # embeds a `commit` job requesting contents: write) startup-fails otherwise —
+    # GitHub rejects the run before any assertion executes. Consumers that call
+    # these workflows must grant the same permissions on their calling job.
+    permissions = _required_call_permissions(scenario.workflow)
+    if permissions:
+        job["permissions"] = permissions
     if runner == "hosted" and scenario.mutation:
         setup_job_id = f"{scenario.job_prefix}_setup"
-        job["permissions"] = {"actions": "read", "contents": "write"}
         job["with"] = {
             **scenario.inputs,
             "commit-branch": f"${{{{ needs.{setup_job_id}.outputs.branch }}}}",
@@ -565,20 +475,19 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     call_job_id = f"{scenario.job_prefix}_call"
     if runner == "hosted" and scenario.mutation:
         setup_job_id = f"{scenario.job_prefix}_setup"
+        # Checkout must precede every script step: the ephemeral branch carries
+        # both the harness scripts (inherited from the default branch) and the
+        # writeback result under inspection.
         steps: list[dict[str, Any]] = [
+            _hosted_checkout_step(
+                name="Checkout ephemeral branch",
+                ref=f"${{{{ needs.{setup_job_id}.outputs.branch }}}}",
+            ),
             {
                 "name": "Assert scenario succeeded",
                 "shell": "bash",
                 "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
-                "run": f"python {GENERATED_SCRIPT_DIR / 'assert-result.py'}",
-            },
-            {
-                "name": "Checkout ephemeral branch",
-                "uses": CHECKOUT_REF,
-                "with": {
-                    "persist-credentials": False,
-                    "ref": f"${{{{ needs.{setup_job_id}.outputs.branch }}}}",
-                },
+                "run": f"python {_script('assert-result.py')}",
             },
             {
                 "name": "Assert ephemeral branch",
@@ -587,7 +496,7 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
                     "DEVFLOWS_ASSERTIONS": json.dumps(scenario.assertions, indent=2),
                     "DEVFLOWS_FIXTURE_PATH": scenario.mutation["fixture-path"],
                 },
-                "run": f"python {GENERATED_SCRIPT_DIR / 'assert-ephemeral-writeback.py'}",
+                "run": f"python {_script('assert-ephemeral-writeback.py')}",
             },
         ]
         return {
@@ -598,14 +507,18 @@ def _assert_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
             "steps": steps,
         }
 
-    steps: list[dict[str, Any]] = [
+    steps: list[dict[str, Any]] = []
+    if runner == "hosted":
+        # Fresh runner without repository content; check out before any script.
+        steps.append(_hosted_checkout_step())
+    steps.append(
         {
             "name": "Assert scenario succeeded",
             "shell": "bash",
             "env": {"ACTUAL_RESULT": f"${{{{ needs.{call_job_id}.result }}}}"},
-            "run": f"python {GENERATED_SCRIPT_DIR / 'assert-result.py'}",
+            "run": f"python {_script('assert-result.py')}",
         }
-    ]
+    )
     if runner == "hosted" and scenario.artifact:
         download_path = str(
             scenario.artifact.get("path") or f".devflows-test-artifacts/{scenario.id}"
@@ -650,8 +563,12 @@ def _ephemeral_branch_cleanup_job(scenario: Scenario) -> dict[str, Any]:
             {
                 "name": "Delete ephemeral branch",
                 "shell": "bash",
-                "env": {"DEVFLOWS_BRANCH": f"${{{{ needs.{setup_job_id}.outputs.branch }}}}"},
-                "run": f"python {GENERATED_SCRIPT_DIR / 'cleanup-ephemeral-branch.py'}",
+                # Cleanup recomputes the deterministic branch name from the prefix
+                # and run identifiers instead of reading the setup output, so a
+                # setup that fails after pushing but before emitting outputs cannot
+                # orphan the branch.
+                "env": {"DEVFLOWS_BRANCH_PREFIX": scenario.mutation["branch-prefix"]},
+                "run": f"python {_script('cleanup-ephemeral-branch.py')}",
             },
         ],
     }
@@ -673,7 +590,7 @@ def _assertion_steps(
                     "EXPECTED": str(assertion["value"]),
                     "ACTUAL": f"${{{{ needs.{call_job_id}.outputs.{output_name} }}}}",
                 },
-                "run": f"python {GENERATED_SCRIPT_DIR / 'assert-equals.py'}",
+                "run": f"python {_script('assert-equals.py')}",
             }
         ]
     path = _assertion_path(scenario, assertion, runner=runner)
@@ -683,7 +600,7 @@ def _assertion_steps(
                 "name": f"Assert file exists: {assertion['path']}",
                 "shell": "bash",
                 "env": {"ASSERT_PATH": path},
-                "run": f"python {GENERATED_SCRIPT_DIR / 'assert-file-exists.py'}",
+                "run": f"python {_script('assert-file-exists.py')}",
             }
         ]
     return [
@@ -691,7 +608,7 @@ def _assertion_steps(
             "name": f"Assert file contains: {assertion['path']}",
             "shell": "bash",
             "env": {"ASSERT_PATH": path, "ASSERT_TEXT": str(assertion["text"])},
-            "run": f"python {GENERATED_SCRIPT_DIR / 'assert-file-contains.py'}",
+            "run": f"python {_script('assert-file-contains.py')}",
         }
     ]
 

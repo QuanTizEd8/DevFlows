@@ -29,9 +29,9 @@ Before promoting a workflow:
    comments.
 6. Opt into shared IO channels in `devflow.yaml` when the workflow should
    support checkout, artifact download, artifact upload, or writeback.
-7. Add checked-in examples under `test/fixtures/<workflow-id>/`.
+7. Add checked-in examples under `tests/fixtures/<workflow-id>/`.
 8. Add scenario tests under `tests.scenarios` in `devflow.yaml`.
-9. Add fixture inputs under `test/scenarios/<workflow-id>/` when needed.
+9. Add fixture inputs under `tests/scenarios/<workflow-id>/` when needed.
 10. Regenerate synced workflows, docs, and scenario workflows.
 11. Run lint, unit tests, local scenarios, docs, and release checks.
 

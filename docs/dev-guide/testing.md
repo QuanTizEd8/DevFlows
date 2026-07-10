@@ -30,16 +30,16 @@ tests:
       runs:
         - local
       cleanup:
-        - test/scenarios/pandoc/working-directory/output.html
+        - tests/scenarios/pandoc/working-directory/output.html
       inputs:
         checkout-enabled: false
         pandoc-image: pandoc/core:3.8
-        pandoc-working-directory: test/scenarios/pandoc/working-directory
+        pandoc-working-directory: tests/scenarios/pandoc/working-directory
         pandoc-arguments: >-
           --standalone --output=output.html input.md
       assertions:
         - type: file-exists
-          path: test/scenarios/pandoc/working-directory/output.html
+          path: tests/scenarios/pandoc/working-directory/output.html
 ```
 
 `id` : Stable scenario identifier. Use lowercase letters, numbers, and hyphens.
@@ -156,7 +156,7 @@ pixi run devflows test-generate --check
 
 ## Adding A Scenario
 
-1. Add or update fixtures under `test/scenarios/<workflow-id>/`.
+1. Add or update fixtures under `tests/scenarios/<workflow-id>/`.
 2. Add a scenario under `tests.scenarios`.
 3. Include at least one assertion.
 4. Use `local` for fast paths and `hosted` for GitHub service paths.
