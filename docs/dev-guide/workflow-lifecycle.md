@@ -77,20 +77,32 @@ Keep reusable workflows narrow and predictable:
 - document any local-runner limitation in tests, not in workflow logic
 
 Keep nontrivial scripts out of workflow YAML. Source support scripts under
-`workflows/<workflow-id>/scripts/`; `devflows sync` publishes them under
-`.github/workflows/<workflow-id>/...` next to the reusable workflow. Public
-reusable workflows that need those files should check out the DevFlows runtime
-repository at `github.workflow_ref` and execute the synced script from that
-checkout.
+`workflows/<workflow-id>/scripts/` and invoke them from a `run:` step through
+`${DEVFLOWS_SCRIPT_ROOT}/<workflow-id>/<script>`. At sync time `devflows sync`
+_inlines_ each referenced script into the generated workflow: it injects a
+"Materialize DevFlows runtime scripts" step (id `devflows-runtime`) that writes
+every referenced script verbatim — via a single-quoted heredoc — to
+`$RUNNER_TEMP/devflows`, then exports that directory as the step's `script-root`
+output, which is what `${DEVFLOWS_SCRIPT_ROOT}` resolves to. Nothing is
+published under `.github/workflows/<workflow-id>/`, and the workflow never
+checks out the DevFlows repository at run time: the scripts travel inside the
+generated YAML, so cross-repo consumers get them without a second checkout (the
+earlier `github.workflow_ref` runtime checkout broke those consumers and is
+gone).
+
+Declare which jobs receive the materialize step in the `io` block. `io.job` is
+the primary runner job that runs the domain scripts; any additional job that
+also needs the scripts is listed under `io.runtime-jobs`. Only those jobs may
+reference `${DEVFLOWS_SCRIPT_ROOT}` (sync/validate enforces this).
 
 ## Generated Outputs
 
 After changing source workflow files, regenerate:
 
 ```bash
-pixi run devflows sync
-pixi run devflows docs
-pixi run devflows test-generate
+pixi run -- devflows sync
+pixi run -- devflows docs
+pixi run -- devflows test-generate
 ```
 
 `task lint` verifies these generated files are current.

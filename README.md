@@ -75,24 +75,24 @@ Quickstart (use the devcontainer, or install [Pixi](https://pixi.sh) locally):
 
 ```bash
 pixi install       # provision the toolchain
-pixi run lint      # validate metadata and check generated files are in sync
-pixi run test      # run unit tests
-pixi run docs      # generate and build documentation
+task lint          # validate metadata and check generated files are in sync
+task test          # run unit tests
+task docs          # generate and build documentation
 ```
 
-Task aliases are also available (`task lint`, `task test`, `task docs`).
+The Taskfile is the single task registry; each task delegates to a pixi-provided
+tool (for example `pixi run -- devflows ...`).
 
 After changing a workflow source, regenerate the published outputs and commit
 them alongside the source change:
 
 ```bash
-devflows sync      # regenerate .github/workflows/ from workflows/<id>/
+task sync          # regenerate .github/workflows/ from workflows/<id>/
 ```
 
-The `pixi run lint` gate fails if the generated workflows, docs, or scenario
-tests have drifted from their sources. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for the full contributor guide and [SECURITY.md](SECURITY.md) for the security
-policy.
+The `task lint` gate fails if the generated workflows, docs, or scenario tests
+have drifted from their sources. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+full contributor guide and [SECURITY.md](SECURITY.md) for the security policy.
 
 ## License
 

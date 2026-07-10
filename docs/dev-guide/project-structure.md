@@ -35,14 +35,14 @@ Edit source files first:
 Then regenerate committed generated files:
 
 ```bash
-pixi run devflows sync
-pixi run devflows test-generate
+pixi run -- devflows sync
+pixi run -- devflows test-generate
 ```
 
 Reference docs are generated as ignored build output by:
 
 ```bash
-pixi run devflows docs
+pixi run -- devflows docs
 ```
 
 Do not hand-edit generated workflow copies, scenario workflows, or reference

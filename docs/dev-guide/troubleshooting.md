@@ -7,9 +7,9 @@ This page covers common maintainer problems.
 Run the relevant generator:
 
 ```bash
-pixi run devflows sync
-pixi run devflows docs
-pixi run devflows test-generate
+pixi run -- devflows sync
+pixi run -- devflows docs
+pixi run -- devflows test-generate
 ```
 
 Then rerun:

@@ -18,23 +18,24 @@ supported paths:
 
 ## Task entry points
 
-Common tasks are exposed both through Pixi and the Taskfile:
+The Taskfile is the single task registry; every task delegates to a
+pixi-provided tool (`pixi run -- <tool>`):
 
 ```bash
-pixi run lint    # or: task lint    -- validation + drift checks + linters
-pixi run test    # or: task test    -- unit tests (pytest)
-pixi run docs    # or: task docs    -- generate + build the documentation
-pixi run fmt     #                  -- auto-format sources, docs, and config
+task lint    # validation + drift checks + linters
+task test    # unit tests (pytest)
+task docs    # generate + build the documentation
+task fmt     # auto-format sources, docs, and config
 ```
 
 Local GitHub Actions scenario tests (require Docker + `act`):
 
 ```bash
-pixi run test-local   # or: task test:local
+task scenarios-local   # aliases: task test-local, task test:local
 ```
 
-`pixi run lint` is the gate: it runs `devflows validate`, the `--check` variants
-of `sync`, `docs`, and `test-generate`, plus actionlint, ruff, yamllint, taplo,
+`task lint` is the gate: it runs `devflows validate`, the `--check` variants of
+`sync`, `docs`, and `test-generate`, plus actionlint, ruff, yamllint, taplo,
 shell linting, and zizmor. Run it before opening a pull request.
 
 ## Source vs generated model
@@ -55,13 +56,14 @@ overwritten and CI will fail the drift check.
 After changing any source, regenerate and commit the outputs together:
 
 ```bash
-devflows sync          # regenerate .github/workflows/
-devflows docs          # regenerate reference documentation
-devflows test-generate # regenerate scenario workflows
+pixi run -- devflows sync          # regenerate .github/workflows/
+pixi run -- devflows docs          # regenerate reference documentation
+pixi run -- devflows test-generate # regenerate scenario workflows
 ```
 
-`pixi run lint` runs the `--check` form of each generator and fails if the
-committed outputs are stale.
+These also have task wrappers (`task sync`, `task docs`, `task test-generate`).
+`task lint` runs the `--check` form of each generator and fails if the committed
+outputs are stale.
 
 ## Conventional commits (required)
 
@@ -86,14 +88,15 @@ test(pandoc): add hosted artifact assertions
 
 Changes to shared tooling (not tied to one workflow) use scopes such as `cli`,
 `docs`, `test`, or `release`. Each active workflow must have a matching
-release-please package entry; `pixi run release-dry-run` validates this.
+release-please package entry; `task release-check` validates this.
 
 ## Pull requests
 
 - Use a Conventional Commits-style PR title.
-- Regenerate and commit outputs (`devflows sync`, `docs`, `test-generate`).
+- Regenerate and commit outputs (`task sync`, `task docs`,
+  `task test-generate`).
 - Add or update tests and documentation for behavior changes.
-- Ensure `pixi run lint` and `pixi run test` pass.
+- Ensure `task lint` and `task test` pass.
 
 ## Promoting a workflow
 

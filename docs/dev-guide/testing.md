@@ -140,7 +140,7 @@ cannot emulate a hosted service, keep that scenario hosted-only.
 Generate scenario workflows with:
 
 ```bash
-pixi run devflows test-generate
+pixi run -- devflows test-generate
 ```
 
 Generated files:
@@ -151,7 +151,7 @@ Generated files:
 The lint task checks that these files are current:
 
 ```bash
-pixi run devflows test-generate --check
+pixi run -- devflows test-generate --check
 ```
 
 ## Adding A Scenario
@@ -160,6 +160,6 @@ pixi run devflows test-generate --check
 2. Add a scenario under `tests.scenarios`.
 3. Include at least one assertion.
 4. Use `local` for fast paths and `hosted` for GitHub service paths.
-5. Run `pixi run devflows test-generate`.
+5. Run `pixi run -- devflows test-generate`.
 6. Run `task scenarios-local` for local scenarios.
 7. Let hosted CI run hosted scenarios after the branch is pushed.

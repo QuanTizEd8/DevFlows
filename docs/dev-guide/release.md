@@ -153,6 +153,46 @@ Owner setup:
   workflow keeps working with the `github.token` fallback until this is set,
   minus the CI-on-release-PR benefit.
 
+## Owner setup: repository rulesets
+
+Two rulesets protect the release artifacts. Configure them once, under
+**Settings → Rules → Rulesets**.
+
+### Tag ruleset (`*/v*`)
+
+Protect the workflow-scoped release tags so a release is immutable once cut:
+
+- **Target:** tags matching `*/v*` (covers exact tags `<id>/vX.Y.Z` and moving
+  major tags `<id>/vN`).
+- **Rules:** restrict **updates** and restrict **deletions**. This makes exact
+  release tags immutable and blocks accidental tag deletion.
+- **Bypass:** the release identity **must** be on the bypass list. The
+  `Force-move moving major tags` step force-pushes `<id>/v<major>` via
+  `scripts/move_major_tags.py`, which is an update to a protected tag; without a
+  bypass for the `RELEASE_PLEASE_TOKEN` identity that push is rejected. (During
+  `0.x` the automation is dormant, but configure the bypass before the first
+  `1.0.0` so the promotion does not fail.)
+
+### Branch protection for `main`
+
+Protect `main` with a branch ruleset that requires pull requests and the CI
+status checks below to pass before merge. Name each required check exactly as
+the job reports it:
+
+- **`Validate`** — the lint/test/propagation job in `devflows-ci.yaml`.
+- **`Adapter contract`** — the pin/contract job in `devflows-ci.yaml` (it runs
+  only when an action pin or a consuming workflow changes; on other PRs it
+  completes without running the network test, so it stays a safe required
+  check).
+- **`Analyze Python`** — the CodeQL job in `devflows-codeql.yaml`.
+- **`Build`** — the docs build job in `devflows-docs.yaml` (it builds on PRs and
+  only deploys Pages on `main`).
+- Scenario assertion jobs from `devflows-scenarios.yaml` (the `*_assert` jobs)
+  can be added as required checks **once they are stable**; until then keep them
+  informational so a hosted-runner flake does not block unrelated merges.
+
+Also enable "restrict deletions" and "block force pushes" on `main`.
+
 ## Release Runbook
 
 1. Merge feature/fix pull requests to `main` using Conventional Commits and, for
