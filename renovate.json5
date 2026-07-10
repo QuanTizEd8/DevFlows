@@ -76,6 +76,20 @@
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ANACONDA_CLIENT_VERSION = "(?<currentValue>[^"]+)"'
       ],
       versioningTemplate: "pep440"
+    },
+    {
+      // Keep the pinned openjournals/inara container tag the paper-openjournals
+      // workflow runs (the paper-image input default) current. The inline
+      // `# renovate:` comment supplies datasource/depName; Renovate bumps the tag
+      // in place. A unit test (tests/test_paper_openjournals.py) asserts this
+      // regex still matches the workflow default so the pin never silently stops
+      // updating.
+      customType: "regex",
+      managerFilePatterns: ["/^workflows/paper-openjournals/workflow\\.yaml$/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: ghcr\\.io/openjournals/inara:(?<currentValue>\\S+)"
+      ],
+      versioningTemplate: "docker"
     }
   ],
   // ------------------------------------------------------------- packageRules

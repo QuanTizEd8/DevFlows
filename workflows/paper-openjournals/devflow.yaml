@@ -1,0 +1,199 @@
+id: paper-openjournals
+name: Open Journals Paper Build
+summary:
+  Build a JOSS, JOSE, or ReScience C paper from a Markdown source with the
+  pinned openjournals/inara container and collect the requested flavors (draft or
+  final PDF, JATS, Crossref XML, CFF, HTML, LaTeX, DOCX, ...) into one artifact.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Documents
+  keywords:
+    - open journals
+    - inara
+    - joss
+    - jose
+    - rescience
+    - paper
+    - pdf
+    - jats
+io:
+  job: build
+  runtime: true
+  runtime-jobs:
+    - validate
+  checkout: true
+  artifact-download: true
+  artifact-upload: true
+  writeback: false
+notes:
+  - >-
+    Pure document build with NO external side effects, so the publishing-tier
+    conventions are deliberately omitted: no dry-run switch (nothing irreversible
+    to skip), no environment gating or concurrency group, no credential isolation
+    or secret-presence preflight (the build needs no credentials), no no-checkout
+    rule (a builder legitimately needs the paper source), and no digest-manifest
+    re-verification (it produces artifacts, it does not consume a signed
+    distribution). This is a research-software-tier build workflow, a peer of
+    pandoc and docs-build, not a publisher.
+  - >-
+    Caller permissions: the build job needs contents: read (to check out the
+    paper source) and actions: read (added by the artifact-download channel). A
+    calling job must grant at least permissions: contents: read, actions: read.
+    There are NO write scopes, no id-token, and no secrets reach the container;
+    the only secret surface is the optional checkout-token the shared checkout
+    channel consumes with persist-credentials: false for a private source.
+  - >-
+    inara writes a fixed output filename per format next to the source, and draft
+    versus production is the orthogonal -p flag on the PDF, so draft-pdf and
+    final-pdf both write paper.pdf. DevFlows owns the flavor to (argv, outputs)
+    table and collects each flavor into its own subdirectory under
+    paper-output-directory, so those two never collide. The whole tree uploads as
+    one artifact through the artifact-upload channel; set artifact-upload-path to
+    paper-output-directory.
+  - >-
+    Injection safety (the draft workflow's core defect): every input reaches a
+    DevFlows script only through env, run-inara.py builds the docker argv
+    programmatically and calls subprocess.run without a shell, and there is zero
+    ${{ inputs.* }} interpolation in any run: block. paper-arguments is a strict
+    allowlist (only -v, -l, -m <file>); -o, -p, -r and bare positionals are
+    rejected in every getopt form.
+  - >-
+    Honesty and rehearsal: the hosted cff and jats scenarios exercise the real
+    inara container end to end (docker run, env-mediated argv, per-flavor
+    collection) using the cheapest flavors that need no LaTeX. The heavy flavors
+    (draft-pdf, final-pdf, preprint, tex, context-pdf, docx) compile LaTeX or
+    ConTeXt inside a large image; their typeset fidelity is NOT proven by CI
+    scenarios because a full PDF compile is too slow for routine runs. They share
+    the exact docker-run and collection plumbing the cff and jats scenarios prove
+    and differ only in the inara argv the table emits. To rehearse a heavy
+    flavor, run the workflow against a fixture paper (it has no external side
+    effects, so a build is always safe) with paper-flavors set to that flavor.
+examples:
+  - name: Build draft PDF and JATS for JOSS review
+    path: tests/fixtures/paper-openjournals/joss-review.yaml
+  - name: Build the CFF flavor and upload it
+    path: tests/fixtures/paper-openjournals/cff-artifact.yaml
+tests:
+  scenarios:
+    # The success scenario is hosted-only: it pulls the ~1-2GB inara image and
+    # runs the real container, so it cannot run under act. It builds the two
+    # cheapest flavors that need no LaTeX compile (cff and jats) in one job, which
+    # exercises the multi-flavor loop, the env-mediated docker-run, and the
+    # per-flavor collection end to end while staying fast and small.
+    - id: cff-jats-build
+      name: Build the CFF and JATS flavors from a minimal fixture paper
+      runs:
+        - hosted
+      inputs:
+        paper-journal: joss
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+        paper-flavors: |
+          cff
+          jats
+        paper-output-directory: paper-build
+        artifact-upload-enabled: true
+        artifact-upload-name: paper-openjournals-build
+        artifact-upload-path: paper-build
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: paper-openjournals-build
+        path: .devflows-test-artifacts/paper-openjournals/build
+      assertions:
+        # cff -> <out>/cff/CITATION.cff (the artifact strips the paper-build root).
+        - type: file-glob-exists
+          path: cff/CITATION.cff
+        - type: file-contains
+          path: cff/CITATION.cff
+          text: DevFlows fixture paper
+        # jats keeps its jats/ subfolder -> <out>/jats/jats/paper.jats.
+        - type: file-glob-exists
+          path: jats/jats/paper.jats
+    # Failure-path scenarios run validate-inputs.py directly through the
+    # validation-failure harness (no reusable call). They run local (act) only:
+    # the validation is pure Python and identical on both runners, so hosted
+    # copies would only add weight to the shared aggregate scenarios file. Each
+    # pins a stable substring of the rejection it targets.
+    - id: invalid-journal
+      name: Unknown paper-journal fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "must be one of"
+      inputs:
+        paper-journal: elsevier
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+    - id: missing-source
+      name: Empty paper-source-path fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "paper-source-path is required"
+      inputs:
+        paper-journal: joss
+        paper-source-path: ""
+    - id: unsafe-source
+      name: A paper-source-path that escapes the workspace fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "must stay inside"
+      inputs:
+        paper-journal: joss
+        paper-source-path: ../../../etc/passwd
+    - id: empty-flavors
+      name: Empty paper-flavors fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "at least one paper flavor"
+      inputs:
+        paper-journal: joss
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+        paper-flavors: ""
+    - id: unknown-flavor
+      name: An unknown flavor name fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "unknown paper flavor: gif"
+      inputs:
+        paper-journal: joss
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+        paper-flavors: |
+          draft-pdf
+          gif
+    - id: invalid-image
+      name: A malformed paper-image reference fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "valid image reference"
+      inputs:
+        paper-journal: joss
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+        paper-image: "inara:bad:ref"
+    - id: owned-flag-argument
+      name: An output-selection flag in paper-arguments fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "controlled by paper-flavors"
+      inputs:
+        paper-journal: joss
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+        paper-arguments: "-o pdf"
+    - id: positional-argument
+      name: A bare positional in paper-arguments fails validation
+      runs:
+        - local
+      expect: validation-failure
+      failure-message-contains: "positional"
+      inputs:
+        paper-journal: joss
+        paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+        paper-arguments: paper2.md
