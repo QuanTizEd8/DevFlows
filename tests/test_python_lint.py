@@ -49,7 +49,7 @@ def _validate_env(tmp_path: Path) -> dict[str, str]:
         "LINT_TYPECHECK_TOOL": "mypy",
         "LINT_TYPECHECK_VERSION": "",
         "LINT_TYPECHECK_ARGUMENTS": "",
-        "LINT_TYPECHECK_PYTHON_VERSIONS": "[]",
+        "LINT_TYPECHECK_PYTHON_VERSIONS": "",
         "LINT_TYPECHECK_WITH": "",
     }
 
@@ -90,7 +90,7 @@ def test_validate_accepts_full_pinned_configuration(monkeypatch, tmp_path) -> No
         LINT_TYPECHECK_TOOL="pyright",
         LINT_TYPECHECK_VERSION="1.1.400",
         LINT_TYPECHECK_ARGUMENTS="--strict",
-        LINT_TYPECHECK_PYTHON_VERSIONS='["3.11", "3.13"]',
+        LINT_TYPECHECK_PYTHON_VERSIONS="3.11\n3.13",
         LINT_TYPECHECK_WITH="types-requests\n.",
     )
 
@@ -119,11 +119,13 @@ def test_validate_rejects_unknown_typecheck_tool(monkeypatch, tmp_path) -> None:
     )
 
 
-def test_validate_rejects_malformed_version_json(monkeypatch, tmp_path) -> None:
+def test_validate_rejects_comma_separated_versions(monkeypatch, tmp_path) -> None:
+    # typecheck-python-versions is newline-separated (convention), so a comma-joined
+    # value is a single malformed entry rather than two versions.
     _expect_validate_error(
         monkeypatch,
         tmp_path,
-        "must be a JSON array",
+        "must match 3.<minor>",
         LINT_TYPECHECK_PYTHON_VERSIONS="3.11, 3.13",
     )
 
@@ -133,7 +135,7 @@ def test_validate_rejects_bad_target_version(monkeypatch, tmp_path) -> None:
         monkeypatch,
         tmp_path,
         "must match 3.<minor>",
-        LINT_TYPECHECK_PYTHON_VERSIONS='["3.11", "cpython"]',
+        LINT_TYPECHECK_PYTHON_VERSIONS="3.11\ncpython",
     )
 
 
@@ -194,6 +196,16 @@ def test_validate_rejects_flag_in_typecheck_with(monkeypatch, tmp_path) -> None:
         "requirement specifiers, not flags",
         LINT_TYPECHECK_WITH="--index-url https://example.com",
     )
+
+
+def test_validate_fails_fast_when_github_workspace_unset(monkeypatch, tmp_path) -> None:
+    module = _load("validate-inputs.py")
+    for key, value in _validate_env(tmp_path).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert "GITHUB_WORKSPACE is not set" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #
@@ -262,6 +274,31 @@ def test_typecheck_command_sync_layers_tool_with_flag() -> None:
     command = module._typecheck_command("mypy", "1.11.0", None, [], ["."], ["."], True)
     assert command[:5] == ["uv", "run", "--no-sync", "--with", "mypy==1.11.0"]
     assert command[-2:] == ["mypy", "."]
+
+
+def test_typecheck_command_ty_inserts_check_subcommand_uvx() -> None:
+    module = _load("run-lint.py")
+    # ty's CLI requires the 'check' subcommand; the uvx package spec stays 'ty@<ver>'
+    # while the executed command is 'ty check'. Regression pin for the empty-argv bug.
+    command = module._typecheck_command(
+        "ty", "0.0.14", "3.12", ["--error-on-warning"], [], ["."], False
+    )
+    assert command == [
+        "uvx",
+        "ty@0.0.14",
+        "check",
+        "--python-version",
+        "3.12",
+        "--error-on-warning",
+        ".",
+    ]
+
+
+def test_typecheck_command_ty_inserts_check_subcommand_sync() -> None:
+    module = _load("run-lint.py")
+    command = module._typecheck_command("ty", "", None, [], [], ["src"], True)
+    # uv-run path executes 'ty check' after installing the ty package.
+    assert command == ["uv", "run", "--no-sync", "--with", "ty", "ty", "check", "src"]
 
 
 # --------------------------------------------------------------------------- #
@@ -351,7 +388,7 @@ def _run_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "LINT_TYPECHECK_TOOL": "mypy",
         "LINT_TYPECHECK_VERSION": "",
         "LINT_TYPECHECK_ARGUMENTS": "",
-        "LINT_TYPECHECK_PYTHON_VERSIONS": "[]",
+        "LINT_TYPECHECK_PYTHON_VERSIONS": "",
         "LINT_TYPECHECK_WITH": "",
     }
     env.update(overrides)
@@ -455,7 +492,7 @@ def test_matrix_multi_version_typecheck_records_each(monkeypatch, tmp_path) -> N
         monkeypatch,
         tmp_path,
         {"ruff-check": (0, "[]", ""), "ruff-format": (0, "", "")},
-        LINT_TYPECHECK_PYTHON_VERSIONS='["3.11", "3.13"]',
+        LINT_TYPECHECK_PYTHON_VERSIONS="3.11\n3.13",
     )
     assert raised is None
     assert exit_code == 0
@@ -536,3 +573,34 @@ def test_published_permissions_are_least_privilege() -> None:
     job = workflow["jobs"]["python-lint"]
     # The artifact channels add actions: read; nothing is granted write.
     assert job["permissions"] == {"contents": "read", "actions": "read"}
+
+
+def _lint_step_names() -> list[str]:
+    workflow = build_published_workflow(_python_lint())
+    steps = workflow["jobs"]["python-lint"]["steps"]
+    return [step.get("name", "") for step in steps]
+
+
+def test_validate_runs_before_set_up_uv() -> None:
+    # A bad uv-cache-mode must hit the pinned validation message, so Validate inputs
+    # must precede Set up uv (which would otherwise consume the value first).
+    names = _lint_step_names()
+    assert names.index("Validate inputs") < names.index("Set up uv")
+
+
+def test_report_upload_step_publishes_on_failure() -> None:
+    workflow = build_published_workflow(_python_lint())
+    steps = workflow["jobs"]["python-lint"]["steps"]
+    upload = next(step for step in steps if step.get("name") == "Upload lint report")
+    # Gated on !cancelled() so lint-enforce failures still publish the report, and on
+    # a non-empty report directory. This is the workflow-owned channel, distinct from
+    # the success-gated generic "Upload artifact" channel (reserved for build output).
+    assert upload["if"] == "${{ !cancelled() && inputs.lint-report-directory != '' }}"
+    assert upload["with"]["name"] == "${{ inputs.lint-report-artifact-name }}"
+    assert upload["with"]["path"] == "${{ inputs.lint-report-directory }}"
+    assert upload["uses"].startswith("actions/upload-artifact@")
+    # The generic artifact-upload channel remains and stays success-gated.
+    generic = next(step for step in steps if step.get("name") == "Upload artifact")
+    assert "!cancelled()" not in generic["if"]
+    inputs = workflow["on"]["workflow_call"]["inputs"]
+    assert inputs["lint-report-artifact-name"]["default"] == "python-lint-report"

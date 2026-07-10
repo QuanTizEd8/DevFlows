@@ -19,12 +19,16 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Tool-specific command name and per-target-version flag. Package name equals the
-# command name for all three, so one entry covers both uvx and uv-run invocation.
+# Tool-specific command name, executed argv prefix, and per-target-version flag.
+# The package name equals the command name for all three (so one entry covers both
+# the uvx package spec and the uv-run --with requirement), but the EXECUTED command
+# is the argv prefix: ty's CLI requires a mandatory 'check' subcommand, so its argv
+# is ["ty", "check"] while its package spec stays 'ty@<ver>'. mypy/pyright invoke
+# the bare command. argv[0] is always the command name.
 _TYPECHECKERS = {
-    "mypy": {"command": "mypy", "version_flag": "--python-version"},
-    "pyright": {"command": "pyright", "version_flag": "--pythonversion"},
-    "ty": {"command": "ty", "version_flag": "--python-version"},
+    "mypy": {"command": "mypy", "argv": ["mypy"], "version_flag": "--python-version"},
+    "pyright": {"command": "pyright", "argv": ["pyright"], "version_flag": "--pythonversion"},
+    "ty": {"command": "ty", "argv": ["ty", "check"], "version_flag": "--python-version"},
 }
 _SUMMARY_DIFF_CAP = 30_000  # keep GITHUB_STEP_SUMMARY well under the 1 MiB limit
 _ANNOTATION_CAP = 10  # GitHub renders at most ~10 annotations per step
@@ -175,7 +179,9 @@ def _run_typecheck(
     version = _get("LINT_TYPECHECK_VERSION")
     extra = _shlex("LINT_TYPECHECK_ARGUMENTS")
     with_requirements = _split_lines(_get("LINT_TYPECHECK_WITH"))
-    target_versions = json.loads(_get("LINT_TYPECHECK_PYTHON_VERSIONS") or "[]") or [None]
+    # typecheck-python-versions is a newline-separated list (convention), one checker
+    # invocation per entry; empty runs a single invocation with the tool's default.
+    target_versions = _split_lines(_get("LINT_TYPECHECK_PYTHON_VERSIONS")) or [None]
 
     outcome = "success"
     crashed = False
@@ -227,6 +233,7 @@ def _typecheck_command(
 ) -> list[str]:
     spec = _TYPECHECKERS[tool]
     command_name = str(spec["command"])
+    argv = [str(part) for part in spec["argv"]]  # e.g. ["ty", "check"]; argv[0] == command_name
     version_flag = [str(spec["version_flag"]), target] if target else []
     tail = [*version_flag, *extra, *paths]
     if sync:
@@ -234,12 +241,14 @@ def _typecheck_command(
         base += ["--with", f"{command_name}=={version}" if version else command_name]
         for requirement in with_requirements:
             base += ["--with", requirement]
-        return [*base, command_name, *tail]
+        return [*base, *argv, *tail]
     base = ["uvx"]
     for requirement in with_requirements:
         base += ["--with", requirement]
+    # uvx runs the package's default entry point (argv[0] == command_name), so the
+    # package spec carries the version and any subcommand follows as argv[1:].
     tool_spec = f"{command_name}@{version}" if version else command_name
-    return [*base, tool_spec, *tail]
+    return [*base, tool_spec, *argv[1:], *tail]
 
 
 # --------------------------------------------------------------------------- #

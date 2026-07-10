@@ -24,10 +24,15 @@ name: '[Reusable]: Python Lint'
         required: false
         default: true
       lint-report-directory:
-        description: When set, machine-readable reports are written there (results.json, ruff-check.json, ruff-format.diff, typecheck-<pyver>.txt) for pickup by the artifact-upload channel or later jobs. Relative to the workspace; must stay inside it. Empty (default) disables file reports; the job summary is always rendered.
+        description: When set, machine-readable reports are written there (results.json, ruff-check.json, ruff-format.diff, typecheck-<pyver>.txt) and the workflow uploads them as the lint-report-artifact-name artifact even when the job fails (see that input). Relative to the workspace; must stay inside it. Empty (default) disables file reports; the job summary is always rendered.
         type: string
         required: false
         default: ''
+      lint-report-artifact-name:
+        description: Name of the workflow-owned artifact that publishes the lint-report-directory contents. Uploaded on '!cancelled()' whenever lint-report-directory is set, so findings that fail the job (lint-enforce) are still published -- unlike the success-gated generic artifact-upload channel, which stays reserved for build outputs. Callers invoking this workflow more than once in the same run must pass distinct names.
+        type: string
+        required: false
+        default: python-lint-report
       lint-timeout-minutes:
         description: Maximum minutes the lint job may run before it is cancelled.
         type: number
@@ -104,10 +109,10 @@ name: '[Reusable]: Python Lint'
         required: false
         default: ''
       typecheck-python-versions:
-        description: JSON array of target Python versions, for example ["3.11", "3.13"]. Each entry must match a 3.<minor> pattern. Each entry produces one checker invocation with the tool's target-version flag inside the single job -- no job matrix, no interpreter installs per version. Empty array (default) runs one invocation with the tool's own default.
+        description: Newline-separated target Python versions, for example 3.11 then 3.13 on its own line. Each entry must match a 3.<minor> pattern. Each entry produces one checker invocation with the tool's target-version flag inside the single job -- no job matrix, no interpreter installs per version. Empty (default) runs one invocation with the tool's own default.
         type: string
         required: false
-        default: '[]'
+        default: ''
       typecheck-with:
         description: Newline-separated additional PyPI requirement specifiers installed alongside the type checker (stub packages like types-requests, checker plugins, or '.' to install the caller's project into the checker environment). Passed as repeated --with flags to uvx / uv run; each line is validated as a requirement specifier.
         type: string
@@ -407,7 +412,6 @@ jobs:
 
           from __future__ import annotations
 
-          import json
           import os
           import re
           import shlex
@@ -427,7 +431,7 @@ jobs:
 
 
           def main() -> int:
-              workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+              workspace = _workspace()
               working_directory = _validate_working_directory(workspace)
               _validate_report_directory(workspace)
               _validate_lint_paths(working_directory, workspace)
@@ -522,15 +526,10 @@ jobs:
 
 
           def _validate_typecheck() -> None:
-              versions_raw = _get("LINT_TYPECHECK_PYTHON_VERSIONS") or "[]"
-              try:
-                  versions = json.loads(versions_raw)
-              except json.JSONDecodeError as error:
-                  raise SystemExit(f"typecheck-python-versions must be a JSON array: {error}") from error
-              if not isinstance(versions, list):
-                  raise SystemExit("typecheck-python-versions must be a JSON array.")
-              for entry in versions:
-                  if not isinstance(entry, str) or not _TARGET_PYTHON.match(entry):
+              # typecheck-python-versions is a newline-separated list (list-input convention),
+              # not a JSON array. Each non-empty line must be a bare 3.<minor> target.
+              for entry in _split_lines(_get("LINT_TYPECHECK_PYTHON_VERSIONS")):
+                  if not _TARGET_PYTHON.match(entry):
                       raise SystemExit(
                           f"typecheck-python-versions entries must match 3.<minor>, got {entry!r}."
                       )
@@ -574,6 +573,15 @@ jobs:
                   raise SystemExit(f"Unable to parse {input_name}: {error}") from error
 
 
+          def _workspace() -> Path:
+              # GITHUB_WORKSPACE is always set on a runner; fail fast with a clear message
+              # (not a raw KeyError) when it is absent, e.g. a misconfigured local harness.
+              raw = os.environ.get("GITHUB_WORKSPACE")
+              if not raw:
+                  raise SystemExit("GITHUB_WORKSPACE is not set.")
+              return Path(raw).resolve()
+
+
           def _split_lines(value: str) -> list[str]:
               return [line.strip() for line in value.splitlines() if line.strip()]
 
@@ -612,12 +620,16 @@ jobs:
           from dataclasses import dataclass, field
           from pathlib import Path
 
-          # Tool-specific command name and per-target-version flag. Package name equals the
-          # command name for all three, so one entry covers both uvx and uv-run invocation.
+          # Tool-specific command name, executed argv prefix, and per-target-version flag.
+          # The package name equals the command name for all three (so one entry covers both
+          # the uvx package spec and the uv-run --with requirement), but the EXECUTED command
+          # is the argv prefix: ty's CLI requires a mandatory 'check' subcommand, so its argv
+          # is ["ty", "check"] while its package spec stays 'ty@<ver>'. mypy/pyright invoke
+          # the bare command. argv[0] is always the command name.
           _TYPECHECKERS = {
-              "mypy": {"command": "mypy", "version_flag": "--python-version"},
-              "pyright": {"command": "pyright", "version_flag": "--pythonversion"},
-              "ty": {"command": "ty", "version_flag": "--python-version"},
+              "mypy": {"command": "mypy", "argv": ["mypy"], "version_flag": "--python-version"},
+              "pyright": {"command": "pyright", "argv": ["pyright"], "version_flag": "--pythonversion"},
+              "ty": {"command": "ty", "argv": ["ty", "check"], "version_flag": "--python-version"},
           }
           _SUMMARY_DIFF_CAP = 30_000  # keep GITHUB_STEP_SUMMARY well under the 1 MiB limit
           _ANNOTATION_CAP = 10  # GitHub renders at most ~10 annotations per step
@@ -768,7 +780,9 @@ jobs:
               version = _get("LINT_TYPECHECK_VERSION")
               extra = _shlex("LINT_TYPECHECK_ARGUMENTS")
               with_requirements = _split_lines(_get("LINT_TYPECHECK_WITH"))
-              target_versions = json.loads(_get("LINT_TYPECHECK_PYTHON_VERSIONS") or "[]") or [None]
+              # typecheck-python-versions is a newline-separated list (convention), one checker
+              # invocation per entry; empty runs a single invocation with the tool's default.
+              target_versions = _split_lines(_get("LINT_TYPECHECK_PYTHON_VERSIONS")) or [None]
 
               outcome = "success"
               crashed = False
@@ -820,6 +834,7 @@ jobs:
           ) -> list[str]:
               spec = _TYPECHECKERS[tool]
               command_name = str(spec["command"])
+              argv = [str(part) for part in spec["argv"]]  # e.g. ["ty", "check"]; argv[0] == command_name
               version_flag = [str(spec["version_flag"]), target] if target else []
               tail = [*version_flag, *extra, *paths]
               if sync:
@@ -827,12 +842,14 @@ jobs:
                   base += ["--with", f"{command_name}=={version}" if version else command_name]
                   for requirement in with_requirements:
                       base += ["--with", requirement]
-                  return [*base, command_name, *tail]
+                  return [*base, *argv, *tail]
               base = ["uvx"]
               for requirement in with_requirements:
                   base += ["--with", requirement]
+              # uvx runs the package's default entry point (argv[0] == command_name), so the
+              # package spec carries the version and any subcommand follows as argv[1:].
               tool_spec = f"{command_name}@{version}" if version else command_name
-              return [*base, tool_spec, *tail]
+              return [*base, tool_spec, *argv[1:], *tail]
 
 
           # --------------------------------------------------------------------------- #
@@ -1051,13 +1068,6 @@ jobs:
               raise SystemExit(main())
           DEVFLOWS_SCRIPT_EOF
           echo "script-root=$RUNNER_TEMP/devflows" >> "$GITHUB_OUTPUT"
-      - name: Set up uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
-        with:
-          version: ${{ inputs.uv-version }}
-          python-version: ${{ inputs.lint-python-version }}
-          enable-cache: ${{ inputs.uv-cache-mode }}
-          working-directory: ${{ inputs.lint-working-directory }}
       - name: Validate inputs
         shell: bash
         env:
@@ -1080,6 +1090,13 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ${{ inputs.typecheck-python-versions }}
           LINT_TYPECHECK_WITH: ${{ inputs.typecheck-with }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/python-lint/validate-inputs.py"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        with:
+          version: ${{ inputs.uv-version }}
+          python-version: ${{ inputs.lint-python-version }}
+          enable-cache: ${{ inputs.uv-cache-mode }}
+          working-directory: ${{ inputs.lint-working-directory }}
       - name: Run lint
         id: lint
         shell: bash
@@ -1104,6 +1121,13 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ${{ inputs.typecheck-python-versions }}
           LINT_TYPECHECK_WITH: ${{ inputs.typecheck-with }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/python-lint/run-lint.py"
+      - name: Upload lint report
+        if: ${{ !cancelled() && inputs.lint-report-directory != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ${{ inputs.lint-report-artifact-name }}
+          path: ${{ inputs.lint-report-directory }}
+          if-no-files-found: warn
       - name: Upload artifact
         if: inputs.artifact-upload-enabled && inputs.artifact-upload-path != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

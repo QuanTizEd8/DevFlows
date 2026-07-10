@@ -38,12 +38,23 @@ on:
       lint-report-directory:
         description: >-
           When set, machine-readable reports are written there (results.json, ruff-check.json,
-          ruff-format.diff, typecheck-<pyver>.txt) for pickup by the artifact-upload channel or
-          later jobs. Relative to the workspace; must stay inside it. Empty (default) disables file
-          reports; the job summary is always rendered.
+          ruff-format.diff, typecheck-<pyver>.txt) and the workflow uploads them as the
+          lint-report-artifact-name artifact even when the job fails (see that input). Relative
+          to the workspace; must stay inside it. Empty (default) disables file reports; the job
+          summary is always rendered.
         type: string
         required: false
         default: ""
+      lint-report-artifact-name:
+        description: >-
+          Name of the workflow-owned artifact that publishes the lint-report-directory contents.
+          Uploaded on '!cancelled()' whenever lint-report-directory is set, so findings that fail
+          the job (lint-enforce) are still published -- unlike the success-gated generic
+          artifact-upload channel, which stays reserved for build outputs. Callers invoking this
+          workflow more than once in the same run must pass distinct names.
+        type: string
+        required: false
+        default: python-lint-report
       lint-timeout-minutes:
         description: Maximum minutes the lint job may run before it is cancelled.
         type: number
@@ -159,13 +170,14 @@ on:
         default: ""
       typecheck-python-versions:
         description: >-
-          JSON array of target Python versions, for example ["3.11", "3.13"]. Each entry must
-          match a 3.<minor> pattern. Each entry produces one checker invocation with the tool's
-          target-version flag inside the single job -- no job matrix, no interpreter installs per
-          version. Empty array (default) runs one invocation with the tool's own default.
+          Newline-separated target Python versions, for example 3.11 then 3.13 on its own line.
+          Each entry must match a 3.<minor> pattern. Each entry produces one checker invocation
+          with the tool's target-version flag inside the single job -- no job matrix, no
+          interpreter installs per version. Empty (default) runs one invocation with the tool's
+          own default.
         type: string
         required: false
-        default: "[]"
+        default: ""
       typecheck-with:
         description: >-
           Newline-separated additional PyPI requirement specifiers installed alongside the type
@@ -215,13 +227,10 @@ jobs:
       typecheck-outcome: ${{ steps.lint.outputs.typecheck-outcome }}
       lint-results: ${{ steps.lint.outputs.lint-results }}
     steps:
-      - name: Set up uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
-        with:
-          version: ${{ inputs.uv-version }}
-          python-version: ${{ inputs.lint-python-version }}
-          enable-cache: ${{ inputs.uv-cache-mode }}
-          working-directory: ${{ inputs.lint-working-directory }}
+      # Validate inputs BEFORE Set up uv so an invalid uv-cache-mode (or any other
+      # input) is rejected by the pinned validation message rather than reaching
+      # setup-uv's enable-cache first. The validate script needs only plain python
+      # plus the materialized DevFlows runtime, not the provisioned uv environment.
       - name: Validate inputs
         shell: bash
         env:
@@ -244,6 +253,13 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ${{ inputs.typecheck-python-versions }}
           LINT_TYPECHECK_WITH: ${{ inputs.typecheck-with }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/python-lint/validate-inputs.py"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: ${{ inputs.uv-version }}
+          python-version: ${{ inputs.lint-python-version }}
+          enable-cache: ${{ inputs.uv-cache-mode }}
+          working-directory: ${{ inputs.lint-working-directory }}
       - name: Run lint
         id: lint
         shell: bash
@@ -268,3 +284,15 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ${{ inputs.typecheck-python-versions }}
           LINT_TYPECHECK_WITH: ${{ inputs.typecheck-with }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/python-lint/run-lint.py"
+      # Workflow-owned report upload. Runs on !cancelled() so lint findings that fail
+      # the job (lint-enforce) still publish results.json / ruff-*/typecheck-* reports;
+      # the success-gated generic artifact-upload channel below cannot (a failed Run
+      # lint step skips it). Guarded on lint-report-directory being set, mirroring
+      # python-test's report upload.
+      - name: Upload lint report
+        if: ${{ !cancelled() && inputs.lint-report-directory != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.lint-report-artifact-name }}
+          path: ${{ inputs.lint-report-directory }}
+          if-no-files-found: warn

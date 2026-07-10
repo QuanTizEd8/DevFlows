@@ -65,6 +65,15 @@ notes:
     are capped at 10 per tool (GitHub renders at most ~10 per step) and use
     workspace-relative paths derived from structured tool output.
   - >-
+    Setting lint-report-directory both writes the machine-readable reports there
+    and makes the workflow upload them as the lint-report-artifact-name artifact
+    (default python-lint-report). That upload is gated on !cancelled(), so reports
+    are published even when lint-enforce fails the job -- the fix for findings
+    never reaching an artifact. The generic artifact-upload channel stays
+    success-gated and reserved for build outputs; use the dedicated report channel
+    for lint reports. Invoking this workflow more than once in a run needs distinct
+    lint-report-artifact-name values.
+  - >-
     CodeQL and dependency review are intentionally NOT wrapped by this workflow.
     Both are GitHub-native two-click setups: enable code scanning at
     https://docs.github.com/code-security/code-scanning and dependency review at

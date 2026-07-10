@@ -8,7 +8,6 @@ tool crash later. All checks are pure Python; nothing is shelled out.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shlex
@@ -28,7 +27,7 @@ _FORBIDDEN_TYPECHECK = ("--python-version", "--pythonversion")
 
 
 def main() -> int:
-    workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+    workspace = _workspace()
     working_directory = _validate_working_directory(workspace)
     _validate_report_directory(workspace)
     _validate_lint_paths(working_directory, workspace)
@@ -123,15 +122,10 @@ def _validate_ruff_check_arguments() -> None:
 
 
 def _validate_typecheck() -> None:
-    versions_raw = _get("LINT_TYPECHECK_PYTHON_VERSIONS") or "[]"
-    try:
-        versions = json.loads(versions_raw)
-    except json.JSONDecodeError as error:
-        raise SystemExit(f"typecheck-python-versions must be a JSON array: {error}") from error
-    if not isinstance(versions, list):
-        raise SystemExit("typecheck-python-versions must be a JSON array.")
-    for entry in versions:
-        if not isinstance(entry, str) or not _TARGET_PYTHON.match(entry):
+    # typecheck-python-versions is a newline-separated list (list-input convention),
+    # not a JSON array. Each non-empty line must be a bare 3.<minor> target.
+    for entry in _split_lines(_get("LINT_TYPECHECK_PYTHON_VERSIONS")):
+        if not _TARGET_PYTHON.match(entry):
             raise SystemExit(
                 f"typecheck-python-versions entries must match 3.<minor>, got {entry!r}."
             )
@@ -173,6 +167,15 @@ def _validate_shlex(env_name: str, input_name: str) -> list[str]:
         return shlex.split(value)
     except ValueError as error:
         raise SystemExit(f"Unable to parse {input_name}: {error}") from error
+
+
+def _workspace() -> Path:
+    # GITHUB_WORKSPACE is always set on a runner; fail fast with a clear message
+    # (not a raw KeyError) when it is absent, e.g. a misconfigured local harness.
+    raw = os.environ.get("GITHUB_WORKSPACE")
+    if not raw:
+        raise SystemExit("GITHUB_WORKSPACE is not set.")
+    return Path(raw).resolve()
 
 
 def _split_lines(value: str) -> list[str]:
