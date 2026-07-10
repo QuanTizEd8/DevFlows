@@ -11,7 +11,11 @@ from typing import Any
 
 from devflows.actions import ref as action_ref
 from devflows.catalog import Workflow
-from devflows.publish import build_published_workflow, published_workflow_call
+from devflows.publish import (
+    build_published_workflow,
+    caller_required_permissions,
+    published_workflow_call,
+)
 from devflows.yaml import dump_yaml
 
 GENERATED_HOSTED_PATH = Path(".github/workflows/devflows-scenarios.yaml")
@@ -29,9 +33,6 @@ UPLOAD_ARTIFACT_REF = action_ref("upload-artifact")
 CHECKOUT_REF = action_ref("checkout")
 ACT_PLATFORM = "ubuntu-latest=catthehacker/ubuntu:act-latest"
 SCENARIO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-# Levels a caller can grant a nested reusable-workflow call, ranked so the
-# required permissions are the maximum requested anywhere in the called tree.
-_PERMISSION_RANK = {"none": 0, "read": 1, "write": 2}
 # A job guarded by this expression runs on same-repo pull requests, pushes, and
 # manual dispatches, but is skipped on fork pull requests. GitHub caps a fork
 # PR's token to read, so a call job that declares any write permission would fail
@@ -79,21 +80,7 @@ def _required_call_permissions(workflow: Workflow) -> dict[str, str]:
     workflow declares (top level plus each job) guarantees the caller is a
     superset, so no call startup-fails and writeback jobs can push at runtime.
     """
-    published = build_published_workflow(workflow)
-    merged: dict[str, str] = {}
-    sources: list[Any] = [published.get("permissions")]
-    for job in (published.get("jobs") or {}).values():
-        if isinstance(job, dict):
-            sources.append(job.get("permissions"))
-    for perms in sources:
-        if not isinstance(perms, dict):
-            continue
-        for name, level in perms.items():
-            level_str = str(level)
-            current = merged.get(name, "none")
-            if _PERMISSION_RANK.get(level_str, 0) > _PERMISSION_RANK.get(current, 0):
-                merged[name] = level_str
-    return {name: level for name, level in sorted(merged.items()) if level != "none"}
+    return caller_required_permissions(build_published_workflow(workflow))
 
 
 def _missing_mutation_inputs(workflow: Workflow) -> list[str]:
