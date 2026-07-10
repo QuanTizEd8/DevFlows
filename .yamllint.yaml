@@ -1,6 +1,7 @@
 extends: default
 
 ignore: |
+  .claude/
   .codex/
   .pixi/
   docs/_build/
