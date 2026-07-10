@@ -11,6 +11,13 @@
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
+    "workflows/binder-build": {
+      "component": "binder-build",
+      "release-type": "simple",
+      "package-name": "binder-build",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
     "workflows/build-devcontainer": {
       "component": "build-devcontainer",
       "release-type": "simple",

@@ -90,6 +90,21 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: ghcr\\.io/openjournals/inara:(?<currentValue>\\S+)"
       ],
       versioningTemplate: "docker"
+    },
+    {
+      // Keep the pinned jupyter-repo2docker version the binder-build workflow
+      // installs (ephemerally, via `uvx --from jupyter-repo2docker==<version>`)
+      // current. The inline `# renovate:` comment above the repo2docker-version
+      // input default supplies datasource/depName; Renovate bumps the pep440
+      // version string in place. A unit test (tests/test_binder_build.py) asserts
+      // this regex still matches the default so the pin never silently stops
+      // updating. Run `devflows sync` after a bump so the generated copy tracks it.
+      customType: "regex",
+      managerFilePatterns: ["/^workflows/binder-build/workflow\\.yaml$/"],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: "(?<currentValue>[^"]+)"'
+      ],
+      versioningTemplate: "pep440"
     }
   ],
   // ------------------------------------------------------------- packageRules

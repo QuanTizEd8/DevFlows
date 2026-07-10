@@ -561,6 +561,438 @@ jobs:
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of fail, skip, overwrite
         run: python harness/scenarios/assert-validation-failure.py
+  binder_build_dry_run_build_hosted_call:
+    name: 'Binder Build: Dry-run builds a Binder image and skips the push job'
+    uses: ./.github/workflows/binder-build.yaml
+    with:
+      image-name: ghcr.io/devflows/e2e-binder
+      publish-dry-run-enabled: true
+      repo2docker-source-path: tests/scenarios/binder-build/minimal
+      docker-login-enabled: false
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  binder_build_dry_run_build_hosted_assert:
+    name: 'Binder Build: Dry-run builds a Binder image and skips the push job assertions'
+    runs-on: ubuntu-latest
+    needs: binder_build_dry_run_build_hosted_call
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.binder_build_dry_run_build_hosted_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: binder-build-proof
+          path: .devflows-test-artifacts/binder-build/dry-run
+      - name: 'Assert file contains: image-id'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/binder-build/dry-run/image-id
+          ASSERT_TEXT: 'sha256:'
+        run: python harness/scenarios/assert-file-contains.py
+      - name: Assert output image-ref
+        shell: bash
+        env:
+          ASSERT_NAME: image-ref
+          EXPECTED: ''
+          ACTUAL: ${{ needs.binder_build_dry_run_build_hosted_call.outputs.image-ref }}
+        run: python harness/scenarios/assert-equals.py
+  binder_build_missing_image_name_validate:
+    name: 'Binder Build: Empty image-name fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ''
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: image-name is required
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_invalid_image_name_validate:
+    name: 'Binder Build: image-name carrying a tag fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo:latest
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: WITHOUT a tag
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_empty_image_tags_validate:
+    name: 'Binder Build: image-tags resolving to an empty list fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: ''
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: non-empty newline-separated list
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_push_without_environment_validate:
+    name: 'Binder Build: A real push with no push-environment-name fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'false'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: push-environment-name is required
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_arguments_owned_push_flag_validate:
+    name: 'Binder Build: A --push smuggled through repo2docker-arguments fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: --push
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_arguments_owned_image_name_validate:
+    name: 'Binder Build: An attached --image-name=value fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: --image-name=attacker/evil
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_arguments_attached_short_option_validate:
+    name: 'Binder Build: An attached short option fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: -eSECRET=1
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: only the allowlisted passthrough flags
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_arguments_bare_positional_validate:
+    name: 'Binder Build: A bare positional source fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ./attacker-repo
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: only the allowlisted passthrough flags
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_arguments_invalid_shlex_validate:
+    name: 'Binder Build: An unbalanced quote in repo2docker-arguments fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: --label='unbalanced
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: could not be parsed as shell arguments
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_unsafe_source_path_validate:
+    name: 'Binder Build: A repo2docker-source-path escaping the workspace fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: ../outside
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: workspace-relative path
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_invalid_repo2docker_version_validate:
+    name: 'Binder Build: A repo2docker-version with a smuggled specifier fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0; os.system('x')
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: binder-dockerfile
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: date-based jupyter-repo2docker version
+        run: python harness/scenarios/assert-validation-failure.py
+  binder_build_unsafe_dockerfile_artifact_name_validate:
+    name: 'Binder Build: An artifact-unsafe dockerfile-artifact-name fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/binder-build/scripts/validate-inputs.py
+          IMAGE_NAME: ghcr.io/owner/repo-binder
+          IMAGE_TAGS: latest
+          IMAGE_SHA_TAG_ENABLED: 'false'
+          IMAGE_SHA_TAG_PREFIX: sha-
+          REPO2DOCKER_SOURCE_PATH: .
+          REPO2DOCKER_VERSION: 2026.4.0
+          REPO2DOCKER_ARGUMENTS: ''
+          REPO2DOCKER_TIMEOUT_MINUTES: '30'
+          PUSH_TIMEOUT_MINUTES: '30'
+          PUBLISH_DRY_RUN_ENABLED: 'true'
+          PUSH_ENVIRONMENT_NAME: ''
+          DOCKERFILE_ARTIFACT_ENABLED: 'true'
+          DOCKERFILE_ARTIFACT_NAME: bad/name
+          BINDER_CACHE_WARM_ENABLED: 'false'
+          BINDER_CACHE_PROVIDER: gh
+          BINDER_CACHE_REPOSITORY: ${{ github.repository }}
+          BINDER_CACHE_REF: ${{ github.sha }}
+          BINDER_CACHE_ENDPOINT: https://mybinder.org
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: artifact-safe token
+        run: python harness/scenarios/assert-validation-failure.py
   build_devcontainer_build_only_minimal_call:
     name: 'Build Devcontainer: Build a minimal devcontainer without pushing'
     uses: ./.github/workflows/build-devcontainer.yaml
