@@ -1,0 +1,25 @@
+name: Build MkDocs site with pip
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  docs:
+    # Replace docs-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/v0.1.0
+    with:
+      docs-tool: mkdocs
+      docs-environment: pip
+      pip-install-targets: |
+        mkdocs-material
+      mkdocs-config-file: mkdocs.yml
+      docs-output-directory: site
+      docs-warnings-as-errors: true
+      artifact-upload-enabled: true
+      artifact-upload-name: documentation-site
+      artifact-upload-path: site
+      artifact-upload-if-no-files-found: error

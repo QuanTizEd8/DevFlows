@@ -66,6 +66,140 @@ jobs:
           ASSERT_PATH: .devflows-test-artifacts/build-devcontainer/build-only/linux-amd64
           ASSERT_TEXT: 'sha256:'
         run: python harness/scenarios/assert-file-contains.py
+  docs_build_sphinx_container_artifact_call:
+    name: 'Build Documentation: Sphinx build in a container image with artifact upload'
+    uses: ./.github/workflows/docs-build.yaml
+    with:
+      docs-tool: sphinx
+      docs-environment: container
+      container-image: sphinxdoc/sphinx:8.1.3
+      sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+      docs-output-directory: .devflows-test/docs-build/sphinx-container-artifact/site
+      artifact-upload-enabled: true
+      artifact-upload-name: docs-build-sphinx-container
+      artifact-upload-path: .devflows-test/docs-build/sphinx-container-artifact/site
+      artifact-upload-if-no-files-found: error
+    permissions:
+      actions: read
+      contents: read
+  docs_build_sphinx_container_artifact_assert:
+    name: 'Build Documentation: Sphinx build in a container image with artifact upload assertions'
+    runs-on: ubuntu-latest
+    needs: docs_build_sphinx_container_artifact_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.docs_build_sphinx_container_artifact_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: docs-build-sphinx-container
+          path: .devflows-test-artifacts/docs-build/sphinx-container
+      - name: 'Assert file exists: index.html'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/docs-build/sphinx-container/index.html
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: index.html'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/docs-build/sphinx-container/index.html
+          ASSERT_TEXT: DevFlows Docs Build Fixture
+        run: python harness/scenarios/assert-file-contains.py
+  docs_build_mkdocs_uv_artifact_call:
+    name: 'Build Documentation: MkDocs build in a uv environment with artifact upload'
+    uses: ./.github/workflows/docs-build.yaml
+    with:
+      docs-tool: mkdocs
+      docs-environment: uv
+      docs-working-directory: tests/scenarios/docs-build/mkdocs-uv
+      uv-sync-groups: |
+        docs
+      uv-sync-locked: false
+      mkdocs-config-file: tests/scenarios/docs-build/mkdocs-uv/mkdocs.yml
+      docs-output-directory: .devflows-test/docs-build/mkdocs-uv/site
+      artifact-upload-enabled: true
+      artifact-upload-name: docs-build-mkdocs-uv
+      artifact-upload-path: .devflows-test/docs-build/mkdocs-uv/site
+      artifact-upload-if-no-files-found: error
+    permissions:
+      actions: read
+      contents: read
+  docs_build_mkdocs_uv_artifact_assert:
+    name: 'Build Documentation: MkDocs build in a uv environment with artifact upload assertions'
+    runs-on: ubuntu-latest
+    needs: docs_build_mkdocs_uv_artifact_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.docs_build_mkdocs_uv_artifact_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: docs-build-mkdocs-uv
+          path: .devflows-test-artifacts/docs-build/mkdocs-uv
+      - name: 'Assert file exists: index.html'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/docs-build/mkdocs-uv/index.html
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: index.html'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/docs-build/mkdocs-uv/index.html
+          ASSERT_TEXT: DevFlows Docs Build MkDocs Fixture
+        run: python harness/scenarios/assert-file-contains.py
+  docs_build_pages_artifact_chain_call:
+    name: 'Build Documentation: Pages artifact upload exposes the deploy-pages handoff outputs'
+    uses: ./.github/workflows/docs-build.yaml
+    with:
+      docs-tool: sphinx
+      docs-environment: pip
+      pip-install-targets: |
+        sphinx
+      sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+      docs-output-directory: .devflows-test/docs-build/pages-chain/site
+      pages-artifact-enabled: true
+      pages-artifact-name: docs-build-pages-chain
+    permissions:
+      actions: read
+      contents: read
+  docs_build_pages_artifact_chain_assert:
+    name: 'Build Documentation: Pages artifact upload exposes the deploy-pages handoff outputs assertions'
+    runs-on: ubuntu-latest
+    needs: docs_build_pages_artifact_chain_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.docs_build_pages_artifact_chain_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Assert output pages-artifact-name
+        shell: bash
+        env:
+          ASSERT_NAME: pages-artifact-name
+          EXPECTED: docs-build-pages-chain
+          ACTUAL: ${{ needs.docs_build_pages_artifact_chain_call.outputs.pages-artifact-name }}
+        run: python harness/scenarios/assert-equals.py
   pandoc_markdown_html_artifact_call:
     name: 'Pandoc: Markdown to HTML with artifact upload'
     uses: ./.github/workflows/pandoc.yaml

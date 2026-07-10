@@ -1,0 +1,171 @@
+id: docs-build
+name: Build Documentation
+summary:
+  Build project documentation (Sphinx first-class, MkDocs supported) in a
+  caller-selected environment (pixi, uv, pip, micromamba, or a container image)
+  and emit the site as a regular artifact and/or a GitHub Pages artifact.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Documents
+  keywords:
+    - documentation
+    - sphinx
+    - mkdocs
+    - github-pages
+    - artifacts
+io:
+  job: docs-build
+  runtime: true
+  checkout: true
+  artifact-download: true
+  artifact-upload: true
+notes:
+  - >-
+    Caller permissions: docs-build is read-only. Its jobs declare only
+    contents: read and actions: read (actions: read is required by the generated
+    artifact channels), so a calling job grants permissions: contents: read,
+    actions: read. There is no nested writeback job, so callers are never forced
+    to grant contents: write for a build-only CI check.
+  - >-
+    Writeback is intentionally OFF. Committing a built site to a gh-pages-style
+    branch is not supported in v1; publish through the GitHub Pages artifact
+    (deploy-pages) or the shared artifact-upload channel instead.
+  - >-
+    Pages chain: pages-artifact-enabled uploads docs-output-directory as a GitHub
+    Pages artifact (default name github-pages) and needs no extra permissions.
+    The deployment (pages: write, id-token: write) lives entirely in the separate
+    deploy-pages workflow, which consumes the pages-artifact-name output.
+  - >-
+    Environment modes are pixi, uv, pip, micromamba, and container. The
+    environment is required (no safe default). Inputs of the non-selected
+    environment groups are silently ignored, so one call site can template
+    several modes.
+  - >-
+    micromamba mode installs a fixed environment named 'docs-build' from
+    micromamba-environment-file; that file must provide the docs toolchain
+    (sphinx or mkdocs). Reusing the test conda environment for other managers
+    (pixi-for-test parity) is a recorded post-v1 candidate.
+  - >-
+    Container mode runs a caller-supplied image via 'docker run --rm' with the
+    workspace mounted and --user uid:gid (pandoc precedent); pin tags or digests
+    for reproducibility. Optional registry login uses the container-password
+    secret with no github.token fallback, because this workflow deliberately
+    holds no packages permission.
+  - >-
+    Sphinx is first-class; the link check uses Sphinx's built-in linkcheck
+    builder and is Sphinx-only. Enabling docs-linkcheck-enabled with docs-tool
+    mkdocs fails validation loudly (MkDocs has no built-in link checker).
+  - >-
+    A build that leaves docs-output-directory missing or empty fails the job, so
+    a misconfigured or vacuous docs-build-command cannot silently succeed.
+  - >-
+    Sphinx extensions that need full git history (e.g. sphinx-last-updated-by-git)
+    require the injected checkout-fetch-depth input set to 0.
+  - >-
+    List-valued inputs (uv-sync-groups, uv-sync-extras, pip-install-targets) are
+    newline-separated and are built into argv, never shell-interpolated.
+  - >-
+    runs-on is hardcoded ubuntu-latest (pandoc precedent). A docs-runner input
+    (string, default ubuntu-latest) can be added later as a compatible minor
+    change if macOS/Windows docs builds ever matter; container mode stays
+    linux-only.
+examples:
+  - name: Sphinx docs with uv
+    path: tests/fixtures/docs-build/sphinx-uv.yaml
+  - name: MkDocs site with pip
+    path: tests/fixtures/docs-build/mkdocs-pip.yaml
+  - name: Build docs and deploy to GitHub Pages
+    path: tests/fixtures/docs-build/pages-chain.yaml
+tests:
+  scenarios:
+    - id: sphinx-container-local
+      name: Sphinx build in a container image (local)
+      runs:
+        - local
+      cleanup:
+        - .devflows-test/docs-build/sphinx-container-local
+      inputs:
+        checkout-enabled: false
+        docs-tool: sphinx
+        docs-environment: container
+        container-image: sphinxdoc/sphinx:8.1.3
+        docs-working-directory: "."
+        sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+        docs-output-directory: .devflows-test/docs-build/sphinx-container-local/site
+      assertions:
+        - type: file-exists
+          path: .devflows-test/docs-build/sphinx-container-local/site/index.html
+        - type: file-contains
+          path: .devflows-test/docs-build/sphinx-container-local/site/index.html
+          text: DevFlows Docs Build Fixture
+    - id: sphinx-container-artifact
+      name: Sphinx build in a container image with artifact upload
+      runs:
+        - hosted
+      artifact:
+        name: docs-build-sphinx-container
+        path: .devflows-test-artifacts/docs-build/sphinx-container
+      inputs:
+        docs-tool: sphinx
+        docs-environment: container
+        container-image: sphinxdoc/sphinx:8.1.3
+        sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+        docs-output-directory: .devflows-test/docs-build/sphinx-container-artifact/site
+        artifact-upload-enabled: true
+        artifact-upload-name: docs-build-sphinx-container
+        artifact-upload-path: .devflows-test/docs-build/sphinx-container-artifact/site
+        artifact-upload-if-no-files-found: error
+      assertions:
+        - type: file-exists
+          path: index.html
+        - type: file-contains
+          path: index.html
+          text: DevFlows Docs Build Fixture
+    - id: mkdocs-uv-artifact
+      name: MkDocs build in a uv environment with artifact upload
+      runs:
+        - hosted
+      artifact:
+        name: docs-build-mkdocs-uv
+        path: .devflows-test-artifacts/docs-build/mkdocs-uv
+      inputs:
+        docs-tool: mkdocs
+        docs-environment: uv
+        docs-working-directory: tests/scenarios/docs-build/mkdocs-uv
+        uv-sync-groups: |
+          docs
+        uv-sync-locked: false
+        mkdocs-config-file: tests/scenarios/docs-build/mkdocs-uv/mkdocs.yml
+        docs-output-directory: .devflows-test/docs-build/mkdocs-uv/site
+        artifact-upload-enabled: true
+        artifact-upload-name: docs-build-mkdocs-uv
+        artifact-upload-path: .devflows-test/docs-build/mkdocs-uv/site
+        artifact-upload-if-no-files-found: error
+      assertions:
+        - type: file-exists
+          path: index.html
+        - type: file-contains
+          path: index.html
+          text: DevFlows Docs Build MkDocs Fixture
+    - id: pages-artifact-chain
+      name: Pages artifact upload exposes the deploy-pages handoff outputs
+      runs:
+        - hosted
+      inputs:
+        docs-tool: sphinx
+        docs-environment: pip
+        pip-install-targets: |
+          sphinx
+        sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+        docs-output-directory: .devflows-test/docs-build/pages-chain/site
+        pages-artifact-enabled: true
+        pages-artifact-name: docs-build-pages-chain
+      assertions:
+        - type: workflow-output-equals
+          name: pages-artifact-name
+          value: docs-build-pages-chain

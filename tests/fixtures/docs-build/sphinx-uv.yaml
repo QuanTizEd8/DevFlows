@@ -1,0 +1,27 @@
+name: Build Sphinx docs with uv
+
+on:
+  workflow_dispatch:
+
+# docs-build runs read-only: its jobs declare contents: read and actions: read
+# (the artifact channels need actions: read). No pages/id-token/contents:write.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  docs:
+    # Replace docs-build/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/v0.1.0
+    with:
+      docs-tool: sphinx
+      docs-environment: uv
+      uv-sync-groups: |
+        docs
+      sphinx-source-directory: docs
+      docs-output-directory: _site
+      docs-warnings-as-errors: true
+      artifact-upload-enabled: true
+      artifact-upload-name: documentation-site
+      artifact-upload-path: _site
+      artifact-upload-if-no-files-found: error

@@ -10,6 +10,12 @@
       "package-name": "build-devcontainer",
       "changelog-path": "CHANGELOG.md"
     },
+    "workflows/docs-build": {
+      "component": "docs-build",
+      "release-type": "simple",
+      "package-name": "docs-build",
+      "changelog-path": "CHANGELOG.md"
+    },
     "workflows/pandoc": {
       "component": "pandoc",
       "release-type": "simple",

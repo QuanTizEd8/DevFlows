@@ -19,6 +19,54 @@ jobs:
             exit 1
           fi
           echo "Running under act."
+  docs_build_sphinx_container_local_clean:
+    name: 'Build Documentation: Sphinx build in a container image (local) cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove previous scenario outputs
+        run: rm -rf .devflows-test/docs-build/sphinx-container-local
+    needs: require_act
+  docs_build_sphinx_container_local_call:
+    name: 'Build Documentation: Sphinx build in a container image (local)'
+    uses: ./.github/workflows/docs-build.yaml
+    with:
+      checkout-enabled: false
+      docs-tool: sphinx
+      docs-environment: container
+      container-image: sphinxdoc/sphinx:8.1.3
+      docs-working-directory: .
+      sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
+      docs-output-directory: .devflows-test/docs-build/sphinx-container-local/site
+    permissions:
+      actions: read
+      contents: read
+    needs:
+      - require_act
+      - docs_build_sphinx_container_local_clean
+  docs_build_sphinx_container_local_assert:
+    name: 'Build Documentation: Sphinx build in a container image (local) assertions'
+    runs-on: ubuntu-latest
+    needs:
+      - require_act
+      - docs_build_sphinx_container_local_call
+    if: always()
+    steps:
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.docs_build_sphinx_container_local_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: 'Assert file exists: .devflows-test/docs-build/sphinx-container-local/site/index.html'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test/docs-build/sphinx-container-local/site/index.html
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: .devflows-test/docs-build/sphinx-container-local/site/index.html'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test/docs-build/sphinx-container-local/site/index.html
+          ASSERT_TEXT: DevFlows Docs Build Fixture
+        run: python harness/scenarios/assert-file-contains.py
   pandoc_markdown_html_local_clean:
     name: 'Pandoc: Markdown to HTML without artifact upload cleanup'
     runs-on: ubuntu-latest
