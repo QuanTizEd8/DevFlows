@@ -2,10 +2,10 @@
   "ref": "refs/heads/main",
   "repository": {
     "default_branch": "main",
-    "full_name": "owner/devflows",
-    "name": "devflows",
+    "full_name": "QuanTizEd8/DevFlows",
+    "name": "DevFlows",
     "owner": {
-      "login": "owner"
+      "login": "QuanTizEd8"
     }
   }
 }

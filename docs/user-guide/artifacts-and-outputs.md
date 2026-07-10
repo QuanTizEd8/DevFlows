@@ -31,7 +31,7 @@ A downstream job can download the artifact:
 ```yaml
 jobs:
   convert:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -86,7 +86,7 @@ permissions:
 
 jobs:
   convert:
-    uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-

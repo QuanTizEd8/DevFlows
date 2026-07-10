@@ -1,0 +1,13 @@
+# Central identity for the DevFlows catalog.
+#
+# This file is the single source of truth for the project's public identity.
+# Generated docs, example snippets, and tooling read these values instead of
+# hard-coding an owner/repo slug. It also marks the catalog root: the CLI walks
+# up from the working directory to the directory containing this file.
+owner: QuanTizEd8
+repo: DevFlows
+default_branch: main
+license: Apache-2.0
+# GitHub Pages project site. The Pages host lowercases the owner while keeping
+# the repository name casing.
+docs_url: https://quantized8.github.io/DevFlows/

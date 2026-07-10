@@ -8,7 +8,7 @@ repository.
 Check the `uses` path and tag:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
 ```
 
 Reusable workflows must be published directly under `.github/workflows` in the

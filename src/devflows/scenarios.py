@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from devflows.actions import ref as action_ref
 from devflows.catalog import Workflow
 from devflows.yaml import dump_yaml
 
@@ -16,9 +17,11 @@ GENERATED_HOSTED_PATH = Path(".github/workflows/devflows-scenarios.yaml")
 GENERATED_LOCAL_PATH = Path(".github/workflows/devflows-local-scenarios.yaml")
 GENERATED_SCRIPT_DIR = Path(".github/workflows/devflows-scenarios")
 LOCAL_EVENT_PATH = Path(".act/push.json")
-DOWNLOAD_ARTIFACT_REF = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
-UPLOAD_ARTIFACT_REF = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
-CHECKOUT_REF = "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+# SHA pins come from the central registry (devflows.actions) so they stay in
+# lockstep with the pins the publisher injects.
+DOWNLOAD_ARTIFACT_REF = action_ref("download-artifact")
+UPLOAD_ARTIFACT_REF = action_ref("upload-artifact")
+CHECKOUT_REF = action_ref("checkout")
 ACT_PLATFORM = "ubuntu-latest=catthehacker/ubuntu:act-latest"
 SCENARIO_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SCENARIO_SCRIPTS = {

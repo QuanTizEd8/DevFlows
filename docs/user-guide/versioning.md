@@ -14,13 +14,13 @@ Workflow tags are scoped by workflow ID:
 For example, Pandoc consumers can reference:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
 ```
 
 or:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
 ```
 
 ## Which Reference Should You Use?
@@ -28,19 +28,19 @@ uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
 Use a moving major tag when you want compatible updates:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
 ```
 
 Use an exact release tag when reproducibility matters:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1.2.3
 ```
 
 Use a commit SHA when you need maximum supply-chain assurance:
 
 ```yaml
-uses: owner/devflows/.github/workflows/pandoc.yaml@0123456789abcdef0123456789abcdef01234567
+uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@0123456789abcdef0123456789abcdef01234567
 ```
 
 ## Compatibility Expectations

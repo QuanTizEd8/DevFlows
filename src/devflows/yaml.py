@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from devflows.errors import DevflowsError
+
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover - exercised in minimal devcontainers.
@@ -34,15 +36,20 @@ if yaml is not None:
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise DevflowsError(f"{path} does not exist.")
     if yaml is None:
         data = _load_with_yq(path)
     else:
-        with path.open(encoding="utf-8") as handle:
-            data = yaml.load(handle, Loader=GitHubActionsLoader)
+        try:
+            with path.open(encoding="utf-8") as handle:
+                data = yaml.load(handle, Loader=GitHubActionsLoader)
+        except yaml.YAMLError as error:
+            raise DevflowsError(f"{path}: invalid YAML: {error}") from error
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise ValueError(f"{path} must contain a YAML mapping at the document root.")
+        raise DevflowsError(f"{path} must contain a YAML mapping at the document root.")
     return data
 
 

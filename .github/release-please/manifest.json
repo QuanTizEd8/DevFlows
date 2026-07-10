@@ -1,5 +1,5 @@
 {
-  "workflows/build-devcontainer": "0.1.0",
-  "workflows/pandoc": "0.1.0",
-  "workflows/writeback": "0.1.0"
+  "workflows/build-devcontainer": "1.0.0",
+  "workflows/pandoc": "1.0.0",
+  "workflows/writeback": "1.0.0"
 }

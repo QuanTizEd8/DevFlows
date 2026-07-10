@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build-devcontainer:
-    uses: owner/devflows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1
+    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v1
     with:
       image-name: ghcr.io/owner/project-devcontainer
       image-tag: latest

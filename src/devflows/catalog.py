@@ -25,11 +25,8 @@ class Workflow:
 
     @property
     def support_path(self) -> Path:
+        """Source directory holding the workflow's runtime scripts."""
         return self.path / "scripts"
-
-    @property
-    def published_support_path(self) -> Path:
-        return PUBLISHED_DIR / self.id
 
     @property
     def name(self) -> str:
