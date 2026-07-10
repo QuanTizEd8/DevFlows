@@ -61,6 +61,20 @@ def test_sync_fails_on_non_ascii_inlined_script(make_catalog, capsys) -> None:
     assert "non-ASCII" in capsys.readouterr().err
 
 
+def test_sync_fails_when_generated_workflow_exceeds_size_cap(make_catalog, capsys) -> None:
+    # A generated workflow that grows past the byte cap (here via an oversized inlined
+    # script) is rejected by GitHub at startup with an opaque "workflow file issue" and
+    # zero jobs, which actionlint and `task lint` cannot see. Sync must catch it locally
+    # instead. Mirrors the ASCII guard above: a padded-but-valid inlined script.
+    padding = "# " + ("pad " * 40000) + "\n"  # ~160 KB of ASCII, well over the cap
+    root = make_catalog(script_body=padding)
+
+    assert main(["sync", "--root", str(root)]) == 1
+    err = capsys.readouterr().err
+    assert "byte cap" in err
+    assert "workflow file issue" in err
+
+
 def test_sync_check_detects_orphans(make_catalog, capsys) -> None:
     root = make_catalog()
     assert main(["sync", "--root", str(root)]) == 0
