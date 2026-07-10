@@ -108,3 +108,47 @@ jobs:
           ASSERT_PATH: tests/scenarios/pandoc/working-directory/output.html
           ASSERT_TEXT: Pandoc Working Directory
         run: python harness/scenarios/assert-file-contains.py
+  python_lint_clean_local_clean:
+    name: 'Python Lint: Clean project passes locally cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove previous scenario outputs
+        run: rm -rf .devflows-test/python-lint/clean-local
+    needs: require_act
+  python_lint_clean_local_call:
+    name: 'Python Lint: Clean project passes locally'
+    uses: ./.github/workflows/python-lint.yaml
+    with:
+      checkout-enabled: false
+      lint-working-directory: tests/scenarios/python-lint/clean
+      lint-report-directory: .devflows-test/python-lint/clean-local
+    permissions:
+      actions: read
+      contents: read
+    needs:
+      - require_act
+      - python_lint_clean_local_clean
+  python_lint_clean_local_assert:
+    name: 'Python Lint: Clean project passes locally assertions'
+    runs-on: ubuntu-latest
+    needs:
+      - require_act
+      - python_lint_clean_local_call
+    if: always()
+    steps:
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.python_lint_clean_local_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: 'Assert file exists: .devflows-test/python-lint/clean-local/results.json'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test/python-lint/clean-local/results.json
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: .devflows-test/python-lint/clean-local/results.json'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test/python-lint/clean-local/results.json
+          ASSERT_TEXT: '"violations": 0'
+        run: python harness/scenarios/assert-file-contains.py

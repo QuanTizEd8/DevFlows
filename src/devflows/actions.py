@@ -61,6 +61,11 @@ ACTION_PINS: dict[str, ActionPin] = {
         "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c",
         "v4.2.0",
     ),
+    "setup-uv": ActionPin(
+        "astral-sh/setup-uv",
+        "11f9893b081a58869d3b5fccaea48c9e9e46f990",
+        "v8.3.2",
+    ),
     "cache": ActionPin(
         "actions/cache",
         "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",

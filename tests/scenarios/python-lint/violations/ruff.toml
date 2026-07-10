@@ -1,0 +1,4 @@
+# Config boundary so the python-lint workflow's ruff run uses ruff defaults for
+# this fixture (an unused import is a real F401, the body is intentionally
+# misformatted) instead of walking up to the DevFlows repository configuration,
+# which excludes this directory from its own lint.
