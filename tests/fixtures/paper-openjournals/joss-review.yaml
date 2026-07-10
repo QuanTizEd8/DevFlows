@@ -1,0 +1,25 @@
+name: Open Journals draft PDF and JATS caller
+
+on:
+  workflow_dispatch:
+
+# The build job checks out the paper source (contents: read) and the
+# artifact-download channel adds actions: read; grant the union.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-paper:
+    # Replace paper-openjournals/v0.1.0 with the latest released tag (0.x has no moving tags).
+    uses: QuanTizEd8/DevFlows/.github/workflows/paper-openjournals.yaml@paper-openjournals/v0.1.0
+    with:
+      paper-journal: joss
+      paper-source-path: docs/paper.md
+      paper-flavors: |
+        draft-pdf
+        jats
+      artifact-upload-enabled: true
+      artifact-upload-name: joss-paper
+      artifact-upload-path: paper-build
+      artifact-upload-if-no-files-found: error

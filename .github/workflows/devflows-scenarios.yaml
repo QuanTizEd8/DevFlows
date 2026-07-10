@@ -1203,6 +1203,61 @@ jobs:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/artifact-download-html/example.html
           ASSERT_TEXT: Pandoc Artifact Input
         run: python harness/scenarios/assert-file-contains.py
+  paper_openjournals_cff_jats_build_call:
+    name: 'Open Journals Paper Build: Build the CFF and JATS flavors from a minimal fixture paper'
+    uses: ./.github/workflows/paper-openjournals.yaml
+    with:
+      paper-journal: joss
+      paper-source-path: tests/scenarios/paper-openjournals/minimal/paper.md
+      paper-flavors: |
+        cff
+        jats
+      paper-output-directory: paper-build
+      artifact-upload-enabled: true
+      artifact-upload-name: paper-openjournals-build
+      artifact-upload-path: paper-build
+      artifact-upload-if-no-files-found: error
+    permissions:
+      actions: read
+      contents: read
+  paper_openjournals_cff_jats_build_assert:
+    name: 'Open Journals Paper Build: Build the CFF and JATS flavors from a minimal fixture paper assertions'
+    runs-on: ubuntu-latest
+    needs: paper_openjournals_cff_jats_build_call
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - name: Assert scenario succeeded
+        shell: bash
+        env:
+          ACTUAL_RESULT: ${{ needs.paper_openjournals_cff_jats_build_call.result }}
+        run: python harness/scenarios/assert-result.py
+      - name: Download scenario artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: paper-openjournals-build
+          path: .devflows-test-artifacts/paper-openjournals/build
+      - name: 'Assert file matches glob: cff/CITATION.cff'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/paper-openjournals/build/cff/CITATION.cff
+          ASSERT_GLOB: '1'
+        run: python harness/scenarios/assert-file-exists.py
+      - name: 'Assert file contains: cff/CITATION.cff'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/paper-openjournals/build/cff/CITATION.cff
+          ASSERT_TEXT: DevFlows fixture paper
+        run: python harness/scenarios/assert-file-contains.py
+      - name: 'Assert file matches glob: jats/jats/paper.jats'
+        shell: bash
+        env:
+          ASSERT_PATH: .devflows-test-artifacts/paper-openjournals/build/jats/jats/paper.jats
+          ASSERT_GLOB: '1'
+        run: python harness/scenarios/assert-file-exists.py
   pypi_publish_dry_run_verify_hosted_setup:
     name: 'PyPI Publish: Dry-run verify a staged sdist and wheel against the manifest setup'
     runs-on: ubuntu-latest

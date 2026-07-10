@@ -39,6 +39,13 @@
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
+    "workflows/paper-openjournals": {
+      "component": "paper-openjournals",
+      "release-type": "simple",
+      "package-name": "paper-openjournals",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
     "workflows/pypi-publish": {
       "component": "pypi-publish",
       "release-type": "simple",
