@@ -66,6 +66,7 @@ uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@<commit-sha>
 using-workflows
 versioning
 permissions-and-secrets
+security-model
 artifacts-and-outputs
 build-devcontainer
 pandoc
