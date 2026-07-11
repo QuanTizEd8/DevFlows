@@ -51,7 +51,7 @@ on:
         type: string
         required: false
         default: pypi
-      publish-attestations-enabled:
+      attestation-enabled:
         description:
           Generate and upload PEP 740 digital attestations (gh-action-pypi-publish attestations
           input). Default true, matching the upstream default since v1.11.0; attestations require
@@ -242,7 +242,7 @@ jobs:
           repository-url: ${{ needs.validate.outputs.repository-url }}
           verify-metadata: ${{ inputs.publish-verify-metadata-enabled }}
           skip-existing: ${{ inputs.publish-skip-existing-enabled }}
-          attestations: ${{ inputs.publish-attestations-enabled }}
+          attestations: ${{ inputs.attestation-enabled }}
 
   install-check:
     name: Install check

@@ -70,8 +70,8 @@ notes:
     password fallback is restricted to ghcr.io, so any other registry must supply
     docker-password or the push job's tokenless preflight fails loudly (validate cannot
     inspect secret presence, so that check lives in the push job, not validate).
-    image-tags is intentionally a plural newline list (binder pushes multiple tags),
-    diverging from build-devcontainer's singular image-tag; the reproducibility Dockerfile
+    image-tags is a plural newline list (binder pushes multiple tags), matching
+    build-devcontainer's image-tags input verbatim; the reproducibility Dockerfile
     always pins by @sha256 digest regardless of which tags are pushed.
   - >-
     The build-devcontainer registry-auth inputs docker-ecr, docker-scope, and docker-logout

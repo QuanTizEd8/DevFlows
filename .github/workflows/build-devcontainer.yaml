@@ -7,8 +7,8 @@ name: '[Reusable]: Build Devcontainer'
         description: Full image reference without tag, including registry when needed.
         type: string
         required: true
-      image-tag:
-        description: Base image tag. Platform tags are published as image-tag-platform_tag.
+      image-tags:
+        description: Newline-separated list of tags applied to the built multi-arch image. Each line is one tag and the merge job tags the resulting manifest with every entry. The first (primary) tag also names the per-platform staging images (first-tag-platform_tag) and the image-ref output (image-name at the primary tag). Validated non-empty; each token must be a valid Docker tag.
         type: string
         required: false
         default: latest
@@ -442,6 +442,8 @@ jobs:
   validate:
     name: Validate inputs
     runs-on: ubuntu-latest
+    outputs:
+      primary-tag: ${{ steps.validate.outputs.primary-tag }}
     steps:
       - name: Materialize DevFlows runtime scripts
         id: devflows-runtime
@@ -454,12 +456,51 @@ jobs:
 
           import json
           import os
+          import re
+
+          # A single Docker tag token; matches binder-build's tag grammar so the two
+          # workflows accept exactly the same set of tags for the shared image-tags input.
+          _TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 
 
           def main() -> int:
               _validate_matrix(json.loads(_required("BUILD_MATRIX")))
               _validate_token_scope()
+              _emit_primary_tag(_resolve_primary_tag())
               return 0
+
+
+          def _resolve_primary_tag() -> str:
+              """Validate the image-tags newline list and return its first (primary) tag.
+
+              image-tags is a newline-separated list; every line is applied to the merged
+              multi-arch manifest, and the first (primary) tag also names the per-platform
+              staging images and the image-ref output. Validate it here, in the pre-build
+              validate job, so a malformed tag fails fast before any image is built.
+              """
+              raw = os.environ.get("IMAGE_TAGS", "")
+              tags = [line.strip() for line in raw.splitlines() if line.strip()]
+              if not tags:
+                  raise SystemExit("image-tags must resolve to a non-empty newline-separated list of tags.")
+              for tag in tags:
+                  if not _TAG_RE.match(tag):
+                      raise SystemExit(f"image-tags contains an invalid Docker tag {tag!r}.")
+              return tags[0]
+
+
+          def _emit_primary_tag(primary_tag: str) -> None:
+              """Expose the primary tag as a job output for the build and merge jobs.
+
+              The build step's per-platform staging tag, the digest artifact name, and the
+              merge job's digest download pattern all need the single primary tag, but a
+              GitHub Actions expression cannot split the newline list; the validate job
+              computes it once and hands it downstream via steps.validate.outputs.primary-tag.
+              """
+              github_output = os.environ.get("GITHUB_OUTPUT")
+              if not github_output:
+                  return
+              with open(github_output, "a", encoding="utf-8") as output:
+                  output.write(f"primary-tag={primary_tag}\n")
 
 
           def _validate_matrix(matrix: object) -> None:
@@ -522,6 +563,7 @@ jobs:
           DEVFLOWS_SCRIPT_EOF
           echo "script-root=$RUNNER_TEMP/devflows" >> "$GITHUB_OUTPUT"
       - name: Validate inputs
+        id: validate
         shell: bash
         env:
           BUILD_MATRIX: ${{ inputs.build-matrix }}
@@ -529,6 +571,7 @@ jobs:
           DOCKER_LOGIN_ENABLED: ${{ inputs.docker-login-enabled }}
           DOCKER_PASSWORD_SET: ${{ secrets.docker-password != '' }}
           DOCKER_REGISTRY: ${{ inputs.docker-registry }}
+          IMAGE_TAGS: ${{ inputs.image-tags }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/validate-inputs.py"
   build-devcontainer:
     name: Build (${{ matrix.platform }})
@@ -891,7 +934,7 @@ jobs:
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca  # v0.3.1900000450
         with:
           imageName: ${{ inputs.image-name }}
-          imageTag: ${{ inputs.image-tag }}-${{ matrix.platform_tag }}
+          imageTag: ${{ needs.validate.outputs.primary-tag }}-${{ matrix.platform_tag }}
           platform: ${{ matrix.platform }}
           configFile: ${{ inputs.devcontainer-config-file }}
           checkoutPath: ${{ inputs.devcontainer-checkout-path }}
@@ -909,14 +952,14 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DIGEST_DIR: ${{ runner.temp }}/devflows-digests
           IMAGE_NAME: ${{ inputs.image-name }}
-          IMAGE_TAG: ${{ inputs.image-tag }}
+          IMAGE_TAG: ${{ needs.validate.outputs.primary-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
       - name: Upload platform digest
         if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: devflows-devcontainer-digest-${{ inputs.image-tag }}-${{ matrix.platform_tag }}
+          name: devflows-devcontainer-digest-${{ needs.validate.outputs.primary-tag }}-${{ matrix.platform_tag }}
           path: ${{ runner.temp }}/devflows-digests/${{ matrix.platform_tag }}
           if-no-files-found: error
           retention-days: 1
@@ -931,7 +974,7 @@ jobs:
           DIGEST_SOURCE: oci
           DIGEST_OCI_ARCHIVE: /tmp/output.tar
           IMAGE_NAME: ${{ inputs.image-name }}
-          IMAGE_TAG: ${{ inputs.image-tag }}
+          IMAGE_TAG: ${{ needs.validate.outputs.primary-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
       - name: Upload build-only image digest
@@ -946,7 +989,9 @@ jobs:
           overwrite: true
   merge-devcontainer:
     name: Merge multi-arch manifest
-    needs: build-devcontainer
+    needs:
+      - validate
+      - build-devcontainer
     if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
     runs-on: ${{ inputs.merge-runner }}
     outputs:
@@ -970,15 +1015,19 @@ jobs:
 
           def main() -> int:
               image = _required("IMAGE_NAME")
-              tag = _required("IMAGE_TAG")
+              tags = _tags(_required("IMAGE_TAGS"))
               matrix = json.loads(_required("BUILD_MATRIX"))
               digest_dir = Path(_required("DIGEST_DIR"))
 
               platform_tags = _platform_tags(matrix)
               sources = _digest_sources(image, digest_dir, platform_tags)
 
-              image_ref = f"{image}:{tag}"
-              _imagetools_create(image_ref, sources)
+              # Tag the merged multi-arch manifest with every requested tag, all pointing at
+              # the same immutable per-platform digests. The first (primary) tag names the
+              # image-ref output.
+              for tag in tags:
+                  _imagetools_create(f"{image}:{tag}", sources)
+              image_ref = f"{image}:{tags[0]}"
 
               sha_image_ref = ""
               if _truthy(os.environ.get("IMAGE_SHA_TAG_ENABLED", "")):
@@ -993,6 +1042,14 @@ jobs:
                       _emit(output, "image-ref", image_ref)
                       _emit(output, "sha-image-ref", sha_image_ref)
               return 0
+
+
+          def _tags(raw: str) -> list[str]:
+              """Parse the image-tags newline list (validated already in the validate job)."""
+              tags = [line.strip() for line in raw.splitlines() if line.strip()]
+              if not tags:
+                  raise SystemExit("IMAGE_TAGS resolved to an empty list; nothing to tag.")
+              return tags
 
 
           def _platform_tags(matrix: object) -> list[str]:
@@ -1091,7 +1148,7 @@ jobs:
       - name: Download platform digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
-          pattern: devflows-devcontainer-digest-${{ inputs.image-tag }}-*
+          pattern: devflows-devcontainer-digest-${{ needs.validate.outputs.primary-tag }}-*
           path: ${{ runner.temp }}/devflows-digests
           merge-multiple: true
       - name: Merge manifest
@@ -1104,6 +1161,6 @@ jobs:
           IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_SHA_TAG_ENABLED: ${{ inputs.image-sha-tag-enabled }}
           IMAGE_SHA_TAG_PREFIX: ${{ inputs.image-sha-tag-prefix }}
-          IMAGE_TAG: ${{ inputs.image-tag }}
+          IMAGE_TAGS: ${{ inputs.image-tags }}
           SOURCE_SHA: ${{ github.sha }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/merge-manifest.py"

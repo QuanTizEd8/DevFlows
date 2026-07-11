@@ -59,7 +59,7 @@ def _emit_outputs(**outputs: str) -> None:
 
 def main() -> int:
     tool = _text("DOCS_TOOL").strip()
-    environment = _text("DOCS_ENVIRONMENT").strip()
+    environment = _text("DOCS_ENV_MANAGER").strip()
     build_command = _text("DOCS_BUILD_COMMAND").strip()
     working_directory = _text("DOCS_WORKING_DIRECTORY")
     output_directory = _text("DOCS_OUTPUT_DIRECTORY").strip()
@@ -99,7 +99,7 @@ def main() -> int:
         raise SystemExit(f"docs-tool must be one of {sorted(_TOOLS)}, got {tool!r}.")
     if environment not in _ENVIRONMENTS:
         raise SystemExit(
-            f"docs-environment must be one of {sorted(_ENVIRONMENTS)}, got {environment!r}."
+            f"docs-env-manager must be one of {sorted(_ENVIRONMENTS)}, got {environment!r}."
         )
 
     # -- output directory is required and must not be empty or escape ---------
@@ -163,7 +163,7 @@ def main() -> int:
                 f"container-image is not a valid image reference: {image!r}. "
                 "Expected [registry/]name[:tag][@digest]."
             )
-        # NOTE: the container-login-enabled/container-password consistency check
+        # NOTE: the docker-login-enabled/docker-password consistency check
         # lives in a dedicated workflow step (see workflow.yaml) rather than here,
         # because it depends on the secret. Keeping this validate step's env
         # inputs-only lets the expect: validation-failure harness reconstruct it.

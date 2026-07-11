@@ -168,7 +168,7 @@ jobs:
   build-docs:
     uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/vX.Y.Z
     with:
-      docs-environment: pip
+      docs-env-manager: pip
       pip-install-targets: |
         sphinx
       pages-artifact-enabled: true

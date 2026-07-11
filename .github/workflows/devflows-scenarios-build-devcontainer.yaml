@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/build-devcontainer.yaml
     with:
       image-name: devflows-e2e-devcontainer
-      image-tag: e2e
+      image-tags: e2e
       devcontainer-config-file: tests/scenarios/build-devcontainer/minimal/devcontainer.json
       docker-login-enabled: false
       devcontainer-push: never

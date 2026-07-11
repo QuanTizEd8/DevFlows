@@ -15,7 +15,7 @@ jobs:
     uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/v0.1.0
     with:
       docs-tool: sphinx
-      docs-environment: uv
+      docs-env-manager: uv
       uv-sync-groups: |
         docs
       sphinx-source-directory: docs

@@ -129,8 +129,8 @@ audience-scoped upload credential. There is no long-lived secret to leak,
 rotate, or forward. The workflow rejects arbitrary repository URLs for
 `publish-index` (only `pypi` and `testpypi` are accepted) precisely because any
 other target would imply an unsupported token flow. PEP 740 digital attestations
-are generated and uploaded by default (`publish-attestations-enabled`), binding
-each distribution to the workflow that built it.
+are generated and uploaded by default (`attestation-enabled`), binding each
+distribution to the workflow that built it.
 
 ### anaconda.org and Zenodo: isolated token secrets
 

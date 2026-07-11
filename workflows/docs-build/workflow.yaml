@@ -10,7 +10,7 @@ on:
         type: string
         required: false
         default: sphinx
-      docs-environment:
+      docs-env-manager:
         description:
           Environment strategy for the build; one of 'pixi', 'uv', 'pip', 'container', or 'micromamba'.
           Required — the environment is the core decision and there is no safe silent default. Inputs of
@@ -214,26 +214,26 @@ on:
       container-image:
         description:
           Image reference ([registry/]name[:tag][@digest]) that provides the docs toolchain in container
-          mode; syntactically validated and required when docs-environment is 'container'. Runs via
+          mode; syntactically validated and required when docs-env-manager is 'container'. Runs via
           'docker run --rm' with the workspace mounted and --user uid:gid. Pin tags or digests for
           reproducibility.
         type: string
         required: false
         default: ""
-      container-login-enabled:
+      docker-login-enabled:
         description:
-          Whether to docker-login to container-registry before pulling. When true the container-password
+          Whether to docker-login to docker-registry before pulling. When true the docker-password
           secret is required (validated — no silent github.token fallback, since this workflow holds no
           packages permission).
         type: boolean
         required: false
         default: false
-      container-registry:
+      docker-registry:
         description: Registry hostname for the optional docker login. Leave default for GHCR; empty means Docker Hub.
         type: string
         required: false
         default: ghcr.io
-      container-username:
+      docker-username:
         description: Username for the optional docker login.
         type: string
         required: false
@@ -241,7 +241,7 @@ on:
       micromamba-environment-file:
         description:
           Conda/mamba environment file (e.g. environment.yml) installed by setup-micromamba in
-          micromamba mode; required when docs-environment is 'micromamba'. The build runs via
+          micromamba mode; required when docs-env-manager is 'micromamba'. The build runs via
           'micromamba run' in the created environment, which must provide the docs toolchain.
         type: string
         required: false
@@ -279,10 +279,10 @@ on:
         required: false
         default: 1
     secrets:
-      container-password:
+      docker-password:
         description:
           Registry password/token for the optional docker login in container mode. Required when
-          container-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
+          docker-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
         required: false
     outputs:
       pages-artifact-name:
@@ -327,7 +327,7 @@ jobs:
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DOCS_TOOL: ${{ inputs.docs-tool }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_BUILD_COMMAND: ${{ inputs.docs-build-command }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
@@ -349,7 +349,7 @@ jobs:
         run: python "${DEVFLOWS_SCRIPT_ROOT}/docs-build/validate-inputs.py"
 
       - name: Set up pixi
-        if: inputs.docs-environment == 'pixi'
+        if: inputs.docs-env-manager == 'pixi'
         uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
         with:
           pixi-version: ${{ inputs.pixi-version }}
@@ -362,7 +362,7 @@ jobs:
           cache-key: ${{ inputs.pixi-cache-key }}
 
       - name: Set up uv
-        if: inputs.docs-environment == 'uv'
+        if: inputs.docs-env-manager == 'uv'
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           version: ${{ inputs.uv-version }}
@@ -371,7 +371,7 @@ jobs:
           working-directory: ${{ inputs.docs-working-directory }}
 
       - name: Set up Python
-        if: inputs.docs-environment == 'pip'
+        if: inputs.docs-env-manager == 'pip'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ inputs.pip-python-version }}
@@ -379,7 +379,7 @@ jobs:
           cache-dependency-path: ${{ inputs.pip-requirements-file }}
 
       - name: Set up micromamba
-        if: inputs.docs-environment == 'micromamba'
+        if: inputs.docs-env-manager == 'micromamba'
         uses: mamba-org/setup-micromamba@d7c9bd84e824b79d2af72a2d4196c7f4300d3476 # v3.0.0
         with:
           environment-file: ${{ inputs.micromamba-environment-file }}
@@ -388,33 +388,33 @@ jobs:
           init-shell: bash
           micromamba-version: ${{ inputs.micromamba-version }}
 
-      - name: Require container-password when logging in
-        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+      - name: Require docker-password when logging in
+        if: inputs.docs-env-manager == 'container' && inputs.docker-login-enabled
         shell: bash
         env:
           # Read the secret here (not in the validate job) so the validate step's
           # env maps only inputs.* and stays reconstructable by the
           # expect: validation-failure scenario harness.
-          CONTAINER_PASSWORD: ${{ secrets.container-password }}
+          DOCKER_PASSWORD: ${{ secrets.docker-password }}
         run: |
-          if [ -z "${CONTAINER_PASSWORD}" ]; then
-            echo "::error::container-login-enabled requires the container-password secret; it is unset."
+          if [ -z "${DOCKER_PASSWORD}" ]; then
+            echo "::error::docker-login-enabled requires the docker-password secret; it is unset."
             exit 1
           fi
 
       - name: Log in to container registry
-        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+        if: inputs.docs-env-manager == 'container' && inputs.docker-login-enabled
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
-          registry: ${{ inputs.container-registry }}
-          username: ${{ inputs.container-username }}
-          password: ${{ secrets.container-password }}
+          registry: ${{ inputs.docker-registry }}
+          username: ${{ inputs.docker-username }}
+          password: ${{ secrets.docker-password }}
 
       - name: Install documentation dependencies
-        if: inputs.docs-environment == 'uv' || inputs.docs-environment == 'pip'
+        if: inputs.docs-env-manager == 'uv' || inputs.docs-env-manager == 'pip'
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           UV_SYNC_LOCKED: ${{ inputs.uv-sync-locked }}
           UV_SYNC_GROUPS: ${{ inputs.uv-sync-groups }}
@@ -431,7 +431,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DOCS_BUILD_MODE: build
           DOCS_TOOL: ${{ inputs.docs-tool }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_BUILD_COMMAND: ${{ inputs.docs-build-command }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
@@ -453,7 +453,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DOCS_BUILD_MODE: linkcheck
           DOCS_TOOL: ${{ inputs.docs-tool }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
           SPHINX_SOURCE_DIRECTORY: ${{ inputs.sphinx-source-directory }}

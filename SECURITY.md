@@ -43,7 +43,15 @@ workflow minting or accepting a token for an unintended audience or index).
 
 ## Supported versions
 
-DevFlows is **pre-release**. Only the latest state of the `main` branch and the
-latest published release line of each workflow receive security fixes. There are
-no long-term support branches for older versions yet. Once versions are
-published, this section will list the supported per-workflow release lines.
+Security fixes always land on the `main` branch first, then flow into releases.
+
+**While the catalog is pre-1.0 (the current state):** only the latest published
+release of each workflow, together with the current `main` branch, receives
+security fixes. The `0.x` lines carry no backport promise and there are no
+long-term support branches for older `0.x` releases.
+
+**From 1.0 onward:** each workflow's latest major release line — its moving
+`<id>/vMAJOR` tag (for example `docs-build/v1`) — receives security fixes. Older
+major lines are not maintained unless a specific support window is announced
+here. This section will be updated to list the supported per-workflow major
+lines as workflows reach 1.0.
