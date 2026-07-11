@@ -37,10 +37,10 @@ html_theme_options = {
         "yet and interfaces may change. Pin an exact per-workflow tag or a "
         "commit SHA."
     ),
-    # Category/section nav that scales as the catalog grows beyond one flat
-    # toctree: collapse extra top-level links into a "More" dropdown, and let
-    # the primary sidebar expose the category-grouped catalog and per-workflow
-    # reference pages.
+    # Category/section nav for the catalog, which `devflows docs` groups by
+    # `docs.category` (one heading and a hidden per-category toctree each):
+    # collapse extra top-level links into a "More" dropdown, and let the primary
+    # sidebar expose the category-grouped catalog and per-workflow reference pages.
     "header_links_before_dropdown": 4,
     "navigation_depth": 3,
     "show_nav_level": 1,

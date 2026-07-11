@@ -113,11 +113,16 @@ notes:
   - Any non-obvious behavior, and the exact caller permission union.
 ```
 
-`docs.category` is a free string in the schema, but by convention use one of the
-existing catalog categories so your workflow slots into the hand-maintained
-category groupings (the `README.md` catalog table and the documentation landing
-pages): **Containers, Documents, Pages, Python, Publishing, Utilities**. If none
-fits, raise it with the maintainers rather than inventing a one-off tier.
+`docs.category` drives the generated reference catalog: `devflows docs` groups
+`docs/reference/catalog.md` under one `##` heading per category (an unrecognized
+category is appended alphabetically, and a missing one falls under **Other**),
+so the value you pick is what readers browse by. It also feeds the
+hand-maintained groupings that mirror it (the `README.md` catalog table and the
+documentation landing pages). `docs.category` is a free string in the schema,
+but by convention use one of the existing catalog categories so your workflow
+slots into every grouping cleanly: **Containers, Documents, Pages, Python,
+Publishing, Utilities**. If none fits, raise it with the maintainers rather than
+inventing a one-off tier.
 
 `release.major` must equal the major component of the release-please manifest
 version you add in step 6 (`0` ↔ `0.0.0`); `task release-check` enforces this.
