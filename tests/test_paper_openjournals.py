@@ -188,6 +188,20 @@ def test_flavor_table_matches_the_design_argv_and_outputs() -> None:
 # --------------------------------------------------------------------------- #
 # Source path containment                                                     #
 # --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("value", [None, ""])
+def test_missing_github_workspace_raises_clear_error(tmp_path, value) -> None:
+    # GITHUB_WORKSPACE anchors every containment check; an unset (or empty) value
+    # must raise a clear SystemExit rather than a bare KeyError (binder parity).
+    env = _base_env(tmp_path)
+    if value is None:
+        del env["GITHUB_WORKSPACE"]
+    else:
+        env["GITHUB_WORKSPACE"] = value
+    with pytest.raises(SystemExit) as excinfo:
+        common.parse_and_validate(env, require_source_exists=False)
+    assert "GITHUB_WORKSPACE is not set" in str(excinfo.value)
+
+
 def test_empty_source_path_is_rejected(tmp_path) -> None:
     with pytest.raises(SystemExit) as excinfo:
         common.parse_and_validate(

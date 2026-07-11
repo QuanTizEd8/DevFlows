@@ -107,7 +107,16 @@ def parse_and_validate(env: Mapping[str, str], *, require_source_exists: bool) -
     require_source_exists is False in the validate job (no checkout, so the
     source file is not present) and True in the build job (checked out).
     """
-    workspace = Path(env["GITHUB_WORKSPACE"]).resolve()
+    # GITHUB_WORKSPACE is always set by GitHub-hosted runners and act, but guard it
+    # explicitly (parity with binder's lexical validation) so an out-of-runner run
+    # fails with a clear message instead of a bare KeyError.
+    workspace_value = env.get("GITHUB_WORKSPACE")
+    if not workspace_value:
+        raise SystemExit(
+            "GITHUB_WORKSPACE is not set; paper-openjournals validation must run in a "
+            "GitHub Actions or act runner environment where it is defined."
+        )
+    workspace = Path(workspace_value).resolve()
 
     journal_env = _validate_journal(env.get("PAPER_JOURNAL", ""))
     image = _validate_image(env.get("PAPER_IMAGE", ""))
