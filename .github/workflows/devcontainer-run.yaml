@@ -43,7 +43,7 @@ name: '[Reusable]: Devcontainer Run'
         required: false
         default: 'on'
       container-env:
-        description: Newline-separated KEY=VALUE pairs passed to the container as repeated --remote-env for both `up` (hooks) and `exec` (the command). Each key must be a valid environment variable name.
+        description: Newline-separated KEY=VALUE pairs passed to the container as repeated --remote-env for both `up` (so lifecycle hooks get them) and `exec` (so the command gets them). Each key must be a valid environment variable name; the value is taken literally after the first '=' (so '=' and spaces are fine) and an embedded control character is rejected. For NON-secret values only - --remote-env places KEY=VALUE in the up/exec argv, which is visible in the runner's process list, so do not put secrets here.
         type: string
         required: false
         default: ''
@@ -82,6 +82,26 @@ name: '[Reusable]: Devcontainer Run'
         type: string
         required: false
         default: ${{ github.repository_owner }}
+      cache-enabled:
+        description: Whether to restore (before `devcontainer up`) and save (in the post-job hook) a workspace cache with actions/cache. Restoring before `up` lets the creation lifecycle hooks (e.g. a pixi install) reuse a previously cached environment instead of rebuilding it every run. When true, cache-paths and cache-key are required.
+        type: boolean
+        required: false
+        default: false
+      cache-paths:
+        description: Newline-separated paths to cache, passed verbatim to actions/cache's `path`. These are HOST paths - a workspace-relative path (e.g. .pixi) is bind-mounted into the container so it caches directly; a cache directory that lives only INSIDE the container must be bind-mounted to a workspace/host path (via the config's mounts) to be cacheable. Required when cache-enabled is true.
+        type: string
+        required: false
+        default: ''
+      cache-key:
+        description: The exact actions/cache key to restore and save under. Required when cache-enabled is true; typically includes a lockfile hash the caller computes with hashFiles (e.g. a key like pixi-<hash-of-pixi.lock>).
+        type: string
+        required: false
+        default: ''
+      cache-restore-keys:
+        description: Optional newline-separated fallback key prefixes for actions/cache's `restore-keys`, tried in order when cache-key misses so a run can still restore a close-enough older cache.
+        type: string
+        required: false
+        default: ''
       checkout-enabled:
         description: Whether to run actions/checkout before workflow execution.
         type: boolean
@@ -356,6 +376,10 @@ jobs:
           UID_MODES = ("never", "on", "off")
           # A POSIX-ish environment variable name for container-env keys.
           _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+          # ASCII control characters (C0 range plus DEL). container-env/cache entries are
+          # split on newlines and then rejected if any control char survives, so an embedded
+          # newline/escape/NUL in a single entry is a hard error rather than a silent split.
+          _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
           # A remoteUser value: a username or a bare numeric uid. It is written into JSON
           # (never a shell), so this only rejects whitespace/control and shell-looking junk.
           _REMOTE_USER = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -379,6 +403,10 @@ jobs:
               container_env: tuple[str, ...]  # validated KEY=VALUE lines
               features: str  # raw JSON object string for --additional-features, or ''
               cli_version: str
+              cache_enabled: bool  # whether the actions/cache restore/save step is active
+              cache_paths: tuple[str, ...]  # host/workspace paths cached, one per line
+              cache_key: str  # exact restore/save key
+              cache_restore_keys: tuple[str, ...]  # ordered fallback key prefixes
 
 
           def parse_and_validate(env: Mapping[str, str], *, require_workspace: bool = True) -> Config:
@@ -418,6 +446,7 @@ jobs:
               container_env = _validate_container_env(env.get("CONTAINER_ENV", ""))
               features = _validate_features(env.get("DEVCONTAINER_FEATURES", ""))
               cli_version = _validate_cli_version(env.get("DEVCONTAINER_CLI_VERSION", ""))
+              cache_enabled, cache_paths, cache_key, cache_restore_keys = _validate_cache(env)
 
               return Config(
                   image=image,
@@ -431,6 +460,10 @@ jobs:
                   container_env=container_env,
                   features=features,
                   cli_version=cli_version,
+                  cache_enabled=cache_enabled,
+                  cache_paths=cache_paths,
+                  cache_key=cache_key,
+                  cache_restore_keys=cache_restore_keys,
               )
 
 
@@ -483,11 +516,24 @@ jobs:
 
 
           def _validate_container_env(value: str) -> tuple[str, ...]:
+              """Validate the non-secret container-env bundle into KEY=VALUE lines.
+
+              Split on newlines only (not the broader str.splitlines set) so an entry that
+              smuggles an embedded control character is rejected here rather than silently
+              torn into two entries. The key must be a POSIX env name; the value is taken
+              literally after the first '=' (so '=' and spaces in a value are fine) and is
+              never eval'd -- it is handed to `--remote-env KEY=VALUE` verbatim.
+              """
               entries: list[str] = []
-              for line in value.splitlines():
+              for line in value.split("\n"):
                   item = line.strip()
                   if not item:
                       continue
+                  if _CONTROL.search(item):
+                      raise SystemExit(
+                          f"container-env has a control character in an entry: {line!r}; entries must be "
+                          "plain KEY=VALUE lines separated by newlines."
+                      )
                   if "=" not in item:
                       raise SystemExit(
                           f"container-env entries must be KEY=VALUE (newline-separated); got {line!r}."
@@ -497,6 +543,55 @@ jobs:
                       raise SystemExit(f"container-env has an invalid environment variable name: {key!r}.")
                   entries.append(item)
               return tuple(entries)
+
+
+          def _validate_cache(env: Mapping[str, str]) -> tuple[bool, tuple[str, ...], str, tuple[str, ...]]:
+              """Validate the actions/cache inputs (only enforced when cache-enabled).
+
+              cache-paths / cache-key / cache-restore-keys reach the SHA-pinned actions/cache
+              step through its `with:` block (never a run: body), so they are injection-safe by
+              construction; this still rejects control characters and requires the paths+key
+              that make the step meaningful. Paths may be workspace-relative (e.g. .pixi, which
+              the container sees through the bind mount) or absolute host paths. When
+              cache-enabled is false the values are ignored (the step is `if:`-gated off), so
+              validation is skipped entirely.
+              """
+              enabled = _truthy(env.get("CACHE_ENABLED", ""))
+              if not enabled:
+                  return False, (), "", ()
+              paths = _split_cache_lines(env.get("CACHE_PATHS", ""), "cache-paths")
+              if not paths:
+                  raise SystemExit(
+                      "cache-enabled is true but cache-paths is empty; provide at least one "
+                      "newline-separated path to cache (e.g. .pixi)."
+                  )
+              key = env.get("CACHE_KEY", "").strip()
+              if not key:
+                  raise SystemExit(
+                      "cache-enabled is true but cache-key is empty; provide a non-empty cache-key."
+                  )
+              if _CONTROL.search(key):
+                  raise SystemExit("cache-key must not contain control characters (including newlines).")
+              restore_keys = _split_cache_lines(env.get("CACHE_RESTORE_KEYS", ""), "cache-restore-keys")
+              return True, paths, key, restore_keys
+
+
+          def _split_cache_lines(value: str, field: str) -> tuple[str, ...]:
+              """Split a newline list into stripped entries, rejecting control characters.
+
+              Splitting on '\\n' only (then rejecting any surviving control char) means an
+              embedded newline/escape inside a single path or restore-key is a hard error, not
+              a silent extra entry.
+              """
+              items: list[str] = []
+              for line in value.split("\n"):
+                  item = line.strip()
+                  if not item:
+                      continue
+                  if _CONTROL.search(item):
+                      raise SystemExit(f"{field} has a control character in an entry: {line!r}.")
+                  items.append(item)
+              return tuple(items)
 
 
           def _validate_features(value: str) -> str:
@@ -837,6 +932,10 @@ jobs:
           CONTAINER_ENV: ${{ inputs.container-env }}
           DEVCONTAINER_FEATURES: ${{ inputs.devcontainer-features }}
           DEVCONTAINER_CLI_VERSION: ${{ inputs.devcontainer-cli-version }}
+          CACHE_ENABLED: ${{ inputs.cache-enabled }}
+          CACHE_PATHS: ${{ inputs.cache-paths }}
+          CACHE_KEY: ${{ inputs.cache-key }}
+          CACHE_RESTORE_KEYS: ${{ inputs.cache-restore-keys }}
         run: |
           # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
           python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/validate-inputs.py"
@@ -953,6 +1052,10 @@ jobs:
           UID_MODES = ("never", "on", "off")
           # A POSIX-ish environment variable name for container-env keys.
           _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+          # ASCII control characters (C0 range plus DEL). container-env/cache entries are
+          # split on newlines and then rejected if any control char survives, so an embedded
+          # newline/escape/NUL in a single entry is a hard error rather than a silent split.
+          _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
           # A remoteUser value: a username or a bare numeric uid. It is written into JSON
           # (never a shell), so this only rejects whitespace/control and shell-looking junk.
           _REMOTE_USER = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -976,6 +1079,10 @@ jobs:
               container_env: tuple[str, ...]  # validated KEY=VALUE lines
               features: str  # raw JSON object string for --additional-features, or ''
               cli_version: str
+              cache_enabled: bool  # whether the actions/cache restore/save step is active
+              cache_paths: tuple[str, ...]  # host/workspace paths cached, one per line
+              cache_key: str  # exact restore/save key
+              cache_restore_keys: tuple[str, ...]  # ordered fallback key prefixes
 
 
           def parse_and_validate(env: Mapping[str, str], *, require_workspace: bool = True) -> Config:
@@ -1015,6 +1122,7 @@ jobs:
               container_env = _validate_container_env(env.get("CONTAINER_ENV", ""))
               features = _validate_features(env.get("DEVCONTAINER_FEATURES", ""))
               cli_version = _validate_cli_version(env.get("DEVCONTAINER_CLI_VERSION", ""))
+              cache_enabled, cache_paths, cache_key, cache_restore_keys = _validate_cache(env)
 
               return Config(
                   image=image,
@@ -1028,6 +1136,10 @@ jobs:
                   container_env=container_env,
                   features=features,
                   cli_version=cli_version,
+                  cache_enabled=cache_enabled,
+                  cache_paths=cache_paths,
+                  cache_key=cache_key,
+                  cache_restore_keys=cache_restore_keys,
               )
 
 
@@ -1080,11 +1192,24 @@ jobs:
 
 
           def _validate_container_env(value: str) -> tuple[str, ...]:
+              """Validate the non-secret container-env bundle into KEY=VALUE lines.
+
+              Split on newlines only (not the broader str.splitlines set) so an entry that
+              smuggles an embedded control character is rejected here rather than silently
+              torn into two entries. The key must be a POSIX env name; the value is taken
+              literally after the first '=' (so '=' and spaces in a value are fine) and is
+              never eval'd -- it is handed to `--remote-env KEY=VALUE` verbatim.
+              """
               entries: list[str] = []
-              for line in value.splitlines():
+              for line in value.split("\n"):
                   item = line.strip()
                   if not item:
                       continue
+                  if _CONTROL.search(item):
+                      raise SystemExit(
+                          f"container-env has a control character in an entry: {line!r}; entries must be "
+                          "plain KEY=VALUE lines separated by newlines."
+                      )
                   if "=" not in item:
                       raise SystemExit(
                           f"container-env entries must be KEY=VALUE (newline-separated); got {line!r}."
@@ -1094,6 +1219,55 @@ jobs:
                       raise SystemExit(f"container-env has an invalid environment variable name: {key!r}.")
                   entries.append(item)
               return tuple(entries)
+
+
+          def _validate_cache(env: Mapping[str, str]) -> tuple[bool, tuple[str, ...], str, tuple[str, ...]]:
+              """Validate the actions/cache inputs (only enforced when cache-enabled).
+
+              cache-paths / cache-key / cache-restore-keys reach the SHA-pinned actions/cache
+              step through its `with:` block (never a run: body), so they are injection-safe by
+              construction; this still rejects control characters and requires the paths+key
+              that make the step meaningful. Paths may be workspace-relative (e.g. .pixi, which
+              the container sees through the bind mount) or absolute host paths. When
+              cache-enabled is false the values are ignored (the step is `if:`-gated off), so
+              validation is skipped entirely.
+              """
+              enabled = _truthy(env.get("CACHE_ENABLED", ""))
+              if not enabled:
+                  return False, (), "", ()
+              paths = _split_cache_lines(env.get("CACHE_PATHS", ""), "cache-paths")
+              if not paths:
+                  raise SystemExit(
+                      "cache-enabled is true but cache-paths is empty; provide at least one "
+                      "newline-separated path to cache (e.g. .pixi)."
+                  )
+              key = env.get("CACHE_KEY", "").strip()
+              if not key:
+                  raise SystemExit(
+                      "cache-enabled is true but cache-key is empty; provide a non-empty cache-key."
+                  )
+              if _CONTROL.search(key):
+                  raise SystemExit("cache-key must not contain control characters (including newlines).")
+              restore_keys = _split_cache_lines(env.get("CACHE_RESTORE_KEYS", ""), "cache-restore-keys")
+              return True, paths, key, restore_keys
+
+
+          def _split_cache_lines(value: str, field: str) -> tuple[str, ...]:
+              """Split a newline list into stripped entries, rejecting control characters.
+
+              Splitting on '\\n' only (then rejecting any surviving control char) means an
+              embedded newline/escape inside a single path or restore-key is a hard error, not
+              a silent extra entry.
+              """
+              items: list[str] = []
+              for line in value.split("\n"):
+                  item = line.strip()
+                  if not item:
+                      continue
+                  if _CONTROL.search(item):
+                      raise SystemExit(f"{field} has a control character in an entry: {line!r}.")
+                  items.append(item)
+              return tuple(items)
 
 
           def _validate_features(value: str) -> str:
@@ -1530,6 +1704,13 @@ jobs:
               sys.exit(main())
           DEVFLOWS_SCRIPT_EOF
           echo "script-root=$RUNNER_TEMP/devflows" >> "$GITHUB_OUTPUT"
+      - name: Restore workspace cache
+        if: ${{ inputs.cache-enabled }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ inputs.cache-paths }}
+          key: ${{ inputs.cache-key }}
+          restore-keys: ${{ inputs.cache-restore-keys }}
       - name: Docker login
         if: inputs.docker-login-enabled
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0

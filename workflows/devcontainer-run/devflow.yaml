@@ -18,6 +18,8 @@ docs:
     - run
     - exec
     - containers
+    - cache
+    - pixi
 io:
   job: run
   runtime: true
@@ -85,6 +87,26 @@ notes:
     wrote into the workspace persist on the host bind mount, so the
     artifact-upload channel (which runs after, on success) still sees them; set
     remove-container: false to leave the container for debugging.
+  - >-
+    container-env carries NON-secret values: each newline KEY=VALUE reaches both
+    `up` (lifecycle hooks) and `exec` (the command) as a repeated --remote-env, so
+    KEY=VALUE lands in the up/exec argv and is visible in the runner's process
+    list. Keep secrets out of it. The value is literal after the first '=' ('=' and
+    spaces are fine); a key must be a POSIX env name and an embedded control
+    character is rejected.
+  - >-
+    Caching (cache-enabled) restores workspace paths with actions/cache BEFORE
+    `devcontainer up`, so the creation lifecycle hooks reuse them instead of
+    rebuilding. The canonical case is a pixi/conda devcontainer: build the image
+    once, then run with cache-enabled and cache-paths: .pixi so postCreate's
+    `pixi install` restores the solved environment rather than re-solving every
+    run (the .pixi dir is workspace-relative, so it caches directly through the
+    bind mount). cache-paths are HOST paths: a cache dir that lives only INSIDE the
+    container must be bind-mounted to a workspace/host path (via the config's
+    mounts) to be cacheable. cache-paths and cache-key are required when
+    cache-enabled is true; actions/cache saves the paths in its post-job hook after
+    the run. The inputs reach the SHA-pinned action only through with:, never a
+    run: body, so they are injection-safe.
 examples:
   - name: Run a command in a prebuilt ghcr image
     path: tests/fixtures/devcontainer-run/ghcr-image.yaml
@@ -124,6 +146,76 @@ tests:
         - type: file-contains
           path: result.txt
           text: hook-ran-and-command-ran
+    # Caching is hosted-only: it runs the real `up`/`exec` AND actions/cache, which
+    # needs the GitHub cache service (unavailable under act). A tiny image-only
+    # config's postCreateCommand writes a marker into the cache-paths dir (.devflows-cache,
+    # workspace-relative so it caches directly through the bind mount); the command,
+    # running in the same kept-alive container, reads it back and uploads it. The run
+    # is cache-enabled with a run-scoped key, so the first run is a MISS (expected) -
+    # this proves the wiring: the restore step ran before `up`, `up`'s hook populated
+    # the cache-paths dir, and actions/cache uploads it in its post-job hook. alpine
+    # has only /bin/sh, so run-shell is sh.
+    - id: cache-restore-before-hooks
+      name: Restore a workspace cache before the creation hooks populate it
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/cache/devcontainer.json
+        run-shell: sh
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/cache &&
+          test -f .devflows-cache/marker.txt &&
+          cp .devflows-cache/marker.txt .devflows-test/devcontainer-run/cache/result.txt
+        cache-enabled: true
+        cache-paths: .devflows-cache
+        cache-key: devflows-devcontainer-run-cache-${{ github.run_id }}-${{ github.run_attempt }}
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-cache
+        artifact-upload-path: .devflows-test/devcontainer-run/cache
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: devcontainer-run-cache
+        path: .devflows-test-artifacts/devcontainer-run/cache
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: cached-by-postcreate
+    # Non-secret env injection, hosted-only (real `up`/`exec`). container-env is
+    # passed as a NON-secret KEY=VALUE; the config's postCreateCommand records
+    # whether the hook saw it (up --remote-env) into a container /tmp marker, and the
+    # command (exec --remote-env) both reads its OWN env var and greps that hook
+    # marker - proving container-env reaches BOTH `up` and `exec`. It asserts a
+    # derived marker, never the value itself, in the uploaded file.
+    - id: container-env-into-hooks-and-command
+      name: A container-env value reaches both the creation hook and the command
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/env/devcontainer.json
+        run-shell: sh
+        container-env: |
+          MARKER_ENV=devflows-env-marker
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/env &&
+          test "$MARKER_ENV" = "devflows-env-marker" &&
+          grep -q 'hook-env=devflows-env-marker' /tmp/devflows-env-hook.marker &&
+          printf 'env-visible-in-command-and-hook\n' >
+          .devflows-test/devcontainer-run/env/result.txt
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-env
+        artifact-upload-path: .devflows-test/devcontainer-run/env
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: devcontainer-run-env
+        path: .devflows-test-artifacts/devcontainer-run/env
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: env-visible-in-command-and-hook
     # Failure-path scenarios run validate-inputs.py directly through the
     # validation-failure harness (no reusable call). Each pins a stable substring
     # of the rejection it targets and sets a valid run-command so the targeted
@@ -189,3 +281,27 @@ tests:
       inputs:
         devcontainer-image: alpine:3.20
         run-command: ""
+    - id: cache-enabled-without-paths
+      name: cache-enabled with no cache-paths fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cache-paths is empty"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-command: echo hi
+        cache-enabled: true
+        cache-key: some-key
+    - id: cache-enabled-without-key
+      name: cache-enabled with no cache-key fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cache-key is empty"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-command: echo hi
+        cache-enabled: true
+        cache-paths: .pixi

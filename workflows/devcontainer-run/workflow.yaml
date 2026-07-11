@@ -71,7 +71,11 @@ on:
       container-env:
         description:
           Newline-separated KEY=VALUE pairs passed to the container as repeated --remote-env for both
-          `up` (hooks) and `exec` (the command). Each key must be a valid environment variable name.
+          `up` (so lifecycle hooks get them) and `exec` (so the command gets them). Each key must be a
+          valid environment variable name; the value is taken literally after the first '=' (so '='
+          and spaces are fine) and an embedded control character is rejected. For NON-secret values
+          only - --remote-env places KEY=VALUE in the up/exec argv, which is visible in the runner's
+          process list, so do not put secrets here.
         type: string
         required: false
         default: ""
@@ -117,6 +121,40 @@ on:
         type: string
         required: false
         default: ${{ github.repository_owner }}
+      cache-enabled:
+        description:
+          Whether to restore (before `devcontainer up`) and save (in the post-job hook) a
+          workspace cache with actions/cache. Restoring before `up` lets the creation lifecycle
+          hooks (e.g. a pixi install) reuse a previously cached environment instead of rebuilding
+          it every run. When true, cache-paths and cache-key are required.
+        type: boolean
+        required: false
+        default: false
+      cache-paths:
+        description:
+          Newline-separated paths to cache, passed verbatim to actions/cache's `path`. These are
+          HOST paths - a workspace-relative path (e.g. .pixi) is bind-mounted into the container so
+          it caches directly; a cache directory that lives only INSIDE the container must be
+          bind-mounted to a workspace/host path (via the config's mounts) to be cacheable. Required
+          when cache-enabled is true.
+        type: string
+        required: false
+        default: ""
+      cache-key:
+        description:
+          The exact actions/cache key to restore and save under. Required when cache-enabled is
+          true; typically includes a lockfile hash the caller computes with hashFiles (e.g. a key
+          like pixi-<hash-of-pixi.lock>).
+        type: string
+        required: false
+        default: ""
+      cache-restore-keys:
+        description:
+          Optional newline-separated fallback key prefixes for actions/cache's `restore-keys`, tried
+          in order when cache-key misses so a run can still restore a close-enough older cache.
+        type: string
+        required: false
+        default: ""
     secrets:
       docker-password:
         description:
@@ -154,6 +192,10 @@ jobs:
           CONTAINER_ENV: ${{ inputs.container-env }}
           DEVCONTAINER_FEATURES: ${{ inputs.devcontainer-features }}
           DEVCONTAINER_CLI_VERSION: ${{ inputs.devcontainer-cli-version }}
+          CACHE_ENABLED: ${{ inputs.cache-enabled }}
+          CACHE_PATHS: ${{ inputs.cache-paths }}
+          CACHE_KEY: ${{ inputs.cache-key }}
+          CACHE_RESTORE_KEYS: ${{ inputs.cache-restore-keys }}
         run: |
           # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
           python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/validate-inputs.py"
@@ -181,6 +223,19 @@ jobs:
       container-id: ${{ steps.run.outputs.container-id }}
       remote-user: ${{ steps.run.outputs.remote-user }}
     steps:
+      # Restore BEFORE `devcontainer up` so the creation lifecycle hooks (e.g. a
+      # pixi/conda install run by postCreateCommand) see the restored workspace
+      # paths on the host bind mount and skip rebuilding. actions/cache saves the
+      # same paths in its post-job hook after the run. cache-paths/key/restore-keys
+      # reach the action only through with:, never a run: body, so they are safe.
+      - name: Restore workspace cache
+        if: ${{ inputs.cache-enabled }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ inputs.cache-paths }}
+          key: ${{ inputs.cache-key }}
+          restore-keys: ${{ inputs.cache-restore-keys }}
+
       - name: Docker login
         if: inputs.docker-login-enabled
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0

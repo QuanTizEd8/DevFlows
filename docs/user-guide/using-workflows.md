@@ -148,6 +148,35 @@ consumes that `image-ref` to run any command inside it **without rebuilding**
 Build once, then run many commands — lint, tests, a script — against the same
 prebuilt image.
 
+Two `devcontainer-run` inputs make that loop fast and configurable (see the
+{doc}`reference </reference/workflows/devcontainer-run>` for the full input
+list):
+
+- **Non-secret env into the container.** `container-env` takes newline
+  `KEY=VALUE` pairs and injects each into both `up` (so lifecycle hooks see it)
+  and `exec` (so your command sees it) via `--remote-env`. Because that places
+  `KEY=VALUE` in the process list, use it for non-secret configuration only.
+- **Cache the environment across runs.** Set `cache-enabled: true` with
+  `cache-paths` and `cache-key` to restore a workspace cache **before**
+  `devcontainer up` runs the creation hooks. For a pixi/conda devcontainer whose
+  `postCreateCommand` runs `pixi install`, caching `.pixi` (a workspace-relative
+  path, so it caches directly through the bind mount) lets the hook reuse the
+  solved environment instead of re-solving every run:
+
+  ```yaml
+  with:
+    devcontainer-image: ${{ needs.build.outputs.image-ref }}
+    run-command: pixi run pytest
+    cache-enabled: true
+    cache-paths: .pixi
+    cache-key: pixi-${{ hashFiles('pixi.lock') }}
+    cache-restore-keys: |
+      pixi-
+  ```
+
+  A cache directory that lives only inside the container must be bind-mounted to
+  a workspace/host path (via the config's `mounts`) to be cacheable.
+
 ## Publishing-Tier Patterns
 
 The Publishing tier (`pypi-publish`, `anaconda-publish`, `zenodo-release`) and

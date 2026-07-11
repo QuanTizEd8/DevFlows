@@ -38,6 +38,10 @@ jobs:
           CONTAINER_ENV: ''
           DEVCONTAINER_FEATURES: ''
           DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'false'
+          CACHE_PATHS: ''
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: valid image reference
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
@@ -60,6 +64,10 @@ jobs:
           CONTAINER_ENV: ''
           DEVCONTAINER_FEATURES: ''
           DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'false'
+          CACHE_PATHS: ''
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: at least one of devcontainer-image or devcontainer-config-file
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
@@ -82,6 +90,10 @@ jobs:
           CONTAINER_ENV: ''
           DEVCONTAINER_FEATURES: ''
           DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'false'
+          CACHE_PATHS: ''
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: run-shell must be one of
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
@@ -104,6 +116,10 @@ jobs:
           CONTAINER_ENV: ''
           DEVCONTAINER_FEATURES: ''
           DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'false'
+          CACHE_PATHS: ''
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must stay inside
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
@@ -126,6 +142,10 @@ jobs:
           CONTAINER_ENV: ''
           DEVCONTAINER_FEATURES: '{not json'
           DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'false'
+          CACHE_PATHS: ''
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: devcontainer-features must be valid JSON
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
@@ -148,6 +168,62 @@ jobs:
           CONTAINER_ENV: ''
           DEVCONTAINER_FEATURES: ''
           DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'false'
+          CACHE_PATHS: ''
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: run-command is required
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  devcontainer_run_cache_enabled_without_paths_validate:
+    name: 'Devcontainer Run: cache-enabled with no cache-paths fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/devcontainer-run/scripts/validate-inputs.py
+          DEVCONTAINER_IMAGE: alpine:3.20
+          DEVCONTAINER_CONFIG_FILE: ''
+          RUN_COMMAND: echo hi
+          RUN_SHELL: bash
+          RUN_WORKING_DIRECTORY: ''
+          REMOTE_USER: ''
+          SKIP_POST_CREATE: 'false'
+          UPDATE_REMOTE_USER_UID: 'on'
+          CONTAINER_ENV: ''
+          DEVCONTAINER_FEATURES: ''
+          DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'true'
+          CACHE_PATHS: ''
+          CACHE_KEY: some-key
+          CACHE_RESTORE_KEYS: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cache-paths is empty
+        run: python harness/scenarios/assert-validation-failure.py
+    needs: require_act
+  devcontainer_run_cache_enabled_without_key_validate:
+    name: 'Devcontainer Run: cache-enabled with no cache-key fails validation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert validation rejects the inputs
+        shell: bash
+        env:
+          DEVFLOWS_VALIDATE_SCRIPT: workflows/devcontainer-run/scripts/validate-inputs.py
+          DEVCONTAINER_IMAGE: alpine:3.20
+          DEVCONTAINER_CONFIG_FILE: ''
+          RUN_COMMAND: echo hi
+          RUN_SHELL: bash
+          RUN_WORKING_DIRECTORY: ''
+          REMOTE_USER: ''
+          SKIP_POST_CREATE: 'false'
+          UPDATE_REMOTE_USER_UID: 'on'
+          CONTAINER_ENV: ''
+          DEVCONTAINER_FEATURES: ''
+          DEVCONTAINER_CLI_VERSION: 0.87.0
+          CACHE_ENABLED: 'true'
+          CACHE_PATHS: .pixi
+          CACHE_KEY: ''
+          CACHE_RESTORE_KEYS: ''
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cache-key is empty
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act

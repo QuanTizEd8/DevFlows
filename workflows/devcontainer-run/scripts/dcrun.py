@@ -42,6 +42,10 @@ SHELLS = ("bash", "sh")
 UID_MODES = ("never", "on", "off")
 # A POSIX-ish environment variable name for container-env keys.
 _ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# ASCII control characters (C0 range plus DEL). container-env/cache entries are
+# split on newlines and then rejected if any control char survives, so an embedded
+# newline/escape/NUL in a single entry is a hard error rather than a silent split.
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 # A remoteUser value: a username or a bare numeric uid. It is written into JSON
 # (never a shell), so this only rejects whitespace/control and shell-looking junk.
 _REMOTE_USER = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
@@ -65,6 +69,10 @@ class Config:
     container_env: tuple[str, ...]  # validated KEY=VALUE lines
     features: str  # raw JSON object string for --additional-features, or ''
     cli_version: str
+    cache_enabled: bool  # whether the actions/cache restore/save step is active
+    cache_paths: tuple[str, ...]  # host/workspace paths cached, one per line
+    cache_key: str  # exact restore/save key
+    cache_restore_keys: tuple[str, ...]  # ordered fallback key prefixes
 
 
 def parse_and_validate(env: Mapping[str, str], *, require_workspace: bool = True) -> Config:
@@ -104,6 +112,7 @@ def parse_and_validate(env: Mapping[str, str], *, require_workspace: bool = True
     container_env = _validate_container_env(env.get("CONTAINER_ENV", ""))
     features = _validate_features(env.get("DEVCONTAINER_FEATURES", ""))
     cli_version = _validate_cli_version(env.get("DEVCONTAINER_CLI_VERSION", ""))
+    cache_enabled, cache_paths, cache_key, cache_restore_keys = _validate_cache(env)
 
     return Config(
         image=image,
@@ -117,6 +126,10 @@ def parse_and_validate(env: Mapping[str, str], *, require_workspace: bool = True
         container_env=container_env,
         features=features,
         cli_version=cli_version,
+        cache_enabled=cache_enabled,
+        cache_paths=cache_paths,
+        cache_key=cache_key,
+        cache_restore_keys=cache_restore_keys,
     )
 
 
@@ -169,11 +182,24 @@ def _validate_remote_user(value: str) -> str:
 
 
 def _validate_container_env(value: str) -> tuple[str, ...]:
+    """Validate the non-secret container-env bundle into KEY=VALUE lines.
+
+    Split on newlines only (not the broader str.splitlines set) so an entry that
+    smuggles an embedded control character is rejected here rather than silently
+    torn into two entries. The key must be a POSIX env name; the value is taken
+    literally after the first '=' (so '=' and spaces in a value are fine) and is
+    never eval'd -- it is handed to `--remote-env KEY=VALUE` verbatim.
+    """
     entries: list[str] = []
-    for line in value.splitlines():
+    for line in value.split("\n"):
         item = line.strip()
         if not item:
             continue
+        if _CONTROL.search(item):
+            raise SystemExit(
+                f"container-env has a control character in an entry: {line!r}; entries must be "
+                "plain KEY=VALUE lines separated by newlines."
+            )
         if "=" not in item:
             raise SystemExit(
                 f"container-env entries must be KEY=VALUE (newline-separated); got {line!r}."
@@ -183,6 +209,55 @@ def _validate_container_env(value: str) -> tuple[str, ...]:
             raise SystemExit(f"container-env has an invalid environment variable name: {key!r}.")
         entries.append(item)
     return tuple(entries)
+
+
+def _validate_cache(env: Mapping[str, str]) -> tuple[bool, tuple[str, ...], str, tuple[str, ...]]:
+    """Validate the actions/cache inputs (only enforced when cache-enabled).
+
+    cache-paths / cache-key / cache-restore-keys reach the SHA-pinned actions/cache
+    step through its `with:` block (never a run: body), so they are injection-safe by
+    construction; this still rejects control characters and requires the paths+key
+    that make the step meaningful. Paths may be workspace-relative (e.g. .pixi, which
+    the container sees through the bind mount) or absolute host paths. When
+    cache-enabled is false the values are ignored (the step is `if:`-gated off), so
+    validation is skipped entirely.
+    """
+    enabled = _truthy(env.get("CACHE_ENABLED", ""))
+    if not enabled:
+        return False, (), "", ()
+    paths = _split_cache_lines(env.get("CACHE_PATHS", ""), "cache-paths")
+    if not paths:
+        raise SystemExit(
+            "cache-enabled is true but cache-paths is empty; provide at least one "
+            "newline-separated path to cache (e.g. .pixi)."
+        )
+    key = env.get("CACHE_KEY", "").strip()
+    if not key:
+        raise SystemExit(
+            "cache-enabled is true but cache-key is empty; provide a non-empty cache-key."
+        )
+    if _CONTROL.search(key):
+        raise SystemExit("cache-key must not contain control characters (including newlines).")
+    restore_keys = _split_cache_lines(env.get("CACHE_RESTORE_KEYS", ""), "cache-restore-keys")
+    return True, paths, key, restore_keys
+
+
+def _split_cache_lines(value: str, field: str) -> tuple[str, ...]:
+    """Split a newline list into stripped entries, rejecting control characters.
+
+    Splitting on '\\n' only (then rejecting any surviving control char) means an
+    embedded newline/escape inside a single path or restore-key is a hard error, not
+    a silent extra entry.
+    """
+    items: list[str] = []
+    for line in value.split("\n"):
+        item = line.strip()
+        if not item:
+            continue
+        if _CONTROL.search(item):
+            raise SystemExit(f"{field} has a control character in an entry: {line!r}.")
+        items.append(item)
+    return tuple(items)
 
 
 def _validate_features(value: str) -> str:

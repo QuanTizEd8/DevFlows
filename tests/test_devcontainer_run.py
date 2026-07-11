@@ -66,6 +66,10 @@ def _base_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "CONTAINER_ENV": "",
         "DEVCONTAINER_FEATURES": "",
         "DEVCONTAINER_CLI_VERSION": "0.87.0",
+        "CACHE_ENABLED": "false",
+        "CACHE_PATHS": "",
+        "CACHE_KEY": "",
+        "CACHE_RESTORE_KEYS": "",
     }
     env.update(overrides)
     return env
@@ -84,6 +88,10 @@ def _config(**overrides: Any) -> dcrun.Config:
         "container_env": (),
         "features": "",
         "cli_version": "0.87.0",
+        "cache_enabled": False,
+        "cache_paths": (),
+        "cache_key": "",
+        "cache_restore_keys": (),
     }
     fields.update(overrides)
     return dcrun.Config(**fields)
@@ -239,6 +247,14 @@ def test_invalid_container_env_is_rejected(tmp_path, value) -> None:
     assert "container-env" in str(excinfo.value)
 
 
+@pytest.mark.parametrize("value", ["KEY=a\x00b", "KEY=a\x1bb", "KEY=a\tb"])
+def test_container_env_with_control_char_in_value_is_rejected(tmp_path, value) -> None:
+    # An embedded NUL/escape/tab in a value is a hard error, not a silent split.
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_and_validate(_base_env(tmp_path, CONTAINER_ENV=value))
+    assert "control character" in str(excinfo.value)
+
+
 def test_features_json_object_is_accepted(tmp_path) -> None:
     raw = '{"ghcr.io/devcontainers/features/node:1": {}}'
     assert dcrun.parse_and_validate(_base_env(tmp_path, DEVCONTAINER_FEATURES=raw)).features == raw
@@ -264,6 +280,72 @@ def test_invalid_cli_version_is_rejected(tmp_path, version) -> None:
     with pytest.raises(SystemExit) as excinfo:
         dcrun.parse_and_validate(_base_env(tmp_path, DEVCONTAINER_CLI_VERSION=version))
     assert "devcontainer-cli-version" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
+# cache inputs                                                                #
+# --------------------------------------------------------------------------- #
+def test_cache_disabled_ignores_paths_and_key(tmp_path) -> None:
+    # When cache-enabled is false the values are ignored (the step is if-gated off),
+    # so even empty/garbage cache inputs must not fail validation.
+    config = dcrun.parse_and_validate(
+        _base_env(tmp_path, CACHE_ENABLED="false", CACHE_PATHS="", CACHE_KEY="")
+    )
+    assert config.cache_enabled is False
+    assert config.cache_paths == ()
+    assert config.cache_key == ""
+    assert config.cache_restore_keys == ()
+
+
+def test_cache_enabled_parses_paths_key_and_restore_keys(tmp_path) -> None:
+    config = dcrun.parse_and_validate(
+        _base_env(
+            tmp_path,
+            CACHE_ENABLED="true",
+            CACHE_PATHS=".pixi\n\n  node_modules  \n/abs/cache",
+            CACHE_KEY="pixi-abc123",
+            CACHE_RESTORE_KEYS="pixi-\nbase-",
+        )
+    )
+    assert config.cache_enabled is True
+    # Blank lines dropped, entries stripped, absolute paths allowed.
+    assert config.cache_paths == (".pixi", "node_modules", "/abs/cache")
+    assert config.cache_key == "pixi-abc123"
+    assert config.cache_restore_keys == ("pixi-", "base-")
+
+
+def test_cache_enabled_requires_paths(tmp_path) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_and_validate(
+            _base_env(tmp_path, CACHE_ENABLED="true", CACHE_PATHS="  \n", CACHE_KEY="k")
+        )
+    assert "cache-paths is empty" in str(excinfo.value)
+
+
+def test_cache_enabled_requires_key(tmp_path) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_and_validate(
+            _base_env(tmp_path, CACHE_ENABLED="true", CACHE_PATHS=".pixi", CACHE_KEY="   ")
+        )
+    assert "cache-key is empty" in str(excinfo.value)
+
+
+def test_cache_path_with_embedded_control_char_is_rejected(tmp_path) -> None:
+    # A NUL embedded in a single path entry is a hard error (not silently kept):
+    # cache-paths splits on '\n' only, then rejects any surviving control char.
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_and_validate(
+            _base_env(tmp_path, CACHE_ENABLED="true", CACHE_PATHS=".pixi\x00evil", CACHE_KEY="k")
+        )
+    assert "control character" in str(excinfo.value)
+
+
+def test_cache_key_with_control_char_is_rejected(tmp_path) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_and_validate(
+            _base_env(tmp_path, CACHE_ENABLED="true", CACHE_PATHS=".pixi", CACHE_KEY="k\x1bx")
+        )
+    assert "control characters" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #
@@ -790,6 +872,48 @@ def test_domain_inputs_match_the_design() -> None:
     channels = {"checkout-enabled", "artifact-download-enabled", "artifact-upload-enabled"}
     assert channels <= set(inputs)
     assert "commit-enabled" not in inputs
+
+
+def test_cache_inputs_are_declared_with_defaults() -> None:
+    inputs = _workflow_call(_published())["inputs"]
+    assert {"cache-enabled", "cache-paths", "cache-key", "cache-restore-keys"} <= set(inputs)
+    assert inputs["cache-enabled"]["type"] == "boolean"
+    assert inputs["cache-enabled"]["default"] is False
+    assert inputs["cache-enabled"]["required"] is False
+    assert inputs["cache-paths"]["default"] == ""
+    assert inputs["cache-key"]["default"] == ""
+    assert inputs["cache-restore-keys"]["default"] == ""
+
+
+def _run_steps(published: dict[str, Any]) -> list[dict[str, Any]]:
+    return published["jobs"]["run"]["steps"]
+
+
+def _step_index(steps: list[dict[str, Any]], name: str) -> int:
+    return next(i for i, step in enumerate(steps) if step.get("name") == name)
+
+
+def test_cache_step_is_pinned_gated_and_restores_before_up() -> None:
+    from devflows.actions import pin as action_pin
+
+    steps = _run_steps(_published())
+    cache_index = _step_index(steps, "Restore workspace cache")
+    cache = steps[cache_index]
+    # SHA-pinned to the central actions/cache registry entry.
+    assert cache["uses"] == action_pin("cache").ref
+    assert cache["uses"] == "actions/cache@" + action_pin("cache").sha
+    # Gated on cache-enabled so it is a no-op unless the caller opts in.
+    assert cache["if"] == "${{ inputs.cache-enabled }}"
+    # Wired straight from the caller inputs through with: (never a run: body).
+    assert cache["with"] == {
+        "path": "${{ inputs.cache-paths }}",
+        "key": "${{ inputs.cache-key }}",
+        "restore-keys": "${{ inputs.cache-restore-keys }}",
+    }
+    # Restore must precede the step that runs `devcontainer up` (pull + up + exec),
+    # so the creation hooks see the restored paths on the host bind mount.
+    run_index = _step_index(steps, "Run command in devcontainer")
+    assert cache_index < run_index
 
 
 def test_outputs_echo_the_run_job() -> None:
