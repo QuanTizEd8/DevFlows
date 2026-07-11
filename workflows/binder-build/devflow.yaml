@@ -74,6 +74,11 @@ notes:
     diverging from build-devcontainer's singular image-tag; the reproducibility Dockerfile
     always pins by @sha256 digest regardless of which tags are pushed.
   - >-
+    The build-devcontainer registry-auth inputs docker-ecr, docker-scope, and docker-logout
+    were intentionally scoped OUT of binder v1 (binder's single ghcr-style push needs none of
+    ECR credential-helper login, multi-registry scope, or an explicit logout step). They are
+    additive, backward-compatible inputs to introduce later if a consumer needs them.
+  - >-
     repo2docker-arguments is mediated through env + shlex.split (never shell-interpolated)
     and guarded by a strict ALLOWLIST grounded in repo2docker's actual argparse
     (repo2docker/__main__.py), not a denylist. A denylist is bypassable: argparse accepts
