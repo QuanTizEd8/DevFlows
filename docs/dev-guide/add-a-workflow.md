@@ -114,9 +114,10 @@ notes:
 ```
 
 `docs.category` is a free string in the schema, but by convention use one of the
-existing catalog categories so the generated catalog groups your workflow
-correctly: **Containers, Documents, Pages, Python, Publishing, Utilities**. If
-none fits, raise it with the maintainers rather than inventing a one-off tier.
+existing catalog categories so your workflow slots into the hand-maintained
+category groupings (the `README.md` catalog table and the documentation landing
+pages): **Containers, Documents, Pages, Python, Publishing, Utilities**. If none
+fits, raise it with the maintainers rather than inventing a one-off tier.
 
 `release.major` must equal the major component of the release-please manifest
 version you add in step 6 (`0` ↔ `0.0.0`); `task release-check` enforces this.

@@ -22,9 +22,9 @@ Browse the full, always-current listing in the
 - **Pages** — {doc}`deploy-pages </reference/workflows/deploy-pages>`
 - **Python** — {doc}`python-build </reference/workflows/python-build>`,
   {doc}`python-test </reference/workflows/python-test>`,
-  {doc}`python-lint </reference/workflows/python-lint>`,
-  {doc}`anaconda-publish </reference/workflows/anaconda-publish>`
+  {doc}`python-lint </reference/workflows/python-lint>`
 - **Publishing** — {doc}`pypi-publish </reference/workflows/pypi-publish>`,
+  {doc}`anaconda-publish </reference/workflows/anaconda-publish>`,
   {doc}`zenodo-release </reference/workflows/zenodo-release>`
 - **Utilities** — {doc}`writeback </reference/workflows/writeback>`
 

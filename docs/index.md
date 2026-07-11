@@ -46,9 +46,7 @@ the caller permission union, examples, and test scenarios. See the full
 
 **Python** — {doc}`python-build </reference/workflows/python-build>` ·
 {doc}`python-test </reference/workflows/python-test>` ·
-{doc}`python-lint </reference/workflows/python-lint>` ·
-{doc}`pypi-publish </reference/workflows/pypi-publish>` ·
-{doc}`anaconda-publish </reference/workflows/anaconda-publish>`
+{doc}`python-lint </reference/workflows/python-lint>`
 
 **Documents** — {doc}`pandoc </reference/workflows/pandoc>` ·
 {doc}`docs-build </reference/workflows/docs-build>` ·
@@ -56,7 +54,9 @@ the caller permission union, examples, and test scenarios. See the full
 
 **Pages** — {doc}`deploy-pages </reference/workflows/deploy-pages>`
 
-**Publishing** — {doc}`zenodo-release </reference/workflows/zenodo-release>`
+**Publishing** — {doc}`pypi-publish </reference/workflows/pypi-publish>` ·
+{doc}`anaconda-publish </reference/workflows/anaconda-publish>` ·
+{doc}`zenodo-release </reference/workflows/zenodo-release>`
 
 **Containers** —
 {doc}`build-devcontainer </reference/workflows/build-devcontainer>` ·
