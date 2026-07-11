@@ -1,0 +1,292 @@
+id: binder-build
+name: Binder Build
+summary:
+  Build a Binder-compatible (repo2docker) image from the caller's repository in a
+  credential-free build job, hand the byte-identical image to an isolated
+  environment-gated push job that pushes it to a registry, attach an
+  actions/attest-build-provenance SLSA attestation for the pushed digest, emit a
+  reproducibility Dockerfile pinned by digest, and optionally warm the mybinder.org
+  cache best-effort. Replaces the cicd-binder draft.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Containers
+  keywords:
+    - binder
+    - repo2docker
+    - docker
+    - ghcr
+    - attestation
+    - provenance
+    - mybinder
+    - containers
+io:
+  job: build-binder
+  runtime: true
+  checkout: true
+  artifact-download: true
+  runtime-jobs:
+    - validate
+    - push-image
+    - warm-binder-cache
+notes:
+  - >-
+    Callers that push (publish-dry-run-enabled false) must grant the calling job the
+    union of every job's permissions: contents: read, actions: read, packages: write,
+    id-token: write, and attestations: write. The credentialed and irreversible grants
+    (packages: write, id-token: write, attestations: write) exist ONLY on the isolated
+    push-image job, which does not check out caller code. The build job holds contents:
+    read (checkout) and actions: read (the artifact-download channel); validate and
+    warm-binder-cache request nothing. A dry-run (build-only) caller still declares the
+    same union because GitHub validates the nested-permission superset at startup, even
+    though the write scopes are never exercised when the push job is skipped.
+  - >-
+    Credential isolation is the spine. repo2docker runs the caller's UNTRUSTED repository
+    contents (postBuild/start scripts execute arbitrary code) in the build-binder job,
+    which holds no registry credential and no id-token. The docker-password secret is
+    exposed on exactly one step -- the docker/login-action step of the push-image job --
+    and never flows to a third-party action or to a script. The push job downloads the
+    OCI archive the build job saved and docker-loads it, so the pushed image is
+    byte-identical to the built image: no rebuild, no TOCTOU, and caller code never
+    coexists with the push credential.
+  - >-
+    publish-dry-run-enabled is the credential-free rehearsal switch (name shared with the
+    publishing tier for chain parity). When true, only validate and build-binder run: the
+    image is built and proven (the build-only proof records the local image config digest,
+    so a vacuous no-op build fails the job) with no registry credential, and the
+    environment-bound push-image job AND the mybinder warm job are skipped at the job
+    level -- no deployment record, no reviewer ping, no credential, no id-token. This is
+    the entire credential-free surface and is fully exercisable in same-repo PR CI. When
+    false, push-environment-name is required so the one credentialed side effect is always
+    gated by a protected GitHub Environment.
+  - >-
+    The registry-auth input group matches build-devcontainer's canonical docker-* shape
+    (docker-login-enabled, docker-registry, docker-username, and the docker-password
+    secret) with identical defaults, and reuses its exact login pattern: the github.token
+    password fallback is restricted to ghcr.io, so any other registry must supply
+    docker-password or the push job's tokenless preflight fails loudly (validate cannot
+    inspect secret presence, so that check lives in the push job, not validate).
+    image-tags is intentionally a plural newline list (binder pushes multiple tags),
+    diverging from build-devcontainer's singular image-tag; the reproducibility Dockerfile
+    always pins by @sha256 digest regardless of which tags are pushed.
+  - >-
+    The build-devcontainer registry-auth inputs docker-ecr, docker-scope, and docker-logout
+    were intentionally scoped OUT of binder v1 (binder's single ghcr-style push needs none of
+    ECR credential-helper login, multi-registry scope, or an explicit logout step). They are
+    additive, backward-compatible inputs to introduce later if a consumer needs them.
+  - >-
+    repo2docker-arguments is mediated through env + shlex.split (never shell-interpolated)
+    and guarded by a strict ALLOWLIST grounded in repo2docker's actual argparse
+    (repo2docker/__main__.py), not a denylist. A denylist is bypassable: argparse accepts
+    --flag=value, attached short options, and bare positionals, so an owned flag could be
+    smuggled past exact-token rejection. Only genuinely-safe passthrough flags (--debug,
+    --no-clean, --json-logs, --build-arg=VALUE, --label=VALUE) are accepted; the image
+    name (--image-name), push behavior (--push/--no-push), build/run control
+    (--no-run/--run, --no-build/--build), the ref (--ref), and the positional source path
+    are owned by typed inputs and rejected in every form. The same allowlist runs again in
+    the build job when it reconstructs the argv, so validation and build never diverge.
+  - >-
+    repo2docker is installed ephemerally at a pinned version via a SHA-pinned setup-uv plus
+    `uvx --from jupyter-repo2docker==<version>` (override with repo2docker-version). The
+    default version is registered for Renovate (a pypi custom manager over the
+    repo2docker-version default in this workflow's source) so it stays current, and a unit
+    test asserts the configured Renovate matchString still matches that default.
+  - >-
+    The build/push handoff artifacts (binder-build-image, binder-build-proof) are internal
+    and run-scoped by artifact name, so a single workflow run should call binder-build once;
+    invoking it multiple times in one run would collide on those names (matching
+    build-devcontainer's per-run digest-artifact naming). Cross-run reuse is safe because
+    artifacts are scoped to their run.
+  - >-
+    The mybinder cache warm is best-effort and non-asserted. warm-binder-cache runs only
+    after a successful build (needs build-binder) and only when binder-cache-warm-enabled,
+    is continue-on-error at the JOB level so mybinder downtime can never fail the caller,
+    and holds no credential and binds no environment. It is independent of the registry
+    push (mybinder builds the repo itself) but, per the dry-run contract, is skipped
+    alongside the push job when publish-dry-run-enabled is true.
+  - >-
+    HONESTY - what the in-repo scenarios prove and what they cannot. The hosted dry-run
+    scenario exercises the full credential-free surface end to end: it runs repo2docker on
+    a fixture source, builds a real image, and asserts through the uploaded build-only
+    proof that an image was actually produced (a no-op build fails), plus that the push
+    job stayed skipped (image-ref is empty). It CANNOT prove: (a) that a registry push, the
+    RepoDigests digest capture, the attestation, or the pinned Dockerfile are correct --
+    the harness cannot keep a credentialed push green mid reusable-call, so tagging, digest
+    capture, output emission, and Dockerfile pinning are covered by unit tests of
+    push-image.py, and the non-ghcr-without-docker-password rejection by a unit test of
+    preflight-push.py; (b) that the SLSA attestation verifies server-side -- only a
+    real-credential run against a real registry proves that. The rehearsal path is
+    publish-dry-run-enabled for every consumer (build without pushing), and a post-merge
+    sentinel in a sandbox repo pushing to a throwaway ghcr namespace under a scoped
+    environment secret, never in PR CI. The anonymous base image repo2docker pulls from
+    docker.io is rate-limited on shared hosted-runner egress, so a burst of scenario runs
+    can flake there (mirroring build-devcontainer's build-only scenario).
+  - All jobs run on ubuntu-latest in v1; adding per-job runner inputs later is a
+    backward-compatible minor change.
+examples:
+  - name: Build and publish a Binder image to GHCR
+    path: tests/fixtures/binder-build/ghcr-publish.yaml
+tests:
+  scenarios:
+    # The success scenario is hosted-only and always dry-run: a registry push cannot
+    # run from PR CI, so it proves the credential-free build surface and asserts the
+    # push job stays skipped. Push/attest/digest behavior lives in tests/test_binder_build.py.
+    - id: dry-run-build-hosted
+      name: Dry-run builds a Binder image and skips the push job
+      runs:
+        - hosted
+      inputs:
+        image-name: ghcr.io/devflows/e2e-binder
+        publish-dry-run-enabled: true
+        repo2docker-source-path: tests/scenarios/binder-build/minimal
+        docker-login-enabled: false
+      artifact:
+        name: binder-build-proof
+        path: .devflows-test-artifacts/binder-build/dry-run
+      assertions:
+        - type: file-contains
+          path: image-id
+          text: "sha256:"
+        - type: workflow-output-equals
+          name: image-ref
+          value: ""
+    # Failure-path scenarios run validate-inputs.py directly through the
+    # validation-failure harness (no reusable call), so they run under both act and
+    # hosted CI. Each pins a stable substring of the rejection it targets, and sets
+    # publish-dry-run-enabled true so the push-environment check does not mask the
+    # earlier rejection under test (except push-without-environment, which targets it).
+    - id: missing-image-name
+      name: Empty image-name fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "image-name is required"
+      inputs:
+        image-name: ""
+        publish-dry-run-enabled: true
+    - id: invalid-image-name
+      name: image-name carrying a tag fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "WITHOUT a tag"
+      inputs:
+        image-name: ghcr.io/owner/repo:latest
+        publish-dry-run-enabled: true
+    - id: empty-image-tags
+      name: image-tags resolving to an empty list fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "non-empty newline-separated list"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        image-tags: ""
+        publish-dry-run-enabled: true
+    - id: push-without-environment
+      name: A real push with no push-environment-name fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "push-environment-name is required"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: false
+        push-environment-name: ""
+    - id: arguments-owned-push-flag
+      name: A --push smuggled through repo2docker-arguments fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "owned by typed inputs"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-arguments: "--push"
+    - id: arguments-owned-image-name
+      name: An attached --image-name=value fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "owned by typed inputs"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-arguments: "--image-name=attacker/evil"
+    - id: arguments-attached-short-option
+      name: An attached short option fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "only the allowlisted passthrough flags"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-arguments: "-eSECRET=1"
+    - id: arguments-bare-positional
+      name: A bare positional source fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "only the allowlisted passthrough flags"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-arguments: "./attacker-repo"
+    - id: arguments-invalid-shlex
+      name: An unbalanced quote in repo2docker-arguments fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "could not be parsed as shell arguments"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-arguments: "--label='unbalanced"
+    - id: unsafe-source-path
+      name: A repo2docker-source-path escaping the workspace fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "workspace-relative path"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-source-path: ../outside
+    - id: invalid-repo2docker-version
+      name: A repo2docker-version with a smuggled specifier fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "date-based jupyter-repo2docker version"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        repo2docker-version: "2026.4.0; os.system('x')"
+    - id: unsafe-dockerfile-artifact-name
+      name: An artifact-unsafe dockerfile-artifact-name fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "artifact-safe token"
+      inputs:
+        image-name: ghcr.io/owner/repo-binder
+        publish-dry-run-enabled: true
+        dockerfile-artifact-enabled: true
+        dockerfile-artifact-name: "bad/name"

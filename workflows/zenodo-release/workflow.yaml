@@ -1,0 +1,481 @@
+name: "[Reusable]: Zenodo Release"
+
+on:
+  workflow_call:
+    inputs:
+      publish-dry-run-enabled:
+        description:
+          Credential-free rehearsal; prepare previews the full plan while zenodo-deposit and
+          release are skipped at the job level (no environment, no token, no side effect).
+        type: boolean
+        required: false
+        default: false
+      publish-timeout-minutes:
+        description: timeout-minutes applied to every job; raise for large assets or slow uploads.
+        type: number
+        required: false
+        default: 15
+      release-enabled:
+        description: Create/update the GitHub Release. At least one of release-enabled / zenodo-enabled must be true.
+        type: boolean
+        required: false
+        default: true
+      release-tag:
+        description:
+          REQUIRED. Tag the release is cut from and the blast-radius anchor
+          (zenodo-publish-confirm must equal it for a real publish). Validated git-ref-safe.
+        type: string
+        required: true
+      release-target:
+        description: Commitish gh tags when release-tag does not yet exist (gh release create --target); empty releases the tag as-is.
+        type: string
+        required: false
+        default: ""
+      release-name:
+        description: Release title; empty defaults to release-tag.
+        type: string
+        required: false
+        default: ""
+      release-notes:
+        description: Explicit release body. Mutually exclusive with release-notes-file.
+        type: string
+        required: false
+        default: ""
+      release-notes-file:
+        description: Workspace-relative path (checkout) to a release-body file, read in prepare. Mutually exclusive with release-notes.
+        type: string
+        required: false
+        default: ""
+      release-generate-notes-enabled:
+        description: Pass gh --generate-notes to auto-generate notes from commits/PRs.
+        type: boolean
+        required: false
+        default: false
+      release-draft-enabled:
+        description: Create the release as a draft (gh --draft).
+        type: boolean
+        required: false
+        default: false
+      release-prerelease-enabled:
+        description: Mark the release as a prerelease (gh --prerelease).
+        type: boolean
+        required: false
+        default: false
+      release-latest-enabled:
+        description: Mark this release as Latest (gh --latest); set false for backport lines.
+        type: boolean
+        required: false
+        default: true
+      release-discussion-category:
+        description:
+          Repository discussion category to open a linked release discussion in
+          (gh --discussion-category); empty = none. Incompatible with release-draft-enabled.
+        type: string
+        required: false
+        default: ""
+      release-existing-mode:
+        description: Behavior when a release already exists for release-tag -- fail (default), update, or skip.
+        type: string
+        required: false
+        default: fail
+      release-asset-globs:
+        description: Newline globs (relative to release-asset-source-path) to attach to the release; non-empty requires artifact-download-enabled.
+        type: string
+        required: false
+        default: ""
+      release-asset-source-path:
+        description: Workspace-relative directory the release assets were downloaded into; empty defaults to artifact-download-path.
+        type: string
+        required: false
+        default: ""
+      release-asset-if-no-files-found:
+        description: When a release-asset glob matches nothing -- error (default), warn, or ignore.
+        type: string
+        required: false
+        default: error
+      release-append-doi-enabled:
+        description:
+          When both targets run, append the minted or reserved Zenodo DOI(s) to the release notes as a
+          footer. With release-generate-notes-enabled, gh treats the notes body as a header and appends
+          its auto-generated notes below it, so the DOI footer reads above the generated changelog.
+        type: boolean
+        required: false
+        default: true
+      release-environment-name:
+        description: Optional GitHub environment the release job binds to (empty = unbound, GITHUB_TOKEN-only precedent).
+        type: string
+        required: false
+        default: ""
+      zenodo-enabled:
+        description: Create/update a Zenodo deposition. Default false so GitHub-release-only is the zero-config path.
+        type: boolean
+        required: false
+        default: false
+      zenodo-sandbox-enabled:
+        description: Target sandbox.zenodo.org with zenodo-sandbox-token instead of zenodo.org with zenodo-token (discardable 10.5072 DOIs).
+        type: boolean
+        required: false
+        default: false
+      zenodo-publish-enabled:
+        description:
+          IRREVERSIBLE. False keeps a draft with a reserved DOI; true POSTs publish and
+          permanently registers the DOI (a real publish also needs zenodo-publish-confirm).
+        type: boolean
+        required: false
+        default: false
+      zenodo-publish-confirm:
+        description:
+          Type-the-name arm switch; must equal release-tag for a real (non-sandbox, non-dry-run) publish.
+        type: string
+        required: false
+        default: ""
+      zenodo-concept-doi:
+        description: Concept DOI of an existing record to add a NEW VERSION to; empty creates a brand-new deposition.
+        type: string
+        required: false
+        default: ""
+      zenodo-new-version-file-mode:
+        description: New-version file handling -- replace (default, upload only this release's assets) or keep (retain inherited files).
+        type: string
+        required: false
+        default: replace
+      zenodo-environment-name:
+        description:
+          GitHub environment the credentialed zenodo-deposit job binds to; required when zenodo-enabled
+          (unprotected for sandbox, protected for real Zenodo).
+        type: string
+        required: false
+        default: ""
+      zenodo-upload-type:
+        description: Zenodo upload_type (software, publication, dataset, poster, presentation, image, video, lesson, physicalobject, other).
+        type: string
+        required: false
+        default: software
+      zenodo-title:
+        description: Deposition title. Required when zenodo-enabled and no CFF path; overrides CFF when set.
+        type: string
+        required: false
+        default: ""
+      zenodo-creators:
+        description:
+          Newline creators as 'Family, Given | Affiliation | ORCID' (last two optional). Required
+          when zenodo-enabled and no CFF path; parsed by DevFlows, never shell-interpolated.
+        type: string
+        required: false
+        default: ""
+      zenodo-description:
+        description: Deposition description/abstract (HTML allowed). Required when zenodo-enabled and no CFF path; overrides CFF.
+        type: string
+        required: false
+        default: ""
+      zenodo-version:
+        description: Version recorded in the deposition; empty derives it from release-tag (leading 'v' stripped).
+        type: string
+        required: false
+        default: ""
+      zenodo-license:
+        description: SPDX license id (e.g. MIT, Apache-2.0); empty defers to CFF or Zenodo's default.
+        type: string
+        required: false
+        default: ""
+      zenodo-keywords:
+        description: Newline keywords; merged with (and overriding) CFF keywords.
+        type: string
+        required: false
+        default: ""
+      zenodo-metadata-cff-path:
+        description:
+          Workspace-relative path (checkout) to a CITATION.cff pre-filling metadata (explicit zenodo-*
+          inputs override it); parsed only in prepare.
+        type: string
+        required: false
+        default: ""
+      zenodo-metadata-extra:
+        description:
+          JSON object merged into the deposition metadata for advanced fields; DevFlows-owned/derived keys rejected.
+        type: string
+        required: false
+        default: ""
+      zenodo-asset-globs:
+        description:
+          Newline globs (relative to zenodo-asset-source-path) to upload to Zenodo; required when
+          zenodo-enabled and, when set, requires artifact-download-enabled.
+        type: string
+        required: false
+        default: ""
+      zenodo-asset-source-path:
+        description: Workspace-relative directory the Zenodo assets were downloaded into; empty defaults to artifact-download-path.
+        type: string
+        required: false
+        default: ""
+      zenodo-asset-if-no-files-found:
+        description: When a zenodo-asset glob matches nothing -- error (default), warn, or ignore.
+        type: string
+        required: false
+        default: error
+      publish-dist-manifest:
+        description:
+          Optional schema-1 dist-manifest covering the Zenodo assets; when set, files are sha256+size
+          verified bidirectionally in prepare and re-verified before upload. When empty, assets upload as-is.
+        type: string
+        required: false
+        default: ""
+    secrets:
+      zenodo-token:
+        description:
+          Zenodo (zenodo.org) token with scopes deposit:write and deposit:actions. required:false
+          (dry-run/sandbox need none); exposed as ZENODO_TOKEN on the single deposit step only.
+        required: false
+      zenodo-sandbox-token:
+        description:
+          Zenodo Sandbox (sandbox.zenodo.org) token with the same scopes, used only when
+          zenodo-sandbox-enabled; isolated to the same single deposit step.
+        required: false
+    outputs:
+      package-version:
+        description: Resolved release version (from zenodo-version or the tag); honest in dry-run.
+        value: ${{ jobs.prepare.outputs.package-version }}
+      release-url:
+        description: html_url of the created/updated GitHub Release; empty when release disabled, skipped, or in dry-run.
+        value: ${{ jobs.release.outputs.release-url }}
+      release-tag:
+        description: The release tag that was cut (echo of release-tag).
+        value: ${{ jobs.prepare.outputs.release-tag }}
+      zenodo-doi:
+        description: Version DOI for this release (reserved in draft mode, registered after publish); empty when disabled or dry-run.
+        value: ${{ jobs.zenodo-deposit.outputs.zenodo-doi }}
+      zenodo-concept-doi:
+        description: Concept DOI, stable across versions; empty when disabled or dry-run.
+        value: ${{ jobs.zenodo-deposit.outputs.zenodo-concept-doi }}
+      zenodo-record-url:
+        description: URL of the Zenodo deposition/record; empty when disabled or dry-run.
+        value: ${{ jobs.zenodo-deposit.outputs.zenodo-record-url }}
+      zenodo-deposition-id:
+        description: Numeric Zenodo deposition id of this version; empty when disabled or dry-run.
+        value: ${{ jobs.zenodo-deposit.outputs.zenodo-deposition-id }}
+      zenodo-state:
+        description: The literal published after a publish, else draft; empty when disabled or dry-run.
+        value: ${{ jobs.zenodo-deposit.outputs.zenodo-state }}
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: ${{ inputs.publish-timeout-minutes }}
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          PUBLISH_DRY_RUN_ENABLED: ${{ inputs.publish-dry-run-enabled }}
+          PUBLISH_TIMEOUT_MINUTES: ${{ inputs.publish-timeout-minutes }}
+          RELEASE_ENABLED: ${{ inputs.release-enabled }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_NOTES: ${{ inputs.release-notes }}
+          RELEASE_NOTES_FILE: ${{ inputs.release-notes-file }}
+          RELEASE_DRAFT_ENABLED: ${{ inputs.release-draft-enabled }}
+          RELEASE_DISCUSSION_CATEGORY: ${{ inputs.release-discussion-category }}
+          RELEASE_EXISTING_MODE: ${{ inputs.release-existing-mode }}
+          RELEASE_ASSET_GLOBS: ${{ inputs.release-asset-globs }}
+          RELEASE_ASSET_SOURCE_PATH: ${{ inputs.release-asset-source-path }}
+          RELEASE_ASSET_IF_NO_FILES_FOUND: ${{ inputs.release-asset-if-no-files-found }}
+          RELEASE_ENVIRONMENT_NAME: ${{ inputs.release-environment-name }}
+          ZENODO_ENABLED: ${{ inputs.zenodo-enabled }}
+          ZENODO_SANDBOX_ENABLED: ${{ inputs.zenodo-sandbox-enabled }}
+          ZENODO_PUBLISH_ENABLED: ${{ inputs.zenodo-publish-enabled }}
+          ZENODO_PUBLISH_CONFIRM: ${{ inputs.zenodo-publish-confirm }}
+          ZENODO_NEW_VERSION_FILE_MODE: ${{ inputs.zenodo-new-version-file-mode }}
+          ZENODO_ENVIRONMENT_NAME: ${{ inputs.zenodo-environment-name }}
+          ZENODO_UPLOAD_TYPE: ${{ inputs.zenodo-upload-type }}
+          ZENODO_TITLE: ${{ inputs.zenodo-title }}
+          ZENODO_CREATORS: ${{ inputs.zenodo-creators }}
+          ZENODO_DESCRIPTION: ${{ inputs.zenodo-description }}
+          ZENODO_METADATA_CFF_PATH: ${{ inputs.zenodo-metadata-cff-path }}
+          ZENODO_METADATA_EXTRA: ${{ inputs.zenodo-metadata-extra }}
+          ZENODO_ASSET_GLOBS: ${{ inputs.zenodo-asset-globs }}
+          ZENODO_ASSET_SOURCE_PATH: ${{ inputs.zenodo-asset-source-path }}
+          ZENODO_ASSET_IF_NO_FILES_FOUND: ${{ inputs.zenodo-asset-if-no-files-found }}
+          PUBLISH_DIST_MANIFEST: ${{ inputs.publish-dist-manifest }}
+          ARTIFACT_DOWNLOAD_ENABLED: ${{ inputs.artifact-download-enabled }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/metadata.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/validate-inputs.py"
+
+  prepare:
+    name: Resolve release plan
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: ${{ inputs.publish-timeout-minutes }}
+    outputs:
+      package-version: ${{ steps.prepare.outputs.package-version }}
+      release-tag: ${{ steps.prepare.outputs.release-tag }}
+      release-title: ${{ steps.prepare.outputs.release-title }}
+      release-body: ${{ steps.prepare.outputs.release-body }}
+      deposition-metadata: ${{ steps.prepare.outputs.deposition-metadata }}
+      release-asset-list: ${{ steps.prepare.outputs.release-asset-list }}
+      zenodo-asset-list: ${{ steps.prepare.outputs.zenodo-asset-list }}
+    steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+      - name: Resolve release plan
+        id: prepare
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          RELEASE_ENABLED: ${{ inputs.release-enabled }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_NAME: ${{ inputs.release-name }}
+          RELEASE_NOTES: ${{ inputs.release-notes }}
+          RELEASE_NOTES_FILE: ${{ inputs.release-notes-file }}
+          RELEASE_ASSET_GLOBS: ${{ inputs.release-asset-globs }}
+          RELEASE_ASSET_SOURCE_PATH: ${{ inputs.release-asset-source-path }}
+          RELEASE_ASSET_IF_NO_FILES_FOUND: ${{ inputs.release-asset-if-no-files-found }}
+          ZENODO_ENABLED: ${{ inputs.zenodo-enabled }}
+          ZENODO_VERSION: ${{ inputs.zenodo-version }}
+          ZENODO_UPLOAD_TYPE: ${{ inputs.zenodo-upload-type }}
+          ZENODO_TITLE: ${{ inputs.zenodo-title }}
+          ZENODO_CREATORS: ${{ inputs.zenodo-creators }}
+          ZENODO_DESCRIPTION: ${{ inputs.zenodo-description }}
+          ZENODO_LICENSE: ${{ inputs.zenodo-license }}
+          ZENODO_KEYWORDS: ${{ inputs.zenodo-keywords }}
+          ZENODO_METADATA_CFF_PATH: ${{ inputs.zenodo-metadata-cff-path }}
+          ZENODO_METADATA_EXTRA: ${{ inputs.zenodo-metadata-extra }}
+          ZENODO_ASSET_GLOBS: ${{ inputs.zenodo-asset-globs }}
+          ZENODO_ASSET_SOURCE_PATH: ${{ inputs.zenodo-asset-source-path }}
+          ZENODO_ASSET_IF_NO_FILES_FOUND: ${{ inputs.zenodo-asset-if-no-files-found }}
+          PUBLISH_DIST_MANIFEST: ${{ inputs.publish-dist-manifest }}
+          ARTIFACT_DOWNLOAD_PATH: ${{ inputs.artifact-download-path }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/assets.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/cff.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/dist_manifest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/hashing.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/metadata.py
+          uv run --no-project --with "pyyaml==6.0.3" python "${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/prepare.py"
+
+  zenodo-deposit:
+    name: Deposit to Zenodo
+    needs:
+      - validate
+      - prepare
+    if: ${{ !inputs.publish-dry-run-enabled && inputs.zenodo-enabled }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    timeout-minutes: ${{ inputs.publish-timeout-minutes }}
+    environment:
+      name: ${{ inputs.zenodo-environment-name }}
+      url: ${{ steps.deposit.outputs.zenodo-record-url }}
+    concurrency:
+      group: zenodo-release-${{ inputs.zenodo-environment-name }}
+      cancel-in-progress: false
+    outputs:
+      zenodo-doi: ${{ steps.deposit.outputs.zenodo-doi }}
+      zenodo-concept-doi: ${{ steps.deposit.outputs.zenodo-concept-doi }}
+      zenodo-record-url: ${{ steps.deposit.outputs.zenodo-record-url }}
+      zenodo-deposition-id: ${{ steps.deposit.outputs.zenodo-deposition-id }}
+      zenodo-state: ${{ steps.deposit.outputs.zenodo-state }}
+    steps:
+      - name: Re-verify assets before upload
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          PUBLISH_DIST_MANIFEST: ${{ inputs.publish-dist-manifest }}
+          ZENODO_ASSET_SOURCE_PATH: ${{ inputs.zenodo-asset-source-path }}
+          ARTIFACT_DOWNLOAD_PATH: ${{ inputs.artifact-download-path }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/dist_manifest.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/hashing.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/reverify.py"
+      - name: Assert Zenodo credential present
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          PUBLISH_DRY_RUN_ENABLED: ${{ inputs.publish-dry-run-enabled }}
+          ZENODO_SANDBOX_ENABLED: ${{ inputs.zenodo-sandbox-enabled }}
+          ZENODO_TOKEN_PRESENT: ${{ secrets.zenodo-token != '' }}
+          ZENODO_SANDBOX_TOKEN_PRESENT: ${{ secrets.zenodo-sandbox-token != '' }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/preflight-token.py"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          enable-cache: false
+      - name: Deposit to Zenodo
+        id: deposit
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          # Pass BOTH tokens plus the sandbox flag; deposit.py selects the correct one
+          # and fails closed if it is empty. A single `sandbox && sandbox-token ||
+          # token` expression would silently inject the production token into a
+          # sandbox run when the sandbox token is empty (GitHub treats it as falsy).
+          ZENODO_TOKEN: ${{ secrets.zenodo-token }}
+          ZENODO_SANDBOX_TOKEN: ${{ secrets.zenodo-sandbox-token }}
+          DEPOSITION_METADATA: ${{ needs.prepare.outputs.deposition-metadata }}
+          ZENODO_ASSET_LIST: ${{ needs.prepare.outputs.zenodo-asset-list }}
+          ZENODO_CONCEPT_DOI: ${{ inputs.zenodo-concept-doi }}
+          ZENODO_NEW_VERSION_FILE_MODE: ${{ inputs.zenodo-new-version-file-mode }}
+          ZENODO_PUBLISH_ENABLED: ${{ inputs.zenodo-publish-enabled }}
+          ZENODO_SANDBOX_ENABLED: ${{ inputs.zenodo-sandbox-enabled }}
+          PUBLISH_DRY_RUN_ENABLED: ${{ inputs.publish-dry-run-enabled }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/zenodo_api.py
+          uv run --no-project --with "requests==2.32.5" python "${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/deposit.py"
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - validate
+      - prepare
+      - zenodo-deposit
+    if: >-
+      ${{ !cancelled()
+      && inputs.release-enabled
+      && !inputs.publish-dry-run-enabled
+      && needs.prepare.result == 'success'
+      && (needs.zenodo-deposit.result == 'success' || needs.zenodo-deposit.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      discussions: write
+    timeout-minutes: ${{ inputs.publish-timeout-minutes }}
+    environment:
+      name: ${{ inputs.release-environment-name }}
+      url: ${{ steps.release.outputs.release-url }}
+    concurrency:
+      group: zenodo-release-release-${{ inputs.release-environment-name }}
+      cancel-in-progress: false
+    outputs:
+      release-url: ${{ steps.release.outputs.release-url }}
+    steps:
+      - name: Create GitHub Release
+        id: release
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_DRY_RUN_ENABLED: ${{ inputs.publish-dry-run-enabled }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          RELEASE_TITLE: ${{ needs.prepare.outputs.release-title }}
+          RELEASE_BODY: ${{ needs.prepare.outputs.release-body }}
+          RELEASE_TARGET: ${{ inputs.release-target }}
+          RELEASE_EXISTING_MODE: ${{ inputs.release-existing-mode }}
+          RELEASE_DRAFT_ENABLED: ${{ inputs.release-draft-enabled }}
+          RELEASE_PRERELEASE_ENABLED: ${{ inputs.release-prerelease-enabled }}
+          RELEASE_LATEST_ENABLED: ${{ inputs.release-latest-enabled }}
+          RELEASE_GENERATE_NOTES_ENABLED: ${{ inputs.release-generate-notes-enabled }}
+          RELEASE_DISCUSSION_CATEGORY: ${{ inputs.release-discussion-category }}
+          RELEASE_ASSET_LIST: ${{ needs.prepare.outputs.release-asset-list }}
+          RELEASE_APPEND_DOI_ENABLED: ${{ inputs.release-append-doi-enabled }}
+          ZENODO_DOI: ${{ needs.zenodo-deposit.outputs.zenodo-doi }}
+          ZENODO_CONCEPT_DOI: ${{ needs.zenodo-deposit.outputs.zenodo-concept-doi }}
+          ZENODO_STATE: ${{ needs.zenodo-deposit.outputs.zenodo-state }}
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/zenodo-release/release.py"

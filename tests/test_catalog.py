@@ -9,15 +9,18 @@ def test_catalog_loads_active_workflows() -> None:
 
     assert [item.id for item in workflows] == [
         "anaconda-publish",
+        "binder-build",
         "build-devcontainer",
         "deploy-pages",
         "docs-build",
         "pandoc",
+        "paper-openjournals",
         "pypi-publish",
         "python-build",
         "python-lint",
         "python-test",
         "writeback",
+        "zenodo-release",
     ]
     assert (
         workflows_by_id["pandoc"].workflow_call["inputs"]["pandoc-image"]["default"]

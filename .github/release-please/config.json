@@ -11,6 +11,13 @@
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
+    "workflows/binder-build": {
+      "component": "binder-build",
+      "release-type": "simple",
+      "package-name": "binder-build",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
     "workflows/build-devcontainer": {
       "component": "build-devcontainer",
       "release-type": "simple",
@@ -36,6 +43,13 @@
       "component": "pandoc",
       "release-type": "simple",
       "package-name": "pandoc",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
+    "workflows/paper-openjournals": {
+      "component": "paper-openjournals",
+      "release-type": "simple",
+      "package-name": "paper-openjournals",
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
@@ -71,6 +85,13 @@
       "component": "writeback",
       "release-type": "simple",
       "package-name": "writeback",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
+    "workflows/zenodo-release": {
+      "component": "zenodo-release",
+      "release-type": "simple",
+      "package-name": "zenodo-release",
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     }

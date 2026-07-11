@@ -20,20 +20,23 @@ reuses the prebuilt devcontainer image/cache published by
 `devflows-devcontainer.yaml`, and a per-ref concurrency group cancels superseded
 runs.
 
-## Hosted Scenario Workflow
+## Hosted Scenario Workflows
 
-`.github/workflows/devflows-scenarios.yaml` is generated from workflow metadata.
-It calls promoted reusable workflows and then runs assertion jobs. Hosted
-scenario tests are the right place to verify behavior that needs real GitHub
-services.
+One `.github/workflows/devflows-scenarios-<id>.yaml` file per catalog workflow
+is generated from workflow metadata. Each calls its promoted reusable workflow
+and then runs assertion jobs. The suite is partitioned per owning workflow so no
+single file crosses the size GitHub startup-rejects; every file shares the same
+`pull_request` / `push` trigger, so GitHub runs them all in parallel on one
+event and total coverage is unchanged. Hosted scenario tests are the right place
+to verify behavior that needs real GitHub services.
 
 For example, Pandoc hosted scenarios upload generated files as artifacts and
 then assertion jobs download those artifacts and inspect their contents.
 
-## Local Scenario Workflow
+## Local Scenario Workflows
 
-`.github/workflows/devflows-local-scenarios.yaml` is generated for local `act`
-runs:
+One `.github/workflows/devflows-scenarios-<id>.local.yaml` file per workflow
+with local scenarios is generated for local `act` runs:
 
 ```bash
 task scenarios-local

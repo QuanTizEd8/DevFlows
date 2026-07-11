@@ -10,16 +10,40 @@ from pathlib import Path
 from typing import Any
 
 from devflows.actions import ref as action_ref
-from devflows.catalog import Workflow
+from devflows.catalog import PUBLISHED_DIR, Workflow
 from devflows.publish import (
+    assert_within_size_cap,
     build_published_workflow,
     caller_required_permissions,
     published_workflow_call,
 )
 from devflows.yaml import dump_yaml
 
-GENERATED_HOSTED_PATH = Path(".github/workflows/devflows-scenarios.yaml")
-GENERATED_LOCAL_PATH = Path(".github/workflows/devflows-local-scenarios.yaml")
+# One hosted and one local scenario workflow are generated PER catalog workflow
+# that owns scenarios, rather than a single monolithic file. GitHub startup-rejects
+# an oversized workflow file (an opaque "workflow file issue" with zero jobs), and
+# with every workflow's scenarios concatenated the hosted file crossed that ceiling.
+# Partitioning by owning workflow keeps each file small; GitHub runs the separate
+# files in parallel on the same event, so total scenario coverage is unchanged.
+SCENARIOS_DIR = PUBLISHED_DIR
+# Filename globs the scenario generator owns under .github/workflows/. Any file
+# matching these but absent from a fresh generation -- the retired monolithic
+# devflows-scenarios.yaml / devflows-local-scenarios.yaml, or a per-workflow file
+# whose owning workflow no longer has scenarios for that runner -- is pruned so
+# `devflows sync` / `devflows test-generate` leave a clean tree.
+_SCENARIO_FILE_GLOBS = ("devflows-scenarios*.yaml", "devflows-local-scenarios*.yaml")
+
+
+def hosted_scenario_path(workflow_id: str) -> Path:
+    """Generated hosted scenario workflow for one catalog workflow."""
+    return SCENARIOS_DIR / f"devflows-scenarios-{workflow_id}.yaml"
+
+
+def local_scenario_path(workflow_id: str) -> Path:
+    """Generated local (act) scenario workflow for one catalog workflow."""
+    return SCENARIOS_DIR / f"devflows-scenarios-{workflow_id}.local.yaml"
+
+
 # Harness scripts are real, lint-and-test-covered .py files. The generated
 # workflows check the repository out and invoke them from this committed
 # directory (they are no longer emitted as generated copies under
@@ -477,25 +501,56 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
 
 
 def write_generated_test_workflows(workflows: list[Workflow], *, check: bool = False) -> list[Path]:
+    """Generate one hosted and one local scenario workflow per catalog workflow.
+
+    Each owning workflow's scenarios are emitted into their own small files
+    (``devflows-scenarios-<id>.yaml`` for hosted, ``devflows-scenarios-<id>.local.yaml``
+    for local/act) so no single generated file approaches the size GitHub
+    startup-rejects. A runner-specific file is written only when the workflow has at
+    least one scenario for that runner, and every generated file is checked against
+    the same byte cap the published workflows use. Stale scenario files -- including
+    the retired monolithic ``devflows-scenarios.yaml`` / ``devflows-local-scenarios.yaml``
+    -- are pruned so the tree holds only the current per-workflow set.
+    """
     scenarios = load_scenarios(workflows)
-    outputs = {
-        GENERATED_HOSTED_PATH: render_test_workflow(
-            scenarios, runner="hosted", name="DevFlows Hosted Scenario Tests"
-        ),
-        GENERATED_LOCAL_PATH: render_test_workflow(
-            scenarios, runner="local", name="DevFlows Local Scenario Tests"
-        ),
-    }
+    outputs: dict[Path, str] = {}
+    for workflow in workflows:
+        owned = [scenario for scenario in scenarios if scenario.workflow.id == workflow.id]
+        for runner, path_for, label in (
+            ("hosted", hosted_scenario_path, "DevFlows Hosted Scenarios"),
+            ("local", local_scenario_path, "DevFlows Local Scenarios"),
+        ):
+            if not any(runner in scenario.runs for scenario in owned):
+                continue
+            path = path_for(workflow.id)
+            rendered = render_test_workflow(owned, runner=runner, name=f"{label}: {workflow.name}")
+            content = rendered.rstrip() + "\n"
+            # Guard each per-workflow file so a future workflow with huge scenarios
+            # fails generation locally, not at startup on a hosted run.
+            assert_within_size_cap(path.name, content)
+            outputs[path] = content
     changed: list[Path] = []
     for path, content in outputs.items():
-        normalized = content.rstrip() + "\n"
         existing = path.read_text(encoding="utf-8") if path.exists() else None
-        if existing != normalized:
+        if existing != content:
             changed.append(path)
             if not check:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(normalized, encoding="utf-8")
+                path.write_text(content, encoding="utf-8")
+    for orphan in _scenario_orphans(set(outputs)):
+        changed.append(orphan)
+        if not check:
+            orphan.unlink()
     return changed
+
+
+def _scenario_orphans(expected: set[Path]) -> list[Path]:
+    """Generator-owned scenario files on disk this generation did not (re)produce."""
+    found: dict[Path, None] = {}
+    for pattern in _SCENARIO_FILE_GLOBS:
+        for path in SCENARIOS_DIR.glob(pattern):
+            found[path] = None
+    return [path for path in sorted(found) if path not in expected]
 
 
 def _requires_write(scenario: Scenario) -> bool:
@@ -611,7 +666,7 @@ def _require_act_guard(workflow: dict[str, Any]) -> None:
                 "shell": "bash",
                 "run": (
                     'if [ "${ACT:-}" != "true" ]; then\n'
-                    '  echo "::error::devflows-local-scenarios.yaml runs only under act. '
+                    '  echo "::error::This local scenario workflow runs only under act. '
                     "Run 'task scenarios-local' locally; do not dispatch it on GitHub.\"\n"
                     "  exit 1\n"
                     "fi\n"
@@ -634,18 +689,35 @@ def _require_act_guard(workflow: dict[str, Any]) -> None:
 def run_local_scenarios(workflows: list[Workflow]) -> int:
     write_generated_test_workflows(workflows)
     _cleanup_local_outputs(load_scenarios(workflows))
-    command = [
-        "act",
-        "workflow_dispatch",
-        "--workflows",
-        str(GENERATED_LOCAL_PATH),
-        "--eventpath",
-        str(LOCAL_EVENT_PATH),
-        "--bind",
-        "-P",
-        ACT_PLATFORM,
+    # The scenarios are split into one local file per owning workflow. act's
+    # --workflows takes a single path (and pointing it at the whole directory
+    # would also pick up the hosted files, which share the workflow_dispatch
+    # trigger), so run each per-workflow local file in turn.
+    local_paths = [
+        local_scenario_path(workflow.id)
+        for workflow in workflows
+        if local_scenario_path(workflow.id).exists()
     ]
-    return subprocess.run(command, check=False).returncode
+    if not local_paths:
+        print("No local scenarios to run.")
+        return 0
+    returncode = 0
+    for path in local_paths:
+        command = [
+            "act",
+            "workflow_dispatch",
+            "--workflows",
+            str(path),
+            "--eventpath",
+            str(LOCAL_EVENT_PATH),
+            "--bind",
+            "-P",
+            ACT_PLATFORM,
+        ]
+        # Run every file even if an earlier one failed so one failing workflow does
+        # not mask failures in the others; surface nonzero if any run fails.
+        returncode = subprocess.run(command, check=False).returncode or returncode
+    return returncode
 
 
 def _on_block(runner: str) -> dict[str, Any]:
