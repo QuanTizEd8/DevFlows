@@ -35,14 +35,84 @@ line** for the workflow (an integer, `0` while pre-1.0). `task release-check`
 cross-validates that it equals the major component of the workflow's
 release-please manifest version, so the two can never silently diverge.
 
-Promoting a workflow to `1.0` is a single deliberate change that, together:
+### Promoting a workflow from 0.x to 1.0
 
-1. sets the workflow's `.github/release-please/manifest.json` entry to `1.0.0`,
-2. bumps `release.major` to `1` in its `devflow.yaml`, and
-3. is reviewed as the moment the workflow's compatibility promise and moving
-   major tag begin.
+Promotion is deliberate and per-workflow: it starts a workflow's compatibility
+promise and activates its moving `<id>/vMAJOR` tag.
 
-`task release-check` fails if steps 1 and 2 are not done together.
+**Do not promote by hand-editing `.github/release-please/manifest.json` to
+`1.0.0`.** In manifest mode the manifest records the **last released** version,
+so writing `1.0.0` there tells release-please that `1.0.0` is _already out_. It
+then computes the _next_ version from `1.0.0`, cuts **no** `<id>/v1.0.0` tag,
+and — because no release is produced — `scripts/move_major_tags.py` never runs,
+so `<id>/v1` is never created. That is the trap the previous procedure fell
+into.
+
+Instead, force the version with release-please's documented one-time
+`Release-As` commit footer (see the
+[release-please README](https://github.com/googleapis/release-please)) and move
+`release.major` in lockstep _inside the release pull request_.
+
+**Prerequisite:** provision `RELEASE_PLEASE_TOKEN` first (see the "Release Token
+(PAT) Setup" section below). Without it release-please still opens the release
+PR under `github.token`, but that PR does not trigger CI, so you cannot watch
+`release-check` go green before merging.
+
+To promote one workflow `<id>`:
+
+1. **Trigger the forced version.** Land a small commit on `main` that touches
+   the workflow's package path (`workflows/<id>/` — for example a one-line
+   `devflow.yaml` note recording the promotion) and carries a `Release-As`
+   footer. The path touch matters: in manifest mode release-please attributes
+   the forced version to the component whose files the commit changed.
+
+   ```bash
+   git commit -m "chore(<id>): promote to 1.0.0" -m "Release-As: 1.0.0"
+   ```
+
+   Do **not** touch `manifest.json` or `release.major` in this commit. On `main`
+   the manifest is still `0.x` and `release.major` is still `0`, so
+   `task release-check` stays green.
+
+2. **Let release-please open the release PR.** `DevFlows Release` runs
+   release-please, which opens a release pull request that bumps
+   `.github/release-please/manifest.json` for `workflows/<id>` to `1.0.0` and
+   writes the changelog. On that PR branch the manifest is `1.0.0` but
+   `release.major` is still `0`, so its `release-check` is **red** — this is
+   expected and you fix it in the next step. It is not a deadlock (see below).
+
+3. **Move `release.major` in lockstep, in the same PR.** On the release PR
+   branch, bump `release.major` from `0` to `1` in
+   `workflows/<id>/devflow.yaml`, then regenerate and commit any generated
+   changes (`task sync`, `task docs`, `task test-generate`) — `release.major`
+   feeds the generated reference page's recommended pin. Now the PR carries the
+   manifest bump (from release-please) **and** the `release.major` bump (from
+   you), so `task release-check` passes: the manifest major and `release.major`
+   are both `1`.
+
+4. **Merge the release PR.** Both flips land on `main` in the same merge, so
+   `main` is never committed in an inconsistent state. release-please creates
+   the `<id>/v1.0.0` tag and GitHub release; because the released major is now
+   `>= 1`, the `Force-move moving major tags` step runs
+   `scripts/move_major_tags.py` and creates/moves `<id>/v1`.
+
+**Why there is no deadlock.** `task release-check` only ever compares the
+**committed** state of `main`, where `release.major` must equal the manifest
+major. The manifest bump (from release-please) and the `release.major` bump
+(from you) travel together in the one release PR, so they become consistent
+atomically on merge — `main` never holds a mismatched pair. The transient red on
+the freshly-opened release PR is cleared by step 3 before merge; no ordering
+forces a permanent failure. (The audit's "deadlock" concern assumed
+`release.major` had to be bumped in a _separate, earlier_ commit on `main`; it
+does not — it rides the release PR.)
+
+Repeat these steps for each of the 13 workflows as it is ready. Each gets its
+own `Release-As` commit and its own release PR, and you bump that workflow's
+`release.major` in its PR — a change to one workflow never forces another to
+promote. (release-please's sticky
+[`release-as` config key](https://github.com/googleapis/release-please/blob/main/docs/manifest-releaser.md)
+is an alternative to the commit footer, but it pins _every_ future release to
+that version until you remove it; prefer the one-time footer.)
 
 ## Release Please
 
