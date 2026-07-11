@@ -916,3 +916,18 @@ def test_scenario_files_are_size_guarded(tmp_path, monkeypatch) -> None:
     assert "over the 500-byte cap" in message
     # The guard labels the offending file, not a catalog workflow id.
     assert "devflows-scenarios-" in message
+
+
+def test_scenario_files_are_size_guarded_in_write_mode(tmp_path, monkeypatch) -> None:
+    # WRITE mode (devflows test-generate without --check) must trip the same cap as
+    # --check, so an oversized file fails generation locally instead of writing a
+    # startup-failing workflow. The guard fires before any file is written.
+    monkeypatch.setattr("devflows.scenarios.SCENARIOS_DIR", tmp_path)
+    monkeypatch.setattr(publish, "MAX_GENERATED_WORKFLOW_BYTES", 500)
+
+    with pytest.raises(DevflowsError) as excinfo:
+        write_generated_test_workflows(load_catalog(), check=False)
+
+    assert "over the 500-byte cap" in str(excinfo.value)
+    # Fail-closed: nothing was written to disk before the guard raised.
+    assert list(tmp_path.glob("devflows-scenarios-*.yaml")) == []
