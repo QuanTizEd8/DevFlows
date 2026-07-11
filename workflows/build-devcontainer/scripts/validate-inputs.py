@@ -2,12 +2,51 @@ from __future__ import annotations
 
 import json
 import os
+import re
+
+# A single Docker tag token; matches binder-build's tag grammar so the two
+# workflows accept exactly the same set of tags for the shared image-tags input.
+_TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 
 
 def main() -> int:
     _validate_matrix(json.loads(_required("BUILD_MATRIX")))
     _validate_token_scope()
+    _emit_primary_tag(_resolve_primary_tag())
     return 0
+
+
+def _resolve_primary_tag() -> str:
+    """Validate the image-tags newline list and return its first (primary) tag.
+
+    image-tags is a newline-separated list; every line is applied to the merged
+    multi-arch manifest, and the first (primary) tag also names the per-platform
+    staging images and the image-ref output. Validate it here, in the pre-build
+    validate job, so a malformed tag fails fast before any image is built.
+    """
+    raw = os.environ.get("IMAGE_TAGS", "")
+    tags = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not tags:
+        raise SystemExit("image-tags must resolve to a non-empty newline-separated list of tags.")
+    for tag in tags:
+        if not _TAG_RE.match(tag):
+            raise SystemExit(f"image-tags contains an invalid Docker tag {tag!r}.")
+    return tags[0]
+
+
+def _emit_primary_tag(primary_tag: str) -> None:
+    """Expose the primary tag as a job output for the build and merge jobs.
+
+    The build step's per-platform staging tag, the digest artifact name, and the
+    merge job's digest download pattern all need the single primary tag, but a
+    GitHub Actions expression cannot split the newline list; the validate job
+    computes it once and hands it downstream via steps.validate.outputs.primary-tag.
+    """
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if not github_output:
+        return
+    with open(github_output, "a", encoding="utf-8") as output:
+        output.write(f"primary-tag={primary_tag}\n")
 
 
 def _validate_matrix(matrix: object) -> None:

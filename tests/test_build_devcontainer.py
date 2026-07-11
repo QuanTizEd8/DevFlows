@@ -135,6 +135,7 @@ def _run_validate(monkeypatch, **env) -> None:
         "DOCKER_LOGIN_ENABLED": "false",
         "DOCKER_PASSWORD_SET": "false",
         "DOCKER_REGISTRY": "ghcr.io",
+        "IMAGE_TAGS": "latest",
     }
     for key, value in {**base, **env}.items():
         monkeypatch.setenv(key, value)
@@ -198,6 +199,43 @@ def test_validate_rejects_token_fallback_to_non_ghcr(monkeypatch, registry) -> N
     with pytest.raises(SystemExit) as excinfo:
         module.main()
     assert "restricted to ghcr.io" in str(excinfo.value)
+
+
+def test_validate_emits_primary_tag(monkeypatch, tmp_path) -> None:
+    module = _load_script("validate-inputs.py")
+    output = tmp_path / "github-output"
+    env = {
+        "BUILD_MATRIX": _VALID_MATRIX,
+        "DOCKER_LOGIN_ENABLED": "false",
+        "DOCKER_PASSWORD_SET": "false",
+        "DOCKER_REGISTRY": "ghcr.io",
+        "IMAGE_TAGS": "latest\nv1.2.3\n",
+        "GITHUB_OUTPUT": str(output),
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    assert module.main() == 0
+    # The first line of image-tags is the primary tag handed to the build/merge jobs.
+    assert _parse_output(output)["primary-tag"] == "latest"
+
+
+@pytest.mark.parametrize(
+    ("tags", "message"),
+    [
+        ("   \n  ", "non-empty"),
+        ("bad tag", "invalid Docker tag"),
+    ],
+)
+def test_validate_rejects_bad_image_tags(monkeypatch, tags, message) -> None:
+    module = _load_script("validate-inputs.py")
+    monkeypatch.setenv("BUILD_MATRIX", _VALID_MATRIX)
+    monkeypatch.setenv("DOCKER_LOGIN_ENABLED", "false")
+    monkeypatch.setenv("DOCKER_PASSWORD_SET", "false")
+    monkeypatch.setenv("DOCKER_REGISTRY", "ghcr.io")
+    monkeypatch.setenv("IMAGE_TAGS", tags)
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert message in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #
@@ -379,7 +417,7 @@ def test_merge_manifest_merges_by_digest(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("IMAGE_NAME", "ghcr.io/example/project-devcontainer")
     monkeypatch.setenv("IMAGE_SHA_TAG_ENABLED", "true")
     monkeypatch.setenv("IMAGE_SHA_TAG_PREFIX", "sha-")
-    monkeypatch.setenv("IMAGE_TAG", "latest")
+    monkeypatch.setenv("IMAGE_TAGS", "latest")
     monkeypatch.setenv("SOURCE_SHA", "0123456789abcdef")
 
     assert module.main() == 0
@@ -412,6 +450,39 @@ def test_merge_manifest_merges_by_digest(monkeypatch, tmp_path) -> None:
     assert parsed["sha-image-ref"] == f"{image}:sha-0123456789abcdef"
 
 
+def test_merge_manifest_applies_every_tag(monkeypatch, tmp_path) -> None:
+    module = _load_script("merge-manifest.py")
+    output = tmp_path / "github-output"
+    digest_dir = tmp_path / "digests"
+    amd = "sha256:" + "1" * 64
+    arm = "sha256:" + "2" * 64
+    _write_digests(digest_dir, {"linux-amd64": amd, "linux-arm64": arm})
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda command, *, check: calls.append(command) or subprocess.CompletedProcess(command, 0),
+    )
+    monkeypatch.setenv("BUILD_MATRIX", _VALID_MATRIX)
+    monkeypatch.setenv("DIGEST_DIR", str(digest_dir))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    monkeypatch.setenv("IMAGE_NAME", "ghcr.io/example/project-devcontainer")
+    monkeypatch.setenv("IMAGE_SHA_TAG_ENABLED", "false")
+    monkeypatch.setenv("IMAGE_TAGS", "latest\nv1.2.3\n")
+
+    assert module.main() == 0
+
+    image = "ghcr.io/example/project-devcontainer"
+    # One imagetools create per tag, each over the same immutable per-platform digests.
+    created_tags = [call[call.index("-t") + 1] for call in calls]
+    assert created_tags == [f"{image}:latest", f"{image}:v1.2.3"]
+    for call in calls:
+        assert f"{image}@{amd}" in call and f"{image}@{arm}" in call
+    # The image-ref output points at the primary (first) tag.
+    assert _parse_output(output)["image-ref"] == f"{image}:latest"
+
+
 def test_merge_manifest_errors_on_missing_digest(monkeypatch, tmp_path) -> None:
     module = _load_script("merge-manifest.py")
     digest_dir = tmp_path / "digests"
@@ -426,7 +497,7 @@ def test_merge_manifest_errors_on_missing_digest(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("BUILD_MATRIX", _VALID_MATRIX)
     monkeypatch.setenv("DIGEST_DIR", str(digest_dir))
     monkeypatch.setenv("IMAGE_NAME", "ghcr.io/example/project-devcontainer")
-    monkeypatch.setenv("IMAGE_TAG", "latest")
+    monkeypatch.setenv("IMAGE_TAGS", "latest")
 
     with pytest.raises(SystemExit) as excinfo:
         module.main()
@@ -446,7 +517,7 @@ def test_merge_manifest_errors_on_invalid_digest(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("BUILD_MATRIX", _VALID_MATRIX)
     monkeypatch.setenv("DIGEST_DIR", str(digest_dir))
     monkeypatch.setenv("IMAGE_NAME", "ghcr.io/example/project-devcontainer")
-    monkeypatch.setenv("IMAGE_TAG", "latest")
+    monkeypatch.setenv("IMAGE_TAGS", "latest")
 
     with pytest.raises(SystemExit) as excinfo:
         module.main()

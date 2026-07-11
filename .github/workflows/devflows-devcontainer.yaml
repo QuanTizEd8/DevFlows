@@ -35,7 +35,7 @@ jobs:
     with:
       # Identity from .config/project.yaml (owner QuanTizEd8; GHCR lowercases it).
       image-name: ghcr.io/quantized8/devflows-devcontainer
-      image-tag: latest
+      image-tags: latest
       # cache-key-prefix "cache" makes the derived registry cache tags exactly
       # image-name:cache-<platform_tag>, matching .devcontainer/devcontainer.json's
       # build.cacheFrom entries so the dev container and CI share one cache.

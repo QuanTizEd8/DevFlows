@@ -16,7 +16,9 @@ jobs:
     uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v0.1.0
     with:
       image-name: ghcr.io/owner/project-devcontainer
-      image-tag: latest
+      image-tags: |
+        latest
+        ${{ github.ref_name }}
       image-sha-tag-enabled: true
       build-matrix: |
         [

@@ -8,15 +8,19 @@ from pathlib import Path
 
 def main() -> int:
     image = _required("IMAGE_NAME")
-    tag = _required("IMAGE_TAG")
+    tags = _tags(_required("IMAGE_TAGS"))
     matrix = json.loads(_required("BUILD_MATRIX"))
     digest_dir = Path(_required("DIGEST_DIR"))
 
     platform_tags = _platform_tags(matrix)
     sources = _digest_sources(image, digest_dir, platform_tags)
 
-    image_ref = f"{image}:{tag}"
-    _imagetools_create(image_ref, sources)
+    # Tag the merged multi-arch manifest with every requested tag, all pointing at
+    # the same immutable per-platform digests. The first (primary) tag names the
+    # image-ref output.
+    for tag in tags:
+        _imagetools_create(f"{image}:{tag}", sources)
+    image_ref = f"{image}:{tags[0]}"
 
     sha_image_ref = ""
     if _truthy(os.environ.get("IMAGE_SHA_TAG_ENABLED", "")):
@@ -31,6 +35,14 @@ def main() -> int:
             _emit(output, "image-ref", image_ref)
             _emit(output, "sha-image-ref", sha_image_ref)
     return 0
+
+
+def _tags(raw: str) -> list[str]:
+    """Parse the image-tags newline list (validated already in the validate job)."""
+    tags = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not tags:
+        raise SystemExit("IMAGE_TAGS resolved to an empty list; nothing to tag.")
+    return tags
 
 
 def _platform_tags(matrix: object) -> list[str]:

@@ -7,8 +7,13 @@ on:
         description: Full image reference without tag, including registry when needed.
         type: string
         required: true
-      image-tag:
-        description: Base image tag. Platform tags are published as image-tag-platform_tag.
+      image-tags:
+        description:
+          Newline-separated list of tags applied to the built multi-arch image. Each line
+          is one tag and the merge job tags the resulting manifest with every entry. The
+          first (primary) tag also names the per-platform staging images
+          (first-tag-platform_tag) and the image-ref output (image-name at the primary
+          tag). Validated non-empty; each token must be a valid Docker tag.
         type: string
         required: false
         default: latest
@@ -305,8 +310,11 @@ jobs:
   validate:
     name: Validate inputs
     runs-on: ubuntu-latest
+    outputs:
+      primary-tag: ${{ steps.validate.outputs.primary-tag }}
     steps:
       - name: Validate inputs
+        id: validate
         shell: bash
         env:
           BUILD_MATRIX: ${{ inputs.build-matrix }}
@@ -314,6 +322,7 @@ jobs:
           DOCKER_LOGIN_ENABLED: ${{ inputs.docker-login-enabled }}
           DOCKER_PASSWORD_SET: ${{ secrets.docker-password != '' }}
           DOCKER_REGISTRY: ${{ inputs.docker-registry }}
+          IMAGE_TAGS: ${{ inputs.image-tags }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/validate-inputs.py"
 
   build-devcontainer:
@@ -398,7 +407,7 @@ jobs:
         uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
           imageName: ${{ inputs.image-name }}
-          imageTag: ${{ inputs.image-tag }}-${{ matrix.platform_tag }}
+          imageTag: ${{ needs.validate.outputs.primary-tag }}-${{ matrix.platform_tag }}
           platform: ${{ matrix.platform }}
           configFile: ${{ inputs.devcontainer-config-file }}
           checkoutPath: ${{ inputs.devcontainer-checkout-path }}
@@ -417,7 +426,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DIGEST_DIR: ${{ runner.temp }}/devflows-digests
           IMAGE_NAME: ${{ inputs.image-name }}
-          IMAGE_TAG: ${{ inputs.image-tag }}
+          IMAGE_TAG: ${{ needs.validate.outputs.primary-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
 
@@ -425,7 +434,7 @@ jobs:
         if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: devflows-devcontainer-digest-${{ inputs.image-tag }}-${{ matrix.platform_tag }}
+          name: devflows-devcontainer-digest-${{ needs.validate.outputs.primary-tag }}-${{ matrix.platform_tag }}
           path: ${{ runner.temp }}/devflows-digests/${{ matrix.platform_tag }}
           if-no-files-found: error
           retention-days: 1
@@ -448,7 +457,7 @@ jobs:
           DIGEST_SOURCE: oci
           DIGEST_OCI_ARCHIVE: /tmp/output.tar
           IMAGE_NAME: ${{ inputs.image-name }}
-          IMAGE_TAG: ${{ inputs.image-tag }}
+          IMAGE_TAG: ${{ needs.validate.outputs.primary-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
 
@@ -465,7 +474,7 @@ jobs:
 
   merge-devcontainer:
     name: Merge multi-arch manifest
-    needs: build-devcontainer
+    needs: [validate, build-devcontainer]
     if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
     runs-on: ${{ inputs.merge-runner }}
     outputs:
@@ -505,7 +514,7 @@ jobs:
       - name: Download platform digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: devflows-devcontainer-digest-${{ inputs.image-tag }}-*
+          pattern: devflows-devcontainer-digest-${{ needs.validate.outputs.primary-tag }}-*
           path: ${{ runner.temp }}/devflows-digests
           merge-multiple: true
 
@@ -519,6 +528,6 @@ jobs:
           IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_SHA_TAG_ENABLED: ${{ inputs.image-sha-tag-enabled }}
           IMAGE_SHA_TAG_PREFIX: ${{ inputs.image-sha-tag-prefix }}
-          IMAGE_TAG: ${{ inputs.image-tag }}
+          IMAGE_TAGS: ${{ inputs.image-tags }}
           SOURCE_SHA: ${{ github.sha }}
         run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/merge-manifest.py"
