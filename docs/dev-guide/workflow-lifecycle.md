@@ -1,12 +1,18 @@
 # Workflow Lifecycle
 
-Promoting a workflow means turning a draft or new idea into a versioned,
-documented, tested reusable workflow.
+Promoting a workflow means turning a new idea into a versioned, documented,
+tested reusable workflow. For a full worked walkthrough of creating one, see
+{doc}`add-a-workflow`; this page describes the states and design rules that
+walkthrough implements.
 
 ## Lifecycle States
 
-Draft : A workflow under `workflows/_drafts`. Drafts can be incomplete,
-inherited, or experimental. They are not part of the public catalog.
+Draft : Not a live state today. A workflow placed under a `workflows/_drafts/`
+directory would be excluded from the default catalog and loadable only with
+`devflows validate --include-drafts`. No such directory exists — new workflows
+are authored directly under `workflows/<workflow-id>/` and reviewed before their
+first release. The status values below apply to workflows already in the
+catalog.
 
 Active : A workflow under `workflows/<workflow-id>` with `status: active` in
 `devflow.yaml`. Active workflows are synced, documented, tested, and released.
@@ -22,7 +28,7 @@ Use this status sparingly and document expectations clearly.
 Before promoting a workflow:
 
 1. Choose a stable workflow ID.
-2. Move or create `workflows/<workflow-id>/workflow.yaml`.
+2. Create `workflows/<workflow-id>/workflow.yaml`.
 3. Add `workflows/<workflow-id>/devflow.yaml`.
 4. Define a clean v1 domain input, secret, output, and permission interface.
 5. Pin upstream actions to exact commit SHAs where practical, with version
@@ -62,8 +68,9 @@ permissions.
 Use defaults in `on.workflow_call.inputs.default` when GitHub supports them.
 This keeps usage sites simple and makes generated docs more accurate.
 
-Avoid aliases for unpublished draft names. Draft interfaces can change before
-the first release.
+The interface can still change before a workflow's first release; there are no
+published tags yet, so early breaking changes are cheap. Firm the interface up
+before cutting the first release.
 
 ## Workflow Implementation
 
@@ -93,7 +100,34 @@ gone).
 Declare which jobs receive the materialize step in the `io` block. `io.job` is
 the primary runner job that runs the domain scripts; any additional job that
 also needs the scripts is listed under `io.runtime-jobs`. Only those jobs may
-reference `${DEVFLOWS_SCRIPT_ROOT}` (sync/validate enforces this).
+reference `${DEVFLOWS_SCRIPT_ROOT}` (sync/validate enforces this). Each job's
+materialize step inlines **only** the scripts that job references, so a shared
+module is not duplicated into every job — this per-job slicing keeps generated
+workflows small.
+
+### Inlined Scripts Must Be ASCII
+
+Because a materialized script is emitted as a YAML block literal, its bytes must
+be ASCII. `devflows sync` rejects any inlined script containing a non-ASCII
+character (`publish.py`, `_materialize_step`), pointing at the offending line. A
+single non-ASCII byte makes the YAML dumper collapse the whole `run:` block into
+one escaped double-quoted scalar; GitHub's workflow parser rejects that form
+with a startup failure even though actionlint accepts it, so the breakage is
+invisible to `task lint` and only surfaces on a hosted run. Replace non-ASCII
+characters (for example an em-dash with `--`) in scripts you inline.
+
+### Generated-Workflow Size Cap
+
+Generation also enforces a hard byte cap on every generated workflow file:
+`MAX_GENERATED_WORKFLOW_BYTES = 115_000` (`publish.py`), applied to both the
+published catalog workflows and the generated scenario workflows. GitHub rejects
+an oversized workflow at startup with an opaque "workflow file issue" (zero
+jobs) error that neither actionlint nor `task lint` catches — they parse the
+file fine, so the failure only shows up on a hosted run. Checking the rendered
+byte count at sync time turns that invisible failure into a loud local
+generation error. If a workflow approaches the cap, shrink or split it (split a
+shared script module so each job inlines only the slice it needs) rather than
+raising the cap.
 
 ## Generated Outputs
 
@@ -105,4 +139,8 @@ pixi run -- devflows docs
 pixi run -- devflows test-generate
 ```
 
-`task lint` verifies these generated files are current.
+`sync` writes `.github/workflows/<id>.yaml`; `test-generate` writes the
+per-workflow scenario files `.github/workflows/devflows-scenarios-<id>.yaml` and
+(when the workflow has local scenarios) `devflows-scenarios-<id>.local.yaml` —
+one pair per workflow, not a single monolithic scenario file. `task lint`
+verifies all of these generated files are current.
