@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/docs-build.yaml
     with:
       docs-tool: sphinx
-      docs-environment: container
+      docs-env-manager: container
       container-image: sphinxdoc/sphinx:8.1.3
       sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
       docs-output-directory: .devflows-test/docs-build/sphinx-container-artifact/site
@@ -67,7 +67,7 @@ jobs:
     uses: ./.github/workflows/docs-build.yaml
     with:
       docs-tool: mkdocs
-      docs-environment: uv
+      docs-env-manager: uv
       docs-working-directory: tests/scenarios/docs-build/mkdocs-uv
       uv-sync-groups: |
         docs
@@ -117,7 +117,7 @@ jobs:
     uses: ./.github/workflows/docs-build.yaml
     with:
       docs-tool: sphinx
-      docs-environment: micromamba
+      docs-env-manager: micromamba
       micromamba-environment-file: tests/scenarios/docs-build/sphinx-micromamba/environment.yml
       sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
       docs-output-directory: .devflows-test/docs-build/sphinx-micromamba/site
@@ -164,7 +164,7 @@ jobs:
     uses: ./.github/workflows/docs-build.yaml
     with:
       docs-tool: sphinx
-      docs-environment: pip
+      docs-env-manager: pip
       pip-install-targets: |
         sphinx
       sphinx-source-directory: tests/scenarios/docs-build/sphinx-site
@@ -209,7 +209,7 @@ jobs:
         env:
           DEVFLOWS_VALIDATE_SCRIPT: workflows/docs-build/scripts/validate-inputs.py
           DOCS_TOOL: mkdocs
-          DOCS_ENVIRONMENT: uv
+          DOCS_ENV_MANAGER: uv
           DOCS_BUILD_COMMAND: ''
           DOCS_WORKING_DIRECTORY: .
           DOCS_OUTPUT_DIRECTORY: _site
@@ -242,7 +242,7 @@ jobs:
         env:
           DEVFLOWS_VALIDATE_SCRIPT: workflows/docs-build/scripts/validate-inputs.py
           DOCS_TOOL: sphinx
-          DOCS_ENVIRONMENT: container
+          DOCS_ENV_MANAGER: container
           DOCS_BUILD_COMMAND: ''
           DOCS_WORKING_DIRECTORY: .
           DOCS_OUTPUT_DIRECTORY: _site

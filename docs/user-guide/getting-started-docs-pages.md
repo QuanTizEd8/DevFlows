@@ -65,7 +65,7 @@ jobs:
     uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/vX.Y.Z
     with:
       docs-tool: sphinx
-      docs-environment: pip
+      docs-env-manager: pip
       pip-install-targets: |
         sphinx
         furo
@@ -97,7 +97,7 @@ rename it.
 
 ## Choosing a Build Environment
 
-`docs-environment` is required (there is no safe silent default). `docs-build`
+`docs-env-manager` is required (there is no safe silent default). `docs-build`
 supports five strategies — `pixi`, `uv`, `pip`, `micromamba`, and `container` —
 and silently ignores inputs of the non-selected group, so one call site can
 template several modes. A few useful knobs:

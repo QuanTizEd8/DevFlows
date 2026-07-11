@@ -60,7 +60,7 @@ def _pip_install(working_dir: Path) -> list[str]:
 
 
 def main() -> int:
-    environment = os.environ.get("DOCS_ENVIRONMENT", "").strip()
+    environment = os.environ.get("DOCS_ENV_MANAGER", "").strip()
     working_dir = _working_directory()
     if environment == "uv":
         command = _uv_sync(working_dir)

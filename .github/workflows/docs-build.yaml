@@ -8,7 +8,7 @@ name: '[Reusable]: Build Documentation'
         type: string
         required: false
         default: sphinx
-      docs-environment:
+      docs-env-manager:
         description: "Environment strategy for the build; one of 'pixi', 'uv', 'pip', 'container', or 'micromamba'. Required \u2014 the environment is the core decision and there is no safe silent default. Inputs of the non-selected environment groups are ignored."
         type: string
         required: true
@@ -158,27 +158,27 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: true
       container-image:
-        description: Image reference ([registry/]name[:tag][@digest]) that provides the docs toolchain in container mode; syntactically validated and required when docs-environment is 'container'. Runs via 'docker run --rm' with the workspace mounted and --user uid:gid. Pin tags or digests for reproducibility.
+        description: Image reference ([registry/]name[:tag][@digest]) that provides the docs toolchain in container mode; syntactically validated and required when docs-env-manager is 'container'. Runs via 'docker run --rm' with the workspace mounted and --user uid:gid. Pin tags or digests for reproducibility.
         type: string
         required: false
         default: ''
-      container-login-enabled:
-        description: "Whether to docker-login to container-registry before pulling. When true the container-password secret is required (validated \u2014 no silent github.token fallback, since this workflow holds no packages permission)."
+      docker-login-enabled:
+        description: "Whether to docker-login to docker-registry before pulling. When true the docker-password secret is required (validated \u2014 no silent github.token fallback, since this workflow holds no packages permission)."
         type: boolean
         required: false
         default: false
-      container-registry:
+      docker-registry:
         description: Registry hostname for the optional docker login. Leave default for GHCR; empty means Docker Hub.
         type: string
         required: false
         default: ghcr.io
-      container-username:
+      docker-username:
         description: Username for the optional docker login.
         type: string
         required: false
         default: ${{ github.repository_owner }}
       micromamba-environment-file:
-        description: Conda/mamba environment file (e.g. environment.yml) installed by setup-micromamba in micromamba mode; required when docs-environment is 'micromamba'. The build runs via 'micromamba run' in the created environment, which must provide the docs toolchain.
+        description: Conda/mamba environment file (e.g. environment.yml) installed by setup-micromamba in micromamba mode; required when docs-env-manager is 'micromamba'. The build runs via 'micromamba run' in the created environment, which must provide the docs toolchain.
         type: string
         required: false
         default: ''
@@ -403,8 +403,8 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: true
     secrets:
-      container-password:
-        description: Registry password/token for the optional docker login in container mode. Required when container-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
+      docker-password:
+        description: Registry password/token for the optional docker login in container mode. Required when docker-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
         required: false
       checkout-token:
         description: Token used by actions/checkout. Defaults to github.token.
@@ -551,7 +551,7 @@ jobs:
 
           def main() -> int:
               tool = _text("DOCS_TOOL").strip()
-              environment = _text("DOCS_ENVIRONMENT").strip()
+              environment = _text("DOCS_ENV_MANAGER").strip()
               build_command = _text("DOCS_BUILD_COMMAND").strip()
               working_directory = _text("DOCS_WORKING_DIRECTORY")
               output_directory = _text("DOCS_OUTPUT_DIRECTORY").strip()
@@ -591,7 +591,7 @@ jobs:
                   raise SystemExit(f"docs-tool must be one of {sorted(_TOOLS)}, got {tool!r}.")
               if environment not in _ENVIRONMENTS:
                   raise SystemExit(
-                      f"docs-environment must be one of {sorted(_ENVIRONMENTS)}, got {environment!r}."
+                      f"docs-env-manager must be one of {sorted(_ENVIRONMENTS)}, got {environment!r}."
                   )
 
               # -- output directory is required and must not be empty or escape ---------
@@ -655,7 +655,7 @@ jobs:
                           f"container-image is not a valid image reference: {image!r}. "
                           "Expected [registry/]name[:tag][@digest]."
                       )
-                  # NOTE: the container-login-enabled/container-password consistency check
+                  # NOTE: the docker-login-enabled/docker-password consistency check
                   # lives in a dedicated workflow step (see workflow.yaml) rather than here,
                   # because it depends on the secret. Keeping this validate step's env
                   # inputs-only lets the expect: validation-failure harness reconstruct it.
@@ -739,7 +739,7 @@ jobs:
 
 
           def main() -> int:
-              environment = os.environ.get("DOCS_ENVIRONMENT", "").strip()
+              environment = os.environ.get("DOCS_ENV_MANAGER", "").strip()
               working_dir = _working_directory()
               if environment == "uv":
                   command = _uv_sync(working_dir)
@@ -868,7 +868,7 @@ jobs:
                       image,
                       *inner,
                   ]
-              raise SystemExit(f"Unsupported docs-environment: {environment!r}.")
+              raise SystemExit(f"Unsupported docs-env-manager: {environment!r}.")
 
 
           def _trusted_command_inner(command: str) -> list[str]:
@@ -878,7 +878,7 @@ jobs:
           def main() -> int:
               mode = os.environ.get("DOCS_BUILD_MODE", "build").strip()
               tool = os.environ.get("DOCS_TOOL", "").strip()
-              environment = os.environ.get("DOCS_ENVIRONMENT", "").strip()
+              environment = os.environ.get("DOCS_ENV_MANAGER", "").strip()
               build_command = os.environ.get("DOCS_BUILD_COMMAND", "").strip()
               warnings_as_errors = _bool("DOCS_WARNINGS_AS_ERRORS")
 
@@ -953,7 +953,7 @@ jobs:
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DOCS_TOOL: ${{ inputs.docs-tool }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_BUILD_COMMAND: ${{ inputs.docs-build-command }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
@@ -974,7 +974,7 @@ jobs:
         shell: bash
         run: python "${DEVFLOWS_SCRIPT_ROOT}/docs-build/validate-inputs.py"
       - name: Set up pixi
-        if: inputs.docs-environment == 'pixi'
+        if: inputs.docs-env-manager == 'pixi'
         uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f  # v0.10.0
         with:
           pixi-version: ${{ inputs.pixi-version }}
@@ -986,7 +986,7 @@ jobs:
           cache: ${{ inputs.pixi-cache-enabled }}
           cache-key: ${{ inputs.pixi-cache-key }}
       - name: Set up uv
-        if: inputs.docs-environment == 'uv'
+        if: inputs.docs-env-manager == 'uv'
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
         with:
           version: ${{ inputs.uv-version }}
@@ -994,14 +994,14 @@ jobs:
           enable-cache: ${{ inputs.uv-cache-mode }}
           working-directory: ${{ inputs.docs-working-directory }}
       - name: Set up Python
-        if: inputs.docs-environment == 'pip'
+        if: inputs.docs-env-manager == 'pip'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: ${{ inputs.pip-python-version }}
           cache: ${{ (inputs.pip-cache-enabled && inputs.pip-requirements-file != '') && 'pip' || '' }}
           cache-dependency-path: ${{ inputs.pip-requirements-file }}
       - name: Set up micromamba
-        if: inputs.docs-environment == 'micromamba'
+        if: inputs.docs-env-manager == 'micromamba'
         uses: mamba-org/setup-micromamba@d7c9bd84e824b79d2af72a2d4196c7f4300d3476  # v3.0.0
         with:
           environment-file: ${{ inputs.micromamba-environment-file }}
@@ -1009,28 +1009,28 @@ jobs:
           cache-environment: ${{ inputs.micromamba-cache-enabled }}
           init-shell: bash
           micromamba-version: ${{ inputs.micromamba-version }}
-      - name: Require container-password when logging in
-        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+      - name: Require docker-password when logging in
+        if: inputs.docs-env-manager == 'container' && inputs.docker-login-enabled
         shell: bash
         env:
-          CONTAINER_PASSWORD: ${{ secrets.container-password }}
+          DOCKER_PASSWORD: ${{ secrets.docker-password }}
         run: |
-          if [ -z "${CONTAINER_PASSWORD}" ]; then
-            echo "::error::container-login-enabled requires the container-password secret; it is unset."
+          if [ -z "${DOCKER_PASSWORD}" ]; then
+            echo "::error::docker-login-enabled requires the docker-password secret; it is unset."
             exit 1
           fi
       - name: Log in to container registry
-        if: inputs.docs-environment == 'container' && inputs.container-login-enabled
+        if: inputs.docs-env-manager == 'container' && inputs.docker-login-enabled
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
-          registry: ${{ inputs.container-registry }}
-          username: ${{ inputs.container-username }}
-          password: ${{ secrets.container-password }}
+          registry: ${{ inputs.docker-registry }}
+          username: ${{ inputs.docker-username }}
+          password: ${{ secrets.docker-password }}
       - name: Install documentation dependencies
-        if: inputs.docs-environment == 'uv' || inputs.docs-environment == 'pip'
+        if: inputs.docs-env-manager == 'uv' || inputs.docs-env-manager == 'pip'
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           UV_SYNC_LOCKED: ${{ inputs.uv-sync-locked }}
           UV_SYNC_GROUPS: ${{ inputs.uv-sync-groups }}
@@ -1046,7 +1046,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DOCS_BUILD_MODE: build
           DOCS_TOOL: ${{ inputs.docs-tool }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_BUILD_COMMAND: ${{ inputs.docs-build-command }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
@@ -1067,7 +1067,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           DOCS_BUILD_MODE: linkcheck
           DOCS_TOOL: ${{ inputs.docs-tool }}
-          DOCS_ENVIRONMENT: ${{ inputs.docs-environment }}
+          DOCS_ENV_MANAGER: ${{ inputs.docs-env-manager }}
           DOCS_WORKING_DIRECTORY: ${{ inputs.docs-working-directory }}
           DOCS_OUTPUT_DIRECTORY: ${{ inputs.docs-output-directory }}
           SPHINX_SOURCE_DIRECTORY: ${{ inputs.sphinx-source-directory }}

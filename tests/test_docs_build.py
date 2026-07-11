@@ -29,7 +29,7 @@ def _load_script(name: str) -> ModuleType:
 def _validate_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
     base = {
         "DOCS_TOOL": "sphinx",
-        "DOCS_ENVIRONMENT": "pip",
+        "DOCS_ENV_MANAGER": "pip",
         "DOCS_BUILD_COMMAND": "",
         "DOCS_WORKING_DIRECTORY": ".",
         "DOCS_OUTPUT_DIRECTORY": "_site",
@@ -45,7 +45,7 @@ def _validate_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "PIXI_FROZEN": "false",
         "MICROMAMBA_ENVIRONMENT_FILE": "",
         "CONTAINER_IMAGE": "",
-        "CONTAINER_LOGIN_ENABLED": "false",
+        "DOCKER_LOGIN_ENABLED": "false",
         "PAGES_ARTIFACT_ENABLED": "false",
         "PAGES_ARTIFACT_NAME": "github-pages",
         "GITHUB_WORKSPACE": str(tmp_path),
@@ -98,15 +98,15 @@ def test_validate_emits_linkcheck_and_pages_outputs(monkeypatch, tmp_path) -> No
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"DOCS_ENVIRONMENT": "uv", "UV_CACHE_MODE": "true", "PIP_INSTALL_TARGETS": ""},
-        {"DOCS_ENVIRONMENT": "pixi", "PIP_INSTALL_TARGETS": ""},
+        {"DOCS_ENV_MANAGER": "uv", "UV_CACHE_MODE": "true", "PIP_INSTALL_TARGETS": ""},
+        {"DOCS_ENV_MANAGER": "pixi", "PIP_INSTALL_TARGETS": ""},
         {
-            "DOCS_ENVIRONMENT": "micromamba",
+            "DOCS_ENV_MANAGER": "micromamba",
             "MICROMAMBA_ENVIRONMENT_FILE": "env.yml",
             "PIP_INSTALL_TARGETS": "",
         },
         {
-            "DOCS_ENVIRONMENT": "container",
+            "DOCS_ENV_MANAGER": "container",
             "CONTAINER_IMAGE": "ghcr.io/org/docs:1",
             "PIP_INSTALL_TARGETS": "",
         },
@@ -122,7 +122,7 @@ def test_validate_accepts_valid_combinations(monkeypatch, tmp_path, overrides) -
     ("overrides", "message"),
     [
         ({"DOCS_TOOL": "flatdoc"}, "docs-tool must be one of"),
-        ({"DOCS_ENVIRONMENT": "conda"}, "docs-environment must be one of"),
+        ({"DOCS_ENV_MANAGER": "conda"}, "docs-env-manager must be one of"),
         ({"DOCS_OUTPUT_DIRECTORY": ""}, "docs-output-directory must not be empty"),
         ({"DOCS_OUTPUT_DIRECTORY": "../escape"}, "GITHUB_WORKSPACE"),
         ({"DOCS_WORKING_DIRECTORY": "../escape"}, "GITHUB_WORKSPACE"),
@@ -145,16 +145,16 @@ def test_validate_accepts_valid_combinations(monkeypatch, tmp_path, overrides) -
             "docs-linkcheck-enabled requires docs-tool sphinx",
         ),
         (
-            {"DOCS_ENVIRONMENT": "uv", "UV_CACHE_MODE": "sometimes", "PIP_INSTALL_TARGETS": ""},
+            {"DOCS_ENV_MANAGER": "uv", "UV_CACHE_MODE": "sometimes", "PIP_INSTALL_TARGETS": ""},
             "uv-cache-mode must be one of",
         ),
         (
-            {"DOCS_ENVIRONMENT": "pip", "PIP_INSTALL_TARGETS": "", "PIP_REQUIREMENTS_FILE": ""},
+            {"DOCS_ENV_MANAGER": "pip", "PIP_INSTALL_TARGETS": "", "PIP_REQUIREMENTS_FILE": ""},
             "pip mode requires",
         ),
         (
             {
-                "DOCS_ENVIRONMENT": "pixi",
+                "DOCS_ENV_MANAGER": "pixi",
                 "PIXI_LOCKED": "true",
                 "PIXI_FROZEN": "true",
                 "PIP_INSTALL_TARGETS": "",
@@ -163,19 +163,19 @@ def test_validate_accepts_valid_combinations(monkeypatch, tmp_path, overrides) -
         ),
         (
             {
-                "DOCS_ENVIRONMENT": "micromamba",
+                "DOCS_ENV_MANAGER": "micromamba",
                 "MICROMAMBA_ENVIRONMENT_FILE": "",
                 "PIP_INSTALL_TARGETS": "",
             },
             "micromamba mode requires",
         ),
         (
-            {"DOCS_ENVIRONMENT": "container", "CONTAINER_IMAGE": "", "PIP_INSTALL_TARGETS": ""},
+            {"DOCS_ENV_MANAGER": "container", "CONTAINER_IMAGE": "", "PIP_INSTALL_TARGETS": ""},
             "container mode requires container-image",
         ),
         (
             {
-                "DOCS_ENVIRONMENT": "container",
+                "DOCS_ENV_MANAGER": "container",
                 "CONTAINER_IMAGE": "bad image!",
                 "PIP_INSTALL_TARGETS": "",
             },
@@ -201,15 +201,15 @@ def test_validate_rejects_bad_combinations(monkeypatch, tmp_path, overrides, mes
 
 
 def test_validate_container_login_ignores_password(monkeypatch, tmp_path) -> None:
-    # The container-login-enabled/container-password consistency check now lives in
+    # The docker-login-enabled/docker-password consistency check now lives in
     # a workflow step (it depends on the secret), so validate-inputs.py accepts a
-    # login-enabled container call and no longer reads CONTAINER_PASSWORD_SET.
+    # login-enabled container call and no longer reads DOCKER_PASSWORD_SET.
     _run_validate(
         monkeypatch,
         tmp_path,
-        DOCS_ENVIRONMENT="container",
+        DOCS_ENV_MANAGER="container",
         CONTAINER_IMAGE="ghcr.io/org/docs:1",
-        CONTAINER_LOGIN_ENABLED="true",
+        DOCKER_LOGIN_ENABLED="true",
         PIP_INSTALL_TARGETS="",
     )
 
@@ -246,7 +246,7 @@ def test_validate_fails_fast_when_github_workspace_unset(monkeypatch, tmp_path) 
 # --------------------------------------------------------------------------- #
 def _install_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
     base = {
-        "DOCS_ENVIRONMENT": "uv",
+        "DOCS_ENV_MANAGER": "uv",
         "DOCS_WORKING_DIRECTORY": ".",
         "UV_SYNC_LOCKED": "true",
         "UV_SYNC_GROUPS": "",
@@ -300,7 +300,7 @@ def test_install_pip_builds_argv(monkeypatch, tmp_path) -> None:
     command = _capture_install(
         monkeypatch,
         tmp_path,
-        DOCS_ENVIRONMENT="pip",
+        DOCS_ENV_MANAGER="pip",
         PIP_REQUIREMENTS_FILE="requirements.txt",
         PIP_INSTALL_TARGETS=".[docs]\nfuro",
     )
@@ -312,7 +312,7 @@ def test_install_pip_builds_argv(monkeypatch, tmp_path) -> None:
 
 def test_install_pip_requires_something(monkeypatch, tmp_path) -> None:
     module = _load_script("install-environment.py")
-    for key, value in _install_env(tmp_path, DOCS_ENVIRONMENT="pip").items():
+    for key, value in _install_env(tmp_path, DOCS_ENV_MANAGER="pip").items():
         monkeypatch.setenv(key, value)
     with pytest.raises(SystemExit) as excinfo:
         module.main()
@@ -321,7 +321,7 @@ def test_install_pip_requires_something(monkeypatch, tmp_path) -> None:
 
 def test_install_rejects_non_uv_pip_environment(monkeypatch, tmp_path) -> None:
     module = _load_script("install-environment.py")
-    for key, value in _install_env(tmp_path, DOCS_ENVIRONMENT="container").items():
+    for key, value in _install_env(tmp_path, DOCS_ENV_MANAGER="container").items():
         monkeypatch.setenv(key, value)
     with pytest.raises(SystemExit) as excinfo:
         module.main()
@@ -462,7 +462,7 @@ def _run_docs_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
     base = {
         "DOCS_BUILD_MODE": "build",
         "DOCS_TOOL": "sphinx",
-        "DOCS_ENVIRONMENT": "pip",
+        "DOCS_ENV_MANAGER": "pip",
         "DOCS_BUILD_COMMAND": "",
         "DOCS_WORKING_DIRECTORY": ".",
         "DOCS_OUTPUT_DIRECTORY": "_site",
@@ -549,9 +549,9 @@ def test_interface_applies_convention_renames() -> None:
     assert "uv-cache-mode" in inputs and "uv-cache-enabled" not in inputs
     # bare python-version -> pip-python-version
     assert "pip-python-version" in inputs and "python-version" not in inputs
-    # container-registry-username -> container-username; default is repository owner
-    assert "container-username" in inputs and "container-registry-username" not in inputs
-    assert inputs["container-username"]["default"] == "${{ github.repository_owner }}"
+    # registry auth uses the catalog-standard docker-* prefix; default is repo owner
+    assert "docker-username" in inputs and "container-username" not in inputs
+    assert inputs["docker-username"]["default"] == "${{ github.repository_owner }}"
     # uv-cache-mode is a string enum defaulting to auto
     assert inputs["uv-cache-mode"]["type"] == "string"
     assert inputs["uv-cache-mode"]["default"] == "auto"
@@ -579,8 +579,8 @@ def test_interface_has_no_writeback_channel() -> None:
 
 def test_interface_secret_and_outputs() -> None:
     call = _docs_build_call()
-    assert "container-password" in call["secrets"]
-    assert "container-registry-password" not in call["secrets"]
+    assert "docker-password" in call["secrets"]
+    assert "container-password" not in call["secrets"]
     assert set(call["outputs"]) == {
         "pages-artifact-name",
         "pages-artifact-id",
@@ -591,7 +591,7 @@ def test_interface_secret_and_outputs() -> None:
 
 def test_interface_environment_required() -> None:
     inputs = _docs_build_call()["inputs"]
-    assert inputs["docs-environment"]["required"] is True
+    assert inputs["docs-env-manager"]["required"] is True
     assert inputs["pages-artifact-name"]["default"] == "github-pages"
 
 
@@ -601,15 +601,15 @@ def _docs_build_steps() -> list[dict]:
 
 
 def test_require_container_password_step_shape() -> None:
-    # The container-login-enabled/container-password consistency check moved out of
+    # The docker-login-enabled/docker-password consistency check moved out of
     # validate-inputs.py (to keep the validate step reconstructable) into this
     # dedicated workflow step; pin its if-condition, secret env binding, and that it
     # exits nonzero when the password is unset.
-    guard_name = "Require container-password when logging in"
+    guard_name = "Require docker-password when logging in"
     step = next(s for s in _docs_build_steps() if s.get("name") == guard_name)
-    assert step["if"] == "inputs.docs-environment == 'container' && inputs.container-login-enabled"
-    assert step["env"]["CONTAINER_PASSWORD"] == "${{ secrets.container-password }}"
-    assert 'if [ -z "${CONTAINER_PASSWORD}" ]' in step["run"]
+    assert step["if"] == "inputs.docs-env-manager == 'container' && inputs.docker-login-enabled"
+    assert step["env"]["DOCKER_PASSWORD"] == "${{ secrets.docker-password }}"
+    assert 'if [ -z "${DOCKER_PASSWORD}" ]' in step["run"]
     assert "exit 1" in step["run"]
     # The guard precedes the docker login step so no login runs without a password.
     names = [s.get("name", "") for s in _docs_build_steps()]

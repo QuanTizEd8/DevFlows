@@ -108,7 +108,7 @@ def wrap_in_environment(
             image,
             *inner,
         ]
-    raise SystemExit(f"Unsupported docs-environment: {environment!r}.")
+    raise SystemExit(f"Unsupported docs-env-manager: {environment!r}.")
 
 
 def _trusted_command_inner(command: str) -> list[str]:
@@ -118,7 +118,7 @@ def _trusted_command_inner(command: str) -> list[str]:
 def main() -> int:
     mode = os.environ.get("DOCS_BUILD_MODE", "build").strip()
     tool = os.environ.get("DOCS_TOOL", "").strip()
-    environment = os.environ.get("DOCS_ENVIRONMENT", "").strip()
+    environment = os.environ.get("DOCS_ENV_MANAGER", "").strip()
     build_command = os.environ.get("DOCS_BUILD_COMMAND", "").strip()
     warnings_as_errors = _bool("DOCS_WARNINGS_AS_ERRORS")
 

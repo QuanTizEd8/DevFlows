@@ -13,7 +13,7 @@ jobs:
     uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/v0.1.0
     with:
       docs-tool: mkdocs
-      docs-environment: pip
+      docs-env-manager: pip
       pip-install-targets: |
         mkdocs-material
       mkdocs-config-file: mkdocs.yml
