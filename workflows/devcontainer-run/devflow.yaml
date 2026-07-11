@@ -47,8 +47,10 @@ notes:
     image's devcontainer.metadata label - features, onCreate/postCreate/postStart
     hooks, remoteUser, and containerEnv - automatically, so a bare
     {"image": "<ref>"} config gets the whole treatment. The resolved config must
-    yield an "image"; a devcontainer-config-file that only carries a Dockerfile
-    build is rejected loudly rather than silently rebuilt.
+    yield an "image": devcontainer-image (or the config-file's own "image") wins,
+    and any build recipe the config-file also carries (build / dockerFile /
+    dockerComposeFile) is stripped so `up` pulls rather than builds. A config-file
+    that yields no image at all is rejected loudly rather than silently rebuilt.
   - >-
     Pairs with build-devcontainer: its images already carry the
     devcontainer.metadata label (devcontainers/ci runs `devcontainer build`,
@@ -66,6 +68,16 @@ notes:
     intended, contained behavior. run-command's exit code becomes the step's exit
     code, so a failing command can never silently pass.
   - >-
+    The caller owns the container's capabilities: the image, the
+    devcontainer-config-file (its features, mounts, runArgs, privileged,
+    remoteUser), and the run-command are all caller-supplied, so devcontainer-run
+    grants the caller nothing beyond what they already provide. Those capabilities
+    are bounded by the run job's least-privilege token - contents: read and
+    packages: read, with no write scope and no id-token - on an ephemeral runner,
+    so even a fully privileged container cannot write the repository or mint an
+    OIDC token. Supply only images and configs you trust, exactly as you would a
+    build step.
+  - >-
     The image must contain a POSIX shell (/bin/sh): `devcontainer up` overrides
     the entrypoint with a /bin/sh keep-alive loop and `exec` runs the command
     through it, so a distroless image with no shell cannot be kept alive or run.
@@ -79,10 +91,12 @@ notes:
   - >-
     A private image needs registry auth: set docker-login-enabled and provide
     docker-password (or rely on the ghcr.io-only github.token fallback, which
-    needs packages: read). The pull rides docker's ambient credentials, so login
-    happens before pull and `up`. The github.token fallback is restricted to
-    ghcr.io; any other registry without an explicit docker-password fails in the
-    validate job.
+    needs packages: read). docker-login-enabled defaults false (build-devcontainer
+    defaults true) because a run usually pulls a public or ghcr.io image that needs
+    no explicit login; enable it only for a private image. The pull rides docker's
+    ambient credentials, so login happens before pull and `up`. The github.token
+    fallback is restricted to ghcr.io; any other registry without an explicit
+    docker-password fails in the validate job.
   - >-
     Cleanup is a separate if: always() step (there is no `devcontainer down`), so
     a container left behind by a failed `up` is still removed. Files the command

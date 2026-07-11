@@ -24,7 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import dcrun
+import dcrun_run
 
 
 def main() -> int:
@@ -40,7 +40,7 @@ def main() -> int:
         return 0
 
     completed = subprocess.run(  # noqa: PLW1510
-        dcrun.build_cleanup_ids_command(id_label),
+        dcrun_run.build_cleanup_ids_command(id_label),
         stdout=subprocess.PIPE,
         text=True,
     )
@@ -61,8 +61,8 @@ def main() -> int:
 def _shred_secret_files() -> None:
     """Overwrite and unlink the run-secrets files, if run-devcontainer.py wrote them."""
     runner_temp = Path(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())
-    for path in dcrun.secret_file_paths(runner_temp):
-        if dcrun.shred_file(path):
+    for path in dcrun_run.secret_file_paths(runner_temp):
+        if dcrun_run.shred_file(path):
             print(f"Shredded secret file {path.name}.")
 
 

@@ -1,11 +1,11 @@
 """Unit tests for the devcontainer-run workflow scripts and interface.
 
-Covers dcrun.py (every validation branch, config synthesis, argv assembly,
-up-JSON parsing, cleanup command, JSONC parsing), run-devcontainer.py and
-cleanup.py (subprocess argv, output emission, exit-code propagation, up-error
-handling), validate-inputs.py / check-registry-auth.py, the published-workflow
-interface snapshot, injection-safety of the generated run: blocks, the size cap,
-and the Renovate @devcontainers/cli pin manager.
+Covers dcrun.py (every validation branch), dcrun_run.py (config synthesis, argv
+assembly, up-JSON parsing, cleanup command, JSONC parsing, run-secrets parsing),
+run-devcontainer.py and cleanup.py (subprocess argv, output emission, exit-code
+propagation, up-error handling), validate-inputs.py / check-registry-auth.py, the
+published-workflow interface snapshot, injection-safety of the generated run:
+blocks, the size cap, and the Renovate @devcontainers/cli pin manager.
 """
 
 from __future__ import annotations
@@ -32,14 +32,17 @@ from devflows.publish import (
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT_DIR = REPO / "workflows" / "devcontainer-run" / "scripts"
 
-# The workflow scripts import their sibling dcrun module (materialized next to
-# them at run time); make it importable here too. The module is named dcrun (not
-# the generic "common") so it never collides with another workflow's shared
-# module when the whole test suite shares one interpreter.
+# The workflow scripts import their sibling dcrun / dcrun_run modules
+# (materialized next to them at run time); make them importable here too. The
+# modules are named dcrun / dcrun_run (not the generic "common") so they never
+# collide with another workflow's shared module when the whole test suite shares
+# one interpreter. dcrun is the validation core (inlined by both jobs); dcrun_run
+# is the run-only config-synthesis/argv/secrets half (inlined only by the run job).
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import dcrun  # type: ignore  # noqa: E402
+import dcrun_run  # type: ignore  # noqa: E402
 
 
 def _load_script(name: str) -> ModuleType:
@@ -392,7 +395,7 @@ def test_registry_auth_rejects_non_ghcr_without_password() -> None:
 # JSONC parsing                                                               #
 # --------------------------------------------------------------------------- #
 def test_parse_jsonc_plain_json() -> None:
-    assert dcrun.parse_jsonc('{"image": "alpine:3.20"}') == {"image": "alpine:3.20"}
+    assert dcrun_run.parse_jsonc('{"image": "alpine:3.20"}') == {"image": "alpine:3.20"}
 
 
 def test_parse_jsonc_with_comments_and_trailing_commas() -> None:
@@ -403,38 +406,38 @@ def test_parse_jsonc_with_comments_and_trailing_commas() -> None:
         "remoteUser": "root",
     }
     """
-    assert dcrun.parse_jsonc(text) == {"image": "alpine:3.20", "remoteUser": "root"}
+    assert dcrun_run.parse_jsonc(text) == {"image": "alpine:3.20", "remoteUser": "root"}
 
 
 def test_parse_jsonc_keeps_url_slashes_in_strings() -> None:
     # A // inside a string value must not be treated as a comment.
-    assert dcrun.parse_jsonc('{"image": "ghcr.io/o/i:1"}') == {"image": "ghcr.io/o/i:1"}
+    assert dcrun_run.parse_jsonc('{"image": "ghcr.io/o/i:1"}') == {"image": "ghcr.io/o/i:1"}
 
 
 # --------------------------------------------------------------------------- #
 # Config synthesis                                                            #
 # --------------------------------------------------------------------------- #
 def test_synthesize_minimal_config_from_image() -> None:
-    assert dcrun.synthesize_override_config(_config(image="alpine:3.20"), None) == {
+    assert dcrun_run.synthesize_override_config(_config(image="alpine:3.20"), None) == {
         "image": "alpine:3.20"
     }
 
 
 def test_synthesize_preserves_caller_config_and_overrides_image() -> None:
     caller = {"image": "old:1", "features": {"x": {}}, "postCreateCommand": "make"}
-    result = dcrun.synthesize_override_config(_config(image="new:2"), caller)
+    result = dcrun_run.synthesize_override_config(_config(image="new:2"), caller)
     assert result == {"image": "new:2", "features": {"x": {}}, "postCreateCommand": "make"}
 
 
 def test_synthesize_uses_caller_image_when_input_empty() -> None:
     caller = {"image": "from-config:1", "postStartCommand": "start"}
-    result = dcrun.synthesize_override_config(_config(image=""), caller)
+    result = dcrun_run.synthesize_override_config(_config(image=""), caller)
     assert result["image"] == "from-config:1"
     assert result["postStartCommand"] == "start"
 
 
 def test_synthesize_injects_remote_user() -> None:
-    result = dcrun.synthesize_override_config(
+    result = dcrun_run.synthesize_override_config(
         _config(image="alpine:3.20", remote_user="root"), None
     )
     assert result["remoteUser"] == "root"
@@ -443,8 +446,41 @@ def test_synthesize_injects_remote_user() -> None:
 def test_synthesize_rejects_config_without_image() -> None:
     caller = {"build": {"dockerfile": "Dockerfile"}}
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.synthesize_override_config(_config(image=""), caller)
+        dcrun_run.synthesize_override_config(_config(image=""), caller)
     assert "no image could be resolved" in str(excinfo.value)
+
+
+def test_synthesize_strips_build_recipe_keys_when_image_is_forced() -> None:
+    # A config-file that carries both a build recipe AND a resolvable image must run
+    # the image (never build): the build/dockerFile/dockerComposeFile keys are
+    # stripped so `devcontainer up` has no ambiguous recipe to fall into, while the
+    # config's features/hooks are preserved.
+    caller = {
+        "image": "prebuilt:1",
+        "build": {"dockerfile": "Dockerfile"},
+        "dockerFile": "Dockerfile",
+        "dockerComposeFile": "docker-compose.yml",
+        "features": {"ghcr.io/x/y": {}},
+        "postCreateCommand": "make",
+    }
+    result = dcrun_run.synthesize_override_config(_config(image=""), caller)
+    assert result["image"] == "prebuilt:1"
+    assert "build" not in result
+    assert "dockerFile" not in result
+    assert "dockerComposeFile" not in result
+    # Non-build config (features / lifecycle hooks) survives the strip.
+    assert result["features"] == {"ghcr.io/x/y": {}}
+    assert result["postCreateCommand"] == "make"
+
+
+def test_synthesize_rejects_malformed_config_file_image() -> None:
+    # devcontainer-image (the input) is regex-validated in the validate job, but an
+    # image taken from the config-file's own "image" field never passed that gate;
+    # synthesize applies the same syntactic check before it is pulled.
+    caller = {"image": "not a valid ref!!"}
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun_run.synthesize_override_config(_config(image=""), caller)
+    assert "not a valid reference" in str(excinfo.value)
 
 
 def test_load_caller_config_reads_workspace_file(tmp_path) -> None:
@@ -452,18 +488,18 @@ def test_load_caller_config_reads_workspace_file(tmp_path) -> None:
     (tmp_path / ".devcontainer" / "devcontainer.json").write_text(
         '{"image": "alpine:3.20"}', encoding="utf-8"
     )
-    result = dcrun.load_caller_config(tmp_path, ".devcontainer/devcontainer.json")
+    result = dcrun_run.load_caller_config(tmp_path, ".devcontainer/devcontainer.json")
     assert result == {"image": "alpine:3.20"}
 
 
 def test_load_caller_config_missing_file_errors(tmp_path) -> None:
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.load_caller_config(tmp_path, "missing/devcontainer.json")
+        dcrun_run.load_caller_config(tmp_path, "missing/devcontainer.json")
     assert "does not exist" in str(excinfo.value)
 
 
 def test_load_caller_config_none_when_unset(tmp_path) -> None:
-    assert dcrun.load_caller_config(tmp_path, "") is None
+    assert dcrun_run.load_caller_config(tmp_path, "") is None
 
 
 # --------------------------------------------------------------------------- #
@@ -477,7 +513,7 @@ _LABEL = "devflows.run=42-1"
 def test_cli_invocation_uses_pinned_npx() -> None:
     # The pinned CLI runs ephemerally via npx (the npm peer of uvx), never a
     # global npm install, so no ad-hoc package-install step reaches the workflow.
-    assert dcrun.cli_invocation(_config(cli_version="0.87.0")) == [
+    assert dcrun_run.cli_invocation(_config(cli_version="0.87.0")) == [
         "npx",
         "--yes",
         "@devcontainers/cli@0.87.0",
@@ -485,7 +521,7 @@ def test_cli_invocation_uses_pinned_npx() -> None:
 
 
 def test_build_up_argv_core_flags() -> None:
-    argv = dcrun.build_up_argv(_config(), _WS, _CFG, _LABEL)
+    argv = dcrun_run.build_up_argv(_config(), _WS, _CFG, _LABEL)
     assert argv[:3] == ["npx", "--yes", "@devcontainers/cli@0.87.0"]
     assert argv[3] == "up"
     assert argv[argv.index("--workspace-folder") + 1] == "/ws"
@@ -508,7 +544,7 @@ def test_build_up_argv_optional_flags() -> None:
         container_env=("CI=true", "TOKEN=x"),
         update_remote_user_uid="never",
     )
-    argv = dcrun.build_up_argv(config, _WS, _CFG, _LABEL)
+    argv = dcrun_run.build_up_argv(config, _WS, _CFG, _LABEL)
     assert "--skip-post-create" in argv
     assert argv[argv.index("--additional-features") + 1] == features
     assert argv[argv.index("--update-remote-user-uid-default") + 1] == "never"
@@ -517,7 +553,7 @@ def test_build_up_argv_optional_flags() -> None:
 
 
 def test_build_exec_argv_correlates_to_up_container() -> None:
-    argv = dcrun.build_exec_argv(_config(run_command="pytest -q"), _WS, _CFG, _LABEL)
+    argv = dcrun_run.build_exec_argv(_config(run_command="pytest -q"), _WS, _CFG, _LABEL)
     assert argv[:3] == ["npx", "--yes", "@devcontainers/cli@0.87.0"]
     assert argv[3] == "exec"
     # Same override-config and id-label as `up` so exec hits the one container.
@@ -528,19 +564,19 @@ def test_build_exec_argv_correlates_to_up_container() -> None:
 
 
 def test_build_exec_argv_passes_remote_env() -> None:
-    argv = dcrun.build_exec_argv(_config(container_env=("CI=true",)), _WS, _CFG, _LABEL)
+    argv = dcrun_run.build_exec_argv(_config(container_env=("CI=true",)), _WS, _CFG, _LABEL)
     assert argv[argv.index("--remote-env") + 1] == "CI=true"
 
 
 def test_build_exec_command_prepends_working_directory() -> None:
-    payload = dcrun.build_exec_command(
+    payload = dcrun_run.build_exec_command(
         _config(run_command="pytest", run_working_directory="pkg/sub")
     )
     assert payload == "cd pkg/sub && pytest"
 
 
 def test_build_exec_command_quotes_working_directory_with_spaces() -> None:
-    payload = dcrun.build_exec_command(_config(run_command="ls", run_working_directory="a dir"))
+    payload = dcrun_run.build_exec_command(_config(run_command="ls", run_working_directory="a dir"))
     assert payload == "cd 'a dir' && ls"
 
 
@@ -558,7 +594,7 @@ def test_build_exec_command_quotes_working_directory_with_spaces() -> None:
     ],
 )
 def test_run_command_stays_a_single_argv_token(command) -> None:
-    argv = dcrun.build_exec_argv(_config(run_command=command), _WS, _CFG, _LABEL)
+    argv = dcrun_run.build_exec_argv(_config(run_command=command), _WS, _CFG, _LABEL)
     # The command is delivered verbatim as the single -c payload; the shell in the
     # container interprets it, but the workflow never splits or re-expands it.
     assert argv[-3:] == [_config().run_shell, "-c", command]
@@ -569,62 +605,62 @@ def test_run_command_stays_a_single_argv_token(command) -> None:
 # run-secrets parsing                                                         #
 # --------------------------------------------------------------------------- #
 def test_parse_run_secrets_json_object_form() -> None:
-    parsed = dcrun.parse_run_secrets('{"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}')
+    parsed = dcrun_run.parse_run_secrets('{"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}')
     assert parsed == {"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}
 
 
 def test_parse_run_secrets_key_value_line_form() -> None:
     # Value is literal after the first '=' ('=' and ':' inside a value are fine).
-    parsed = dcrun.parse_run_secrets("API_TOKEN=abc\nDB_PASSWORD=p@ss=w:rd")
+    parsed = dcrun_run.parse_run_secrets("API_TOKEN=abc\nDB_PASSWORD=p@ss=w:rd")
     assert parsed == {"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}
 
 
 def test_parse_run_secrets_skips_blank_and_comment_lines() -> None:
-    parsed = dcrun.parse_run_secrets("\n# a comment\nA=1\n\n  # indented comment\nB=2\n")
+    parsed = dcrun_run.parse_run_secrets("\n# a comment\nA=1\n\n  # indented comment\nB=2\n")
     assert parsed == {"A": "1", "B": "2"}
 
 
 def test_parse_run_secrets_empty_is_empty_dict() -> None:
-    assert dcrun.parse_run_secrets("") == {}
-    assert dcrun.parse_run_secrets("   \n  ") == {}
+    assert dcrun_run.parse_run_secrets("") == {}
+    assert dcrun_run.parse_run_secrets("   \n  ") == {}
 
 
 def test_parse_run_secrets_empty_json_object() -> None:
-    assert dcrun.parse_run_secrets("{}") == {}
+    assert dcrun_run.parse_run_secrets("{}") == {}
 
 
 @pytest.mark.parametrize("token_key", ["github_token", "GITHUB_TOKEN"])
 def test_parse_run_secrets_drops_github_token(token_key) -> None:
     # A toJSON(secrets)+inherit bundle carries the Actions token; it must be dropped
     # so it is never injected into the user command.
-    parsed = dcrun.parse_run_secrets(f'{{"{token_key}": "ghs_xxx", "REAL": "v"}}')
+    parsed = dcrun_run.parse_run_secrets(f'{{"{token_key}": "ghs_xxx", "REAL": "v"}}')
     assert parsed == {"REAL": "v"}
-    line_form = dcrun.parse_run_secrets(f"{token_key}=ghs_xxx\nREAL=v")
+    line_form = dcrun_run.parse_run_secrets(f"{token_key}=ghs_xxx\nREAL=v")
     assert line_form == {"REAL": "v"}
 
 
 @pytest.mark.parametrize("key", ["1BAD", "has space", "has-dash", "a.b", ""])
 def test_parse_run_secrets_rejects_invalid_key(key) -> None:
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.parse_run_secrets(json.dumps({key: "v"}))
+        dcrun_run.parse_run_secrets(json.dumps({key: "v"}))
     assert "invalid environment variable name" in str(excinfo.value)
 
 
 def test_parse_run_secrets_rejects_control_char_in_key() -> None:
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.parse_run_secrets(json.dumps({"A\x01B": "v"}))
+        dcrun_run.parse_run_secrets(json.dumps({"A\x01B": "v"}))
     assert "control character" in str(excinfo.value)
 
 
 def test_parse_run_secrets_rejects_non_string_value() -> None:
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.parse_run_secrets('{"A": 123}')
+        dcrun_run.parse_run_secrets('{"A": 123}')
     assert "must be a string" in str(excinfo.value)
 
 
 def test_parse_run_secrets_line_without_equals_is_rejected() -> None:
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.parse_run_secrets("NOEQUALS")
+        dcrun_run.parse_run_secrets("NOEQUALS")
     assert "no '='" in str(excinfo.value)
 
 
@@ -633,7 +669,7 @@ def test_parse_run_secrets_bad_json_error_does_not_leak_value() -> None:
     # chaining the json decoder's message (which would quote the raw text).
     secret_material = "s3cr3t-do-not-leak"
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.parse_run_secrets('{"A": "' + secret_material)  # unterminated
+        dcrun_run.parse_run_secrets('{"A": "' + secret_material)  # unterminated
     message = str(excinfo.value)
     assert "not valid JSON" in message
     assert secret_material not in message
@@ -645,7 +681,7 @@ def test_parse_run_secrets_bad_json_error_does_not_leak_value() -> None:
 # --------------------------------------------------------------------------- #
 def test_build_exec_override_config_merges_secrets_into_remote_env() -> None:
     base = {"image": "alpine:3.20"}
-    result = dcrun.build_exec_override_config(base, {"API_TOKEN": "abc"})
+    result = dcrun_run.build_exec_override_config(base, {"API_TOKEN": "abc"})
     assert result == {"image": "alpine:3.20", "remoteEnv": {"API_TOKEN": "abc"}}
     # The base override (used for `up`) is not mutated (no secrets leak into it).
     assert base == {"image": "alpine:3.20"}
@@ -653,21 +689,23 @@ def test_build_exec_override_config_merges_secrets_into_remote_env() -> None:
 
 def test_build_exec_override_config_preserves_existing_remote_env() -> None:
     base = {"image": "x:1", "remoteEnv": {"PATH_HINT": "/opt/bin"}}
-    result = dcrun.build_exec_override_config(base, {"API_TOKEN": "abc"})
+    result = dcrun_run.build_exec_override_config(base, {"API_TOKEN": "abc"})
     assert result["remoteEnv"] == {"PATH_HINT": "/opt/bin", "API_TOKEN": "abc"}
 
 
 def test_up_argv_gets_secrets_file_only_when_provided() -> None:
-    without = dcrun.build_up_argv(_config(), _WS, _CFG, _LABEL)
+    without = dcrun_run.build_up_argv(_config(), _WS, _CFG, _LABEL)
     assert "--secrets-file" not in without
-    with_secrets = dcrun.build_up_argv(_config(), _WS, _CFG, _LABEL, Path("/tmp/s/secrets.json"))
+    with_secrets = dcrun_run.build_up_argv(
+        _config(), _WS, _CFG, _LABEL, Path("/tmp/s/secrets.json")
+    )
     assert with_secrets[with_secrets.index("--secrets-file") + 1] == "/tmp/s/secrets.json"
 
 
 def test_exec_argv_never_gets_secrets_file_or_secret_remote_env() -> None:
     # exec REJECTS --secrets-file, and secrets must NOT ride --remote-env (argv is
     # process-list visible). Secrets reach exec only through the override-config.
-    argv = dcrun.build_exec_argv(_config(container_env=("CI=true",)), _WS, _CFG, _LABEL)
+    argv = dcrun_run.build_exec_argv(_config(container_env=("CI=true",)), _WS, _CFG, _LABEL)
     assert "--secrets-file" not in argv
     remote_envs = [argv[i + 1] for i, tok in enumerate(argv) if tok == "--remote-env"]
     # Only the non-secret container-env stays on --remote-env.
@@ -676,14 +714,14 @@ def test_exec_argv_never_gets_secrets_file_or_secret_remote_env() -> None:
 
 def test_write_secret_file_is_0600_and_roundtrips(tmp_path) -> None:
     path = tmp_path / "secrets.json"
-    dcrun.write_secret_file(path, {"API_TOKEN": "abc"})
+    dcrun_run.write_secret_file(path, {"API_TOKEN": "abc"})
     assert json.loads(path.read_text(encoding="utf-8")) == {"API_TOKEN": "abc"}
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_secret_file_paths_are_under_runner_state_dir(tmp_path) -> None:
-    secrets_path, exec_path = dcrun.secret_file_paths(tmp_path)
-    state = dcrun.state_dir(tmp_path)
+    secrets_path, exec_path = dcrun_run.secret_file_paths(tmp_path)
+    state = dcrun_run.state_dir(tmp_path)
     assert secrets_path == state / "secrets.json"
     assert exec_path == state / "exec-config.json"
 
@@ -691,12 +729,12 @@ def test_secret_file_paths_are_under_runner_state_dir(tmp_path) -> None:
 def test_shred_file_overwrites_and_removes(tmp_path) -> None:
     path = tmp_path / "secrets.json"
     path.write_text('{"A": "secret"}', encoding="utf-8")
-    assert dcrun.shred_file(path) is True
+    assert dcrun_run.shred_file(path) is True
     assert not path.exists()
 
 
 def test_shred_file_tolerates_missing(tmp_path) -> None:
-    assert dcrun.shred_file(tmp_path / "nope.json") is False
+    assert dcrun_run.shred_file(tmp_path / "nope.json") is False
 
 
 # --------------------------------------------------------------------------- #
@@ -708,7 +746,7 @@ def test_parse_up_result_success() -> None:
         '{"outcome":"success","containerId":"abc123","remoteUser":"root",'
         '"remoteWorkspaceFolder":"/workspaces/x"}\n'
     )
-    result = dcrun.parse_up_result(stdout)
+    result = dcrun_run.parse_up_result(stdout)
     assert result["outcome"] == "success"
     assert result["containerId"] == "abc123"
     assert result["remoteUser"] == "root"
@@ -716,24 +754,24 @@ def test_parse_up_result_success() -> None:
 
 def test_parse_up_result_error() -> None:
     stdout = '{"outcome":"error","message":"Command failed","containerId":"deadbeef"}\n'
-    result = dcrun.parse_up_result(stdout)
+    result = dcrun_run.parse_up_result(stdout)
     assert result["outcome"] == "error"
     assert result["message"] == "Command failed"
 
 
 def test_parse_up_result_takes_last_outcome_object() -> None:
     stdout = '{"outcome":"error"}\n{"outcome":"success","containerId":"z"}\n'
-    assert dcrun.parse_up_result(stdout)["outcome"] == "success"
+    assert dcrun_run.parse_up_result(stdout)["outcome"] == "success"
 
 
 def test_parse_up_result_without_result_raises() -> None:
     with pytest.raises(SystemExit) as excinfo:
-        dcrun.parse_up_result('{"log":"only logs"}\nplain text\n')
+        dcrun_run.parse_up_result('{"log":"only logs"}\nplain text\n')
     assert "did not emit a JSON result" in str(excinfo.value)
 
 
 def test_build_cleanup_ids_command() -> None:
-    assert dcrun.build_cleanup_ids_command("devflows.run=42-1") == [
+    assert dcrun_run.build_cleanup_ids_command("devflows.run=42-1") == [
         "docker",
         "ps",
         "-aq",

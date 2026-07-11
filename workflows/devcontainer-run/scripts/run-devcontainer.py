@@ -42,6 +42,7 @@ import tempfile
 from pathlib import Path
 
 import dcrun
+import dcrun_run
 
 
 def main() -> int:
@@ -54,13 +55,13 @@ def main() -> int:
     # RUN_SECRETS is a DECLARED, GitHub-masked workflow_call secret (never an
     # input, so never in the inputs-only validate job). Parse+validate here, in
     # the run step, with no echo/set -x around it; a bad KEY fails the step loudly.
-    run_secrets = dcrun.parse_run_secrets(os.environ.get("RUN_SECRETS", ""))
+    run_secrets = dcrun_run.parse_run_secrets(os.environ.get("RUN_SECRETS", ""))
 
-    caller_config = dcrun.load_caller_config(workspace, config.config_file)
-    override = dcrun.synthesize_override_config(config, caller_config)
+    caller_config = dcrun_run.load_caller_config(workspace, config.config_file)
+    override = dcrun_run.synthesize_override_config(config, caller_config)
 
     runner_temp = Path(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())
-    state_dir = dcrun.state_dir(runner_temp)
+    state_dir = dcrun_run.state_dir(runner_temp)
     state_dir.mkdir(parents=True, exist_ok=True)
     # The `up` override config carries NO secrets in remoteEnv (that would leak
     # them into the persisted devcontainer.metadata label).
@@ -70,13 +71,14 @@ def main() -> int:
     secrets_file: Path | None = None
     exec_config_path = config_path
     if run_secrets:
-        secrets_path, exec_path = dcrun.secret_file_paths(runner_temp)
+        secrets_path, exec_path = dcrun_run.secret_file_paths(runner_temp)
         # up --secrets-file shape: {"KEY": "VALUE", ...}, injected into the hooks.
-        dcrun.write_secret_file(secrets_path, run_secrets)
+        dcrun_run.write_secret_file(secrets_path, run_secrets)
         secrets_file = secrets_path
         # exec override-config: base + secrets in remoteEnv, reaching the command
         # via a transient `docker exec -e` (no persisted label). 0600, cleaned up.
-        dcrun.write_secret_file(exec_path, dcrun.build_exec_override_config(override, run_secrets))
+        exec_override = dcrun_run.build_exec_override_config(override, run_secrets)
+        dcrun_run.write_secret_file(exec_path, exec_override)
         exec_config_path = exec_path
 
     resolved_image = override["image"]
@@ -114,7 +116,7 @@ def _up(
     id_label: str,
     secrets_file: Path | None,
 ) -> dict:
-    argv = dcrun.build_up_argv(config, workspace, config_path, id_label, secrets_file)
+    argv = dcrun_run.build_up_argv(config, workspace, config_path, id_label, secrets_file)
     # The echoed argv carries only the --secrets-file PATH, never a secret value.
     print("+ " + " ".join(shlex.quote(part) for part in argv), flush=True)
     completed = subprocess.run(argv, stdout=subprocess.PIPE, text=True)  # noqa: PLW1510
@@ -124,11 +126,11 @@ def _up(
         raise SystemExit(
             f"devcontainer up exited {completed.returncode} without a JSON result; cannot continue."
         )
-    return dcrun.parse_up_result(completed.stdout)
+    return dcrun_run.parse_up_result(completed.stdout)
 
 
 def _exec(config: dcrun.Config, workspace: Path, config_path: Path, id_label: str) -> int:
-    argv = dcrun.build_exec_argv(config, workspace, config_path, id_label)
+    argv = dcrun_run.build_exec_argv(config, workspace, config_path, id_label)
     print("+ " + " ".join(shlex.quote(part) for part in argv), flush=True)
     completed = subprocess.run(argv)  # noqa: PLW1510
     return completed.returncode

@@ -95,8 +95,8 @@ on:
         default: true
       devcontainer-cli-version:
         description:
-          The pinned @devcontainers/cli npm version installed with `npm install -g`. Kept current by
-          Renovate.
+          The pinned @devcontainers/cli npm version, run ephemerally with `npx --yes` (nothing is
+          installed into a global prefix). Kept current by Renovate.
         type: string
         required: false
         # renovate: datasource=npm depName=@devcontainers/cli
@@ -107,7 +107,12 @@ on:
         required: false
         default: 30
       docker-login-enabled:
-        description: Whether to log in to a Docker registry before pulling and running the image.
+        description:
+          Whether to log in to a Docker registry before pulling and running the image. Defaults to
+          false (build-devcontainer defaults true) because a run usually pulls a public or ghcr.io
+          image that needs no explicit login - ghcr.io uses the github.token fallback with the
+          packages read scope. Set true only to pull a private image from a registry that requires
+          authentication, and provide docker-password (or a non-ghcr.io registry).
         type: boolean
         required: false
         default: false
@@ -294,6 +299,7 @@ jobs:
           RUN_SECRETS: ${{ secrets.run-secrets }}
         run: |
           # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun_run.py
           python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/run-devcontainer.py"
 
       - name: Clean up container
@@ -304,5 +310,5 @@ jobs:
           ID_LABEL: devflows.run=${{ github.run_id }}-${{ github.run_attempt }}
           REMOVE_CONTAINER: ${{ inputs.remove-container }}
         run: |
-          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun_run.py
           python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/cleanup.py"
