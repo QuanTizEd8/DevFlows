@@ -14,9 +14,12 @@ release checks, YAML handling, and scenario generation.
 Local scenario tests : `task scenarios-local` generates local scenario workflows
 and runs them with `act`.
 
-Hosted scenario tests : `.github/workflows/devflows-scenarios.yaml` runs
-scenarios that require real GitHub-hosted behavior, including artifact
-upload/download.
+Hosted scenario tests : one `.github/workflows/devflows-scenarios-<id>.yaml`
+file per catalog workflow runs scenarios that require real GitHub-hosted
+behavior, including artifact upload/download. The suite is split per workflow so
+no single generated file crosses the size GitHub startup-rejects; GitHub runs
+the separate files in parallel on the same event, so total coverage is
+unchanged.
 
 ## Scenario Fields
 
@@ -255,12 +258,18 @@ Generate scenario workflows with:
 pixi run -- devflows test-generate
 ```
 
-Generated files:
+Generated files (one hosted and one local file per catalog workflow that owns
+scenarios; a local file is emitted only when the workflow has local scenarios):
 
-- `.github/workflows/devflows-local-scenarios.yaml`
-- `.github/workflows/devflows-scenarios.yaml`
+- `.github/workflows/devflows-scenarios-<id>.yaml` — hosted scenarios
+- `.github/workflows/devflows-scenarios-<id>.local.yaml` — local (`act`)
+  scenarios
 
-The lint task checks that these files are current:
+`test-generate` also prunes stale scenario files (a workflow that loses its
+scenarios, or the retired monolithic `devflows-scenarios.yaml` /
+`devflows-local-scenarios.yaml`), and fails if any generated file exceeds the
+byte cap GitHub startup-rejects. The lint task checks that these files are
+current:
 
 ```bash
 pixi run -- devflows test-generate --check

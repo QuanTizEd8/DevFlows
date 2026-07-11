@@ -187,9 +187,22 @@ the job reports it:
 - **`Analyze Python`** — the CodeQL job in `devflows-codeql.yaml`.
 - **`Build`** — the docs build job in `devflows-docs.yaml` (it builds on PRs and
   only deploys Pages on `main`).
-- Scenario assertion jobs from `devflows-scenarios.yaml` (the `*_assert` jobs)
-  can be added as required checks **once they are stable**; until then keep them
-  informational so a hosted-runner flake does not block unrelated merges.
+- Scenario assertion jobs (the `*_assert` jobs) can be added as required checks
+  **once they are stable**; until then keep them informational so a
+  hosted-runner flake does not block unrelated merges. These jobs now live
+  across the per-workflow `devflows-scenarios-<id>.yaml` files rather than a
+  single `devflows-scenarios.yaml`, but a required status check is keyed on the
+  job's reported **name** (its check context), not the file it lives in, and
+  those names are unchanged by the split — each still reads as
+  `<Workflow name>: <scenario> assertions` (e.g. `Pandoc: … assertions`) and
+  stays unique because it embeds the workflow name. So add the specific
+  assertion jobs you want to gate on by name, exactly as before. GitHub cannot
+  require "all scenario workflows" as one check (there is no single aggregate
+  context across files); if you want one gate to wait on the whole suite, add a
+  tiny `workflow_run`-triggered job that `needs` nothing but reports success
+  once the scenario workflows for the ref complete, and require that. That
+  aggregation is optional and unnecessary while the assertion jobs are
+  informational.
 
 Also enable "restrict deletions" and "block force pushes" on `main`.
 

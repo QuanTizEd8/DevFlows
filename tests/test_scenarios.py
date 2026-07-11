@@ -2,7 +2,11 @@ import dataclasses
 import json
 from pathlib import Path
 
+import pytest
+
+import devflows.publish as publish
 from devflows.catalog import Workflow, load_catalog
+from devflows.errors import DevflowsError
 from devflows.scenarios import (
     _assert_job,
     _call_job,
@@ -16,9 +20,12 @@ from devflows.scenarios import (
     _setup_artifact_job,
     _validation_failure_env,
     _validation_failure_job,
+    hosted_scenario_path,
     load_scenarios,
+    local_scenario_path,
     render_test_workflow,
     validate_scenarios,
+    write_generated_test_workflows,
 )
 
 
@@ -827,3 +834,85 @@ def test_every_local_job_depends_on_require_act() -> None:
         needs = job.get("needs")
         needs_list = [needs] if isinstance(needs, str) else list(needs or [])
         assert "require_act" in needs_list, job_id
+
+
+# --- per-workflow scenario file split + size guard ---
+
+
+def test_scenario_path_helpers_name_per_workflow_files() -> None:
+    assert hosted_scenario_path("pandoc") == Path(
+        ".github/workflows/devflows-scenarios-pandoc.yaml"
+    )
+    assert local_scenario_path("pandoc") == Path(
+        ".github/workflows/devflows-scenarios-pandoc.local.yaml"
+    )
+
+
+def test_write_splits_into_per_workflow_files_and_drops_monolith(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("devflows.scenarios.SCENARIOS_DIR", tmp_path)
+
+    changed = write_generated_test_workflows(load_catalog())
+
+    # One hosted file per workflow with hosted scenarios; a local file only when the
+    # workflow also owns local scenarios (build-devcontainer/writeback have none).
+    assert (tmp_path / "devflows-scenarios-pandoc.yaml").exists()
+    assert (tmp_path / "devflows-scenarios-pandoc.local.yaml").exists()
+    assert (tmp_path / "devflows-scenarios-build-devcontainer.yaml").exists()
+    assert not (tmp_path / "devflows-scenarios-build-devcontainer.local.yaml").exists()
+    assert not (tmp_path / "devflows-scenarios-writeback.local.yaml").exists()
+    # The retired monolithic files are never (re)produced.
+    assert not (tmp_path / "devflows-scenarios.yaml").exists()
+    assert not (tmp_path / "devflows-local-scenarios.yaml").exists()
+    # Every emitted file names exactly its owning workflow's scenarios.
+    pandoc = (tmp_path / "devflows-scenarios-pandoc.yaml").read_text(encoding="utf-8")
+    assert "pandoc_markdown_html_artifact_call" in pandoc
+    assert "zenodo" not in pandoc
+    assert set(changed) == set(tmp_path.glob("devflows-scenarios-*.yaml"))
+
+
+def test_write_prunes_retired_monolithic_and_stale_files(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("devflows.scenarios.SCENARIOS_DIR", tmp_path)
+    # Seed the retired monolithic files plus a stale per-workflow file for a workflow
+    # that no longer exists; all three must be pruned by a regeneration.
+    stale = [
+        tmp_path / "devflows-scenarios.yaml",
+        tmp_path / "devflows-local-scenarios.yaml",
+        tmp_path / "devflows-scenarios-removed-workflow.yaml",
+    ]
+    for path in stale:
+        path.write_text("# stale\n", encoding="utf-8")
+
+    changed = write_generated_test_workflows(load_catalog())
+
+    for path in stale:
+        assert not path.exists()
+        assert path in changed
+
+
+def test_write_check_mode_flags_stale_without_touching_disk(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("devflows.scenarios.SCENARIOS_DIR", tmp_path)
+    orphan = tmp_path / "devflows-scenarios.yaml"
+    orphan.write_text("# stale\n", encoding="utf-8")
+
+    changed = write_generated_test_workflows(load_catalog(), check=True)
+
+    # check mode reports the drift (new files missing + orphan present) but writes
+    # and deletes nothing.
+    assert orphan in changed
+    assert orphan.exists()
+    assert not (tmp_path / "devflows-scenarios-pandoc.yaml").exists()
+
+
+def test_scenario_files_are_size_guarded(tmp_path, monkeypatch) -> None:
+    # A future workflow with huge scenarios must fail generation locally rather than
+    # startup-fail on a hosted run. Shrinking the shared cap makes the real catalog's
+    # per-workflow files trip the same guard published workflows use.
+    monkeypatch.setattr(publish, "MAX_GENERATED_WORKFLOW_BYTES", 500)
+
+    with pytest.raises(DevflowsError) as excinfo:
+        write_generated_test_workflows(load_catalog(), check=True)
+
+    message = str(excinfo.value)
+    assert "over the 500-byte cap" in message
+    # The guard labels the offending file, not a catalog workflow id.
+    assert "devflows-scenarios-" in message

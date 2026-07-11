@@ -9,7 +9,7 @@ from devflows.yaml import load_yaml
 CATALOG_DIR = Path("workflows")
 PUBLISHED_DIR = Path(".github/workflows")
 # Reserved namespace for the repository's own internal workflows
-# (devflows-ci.yaml, devflows-scenarios.yaml, ...). A catalog id in this
+# (devflows-ci.yaml, devflows-scenarios-<id>.yaml, ...). A catalog id in this
 # namespace would publish a `<id>.yaml` that shadows an internal file and that
 # the orphan sweep deliberately skips, so it is rejected at validation time.
 RESERVED_ID_PREFIX = "devflows-"
