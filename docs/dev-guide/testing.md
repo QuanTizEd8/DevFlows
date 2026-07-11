@@ -17,9 +17,9 @@ and runs them with `act`.
 Hosted scenario tests : one `.github/workflows/devflows-scenarios-<id>.yaml`
 file per catalog workflow runs scenarios that require real GitHub-hosted
 behavior, including artifact upload/download. The suite is split per workflow so
-no single generated file crosses the size GitHub startup-rejects; GitHub runs
-the separate files in parallel on the same event, so total coverage is
-unchanged.
+no single generated file crosses the `MAX_GENERATED_WORKFLOW_BYTES = 115_000`
+byte cap (`publish.py`) that GitHub startup-rejects; GitHub runs the separate
+files in parallel on the same event, so total coverage is unchanged.
 
 ## Scenario Fields
 
@@ -268,8 +268,9 @@ scenarios; a local file is emitted only when the workflow has local scenarios):
 `test-generate` also prunes stale scenario files (a workflow that loses its
 scenarios, or the retired monolithic `devflows-scenarios.yaml` /
 `devflows-local-scenarios.yaml`), and fails if any generated file exceeds the
-byte cap GitHub startup-rejects. The lint task checks that these files are
-current:
+`MAX_GENERATED_WORKFLOW_BYTES = 115_000` byte cap (`publish.py`) that GitHub
+startup-rejects — see {doc}`workflow-lifecycle` for why the cap exists. The lint
+task checks that these files are current:
 
 ```bash
 pixi run -- devflows test-generate --check

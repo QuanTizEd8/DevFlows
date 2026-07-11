@@ -13,7 +13,7 @@ release:
   type: simple
   major: 0
 docs:
-  category: Python
+  category: Publishing
   keywords:
     - anaconda
     - conda

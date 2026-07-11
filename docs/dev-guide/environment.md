@@ -28,6 +28,12 @@ task lint
 task test
 ```
 
+`pixi.toml` locks the toolchain for `linux-64`, `linux-aarch64`, and
+`osx-arm64`, so the Pixi environment resolves natively on Apple Silicon as well
+as Linux CI. The devcontainer image itself is built for `linux/amd64` and
+`linux/arm64`. Docker-backed local scenarios still run their steps in Linux
+containers regardless of host.
+
 ## Local Scenario Tests
 
 Local scenario tests use `act` and Docker:

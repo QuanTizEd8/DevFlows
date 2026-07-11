@@ -84,3 +84,25 @@ jobs:
       pages-path: _site
       pages-artifact-enabled: true
       pages-deploy-enabled: true
+
+  # Surface the deployed site's live URL in the run summary. A reusable-call job
+  # (deploy, above) cannot carry steps, so reading its pages-url output requires a
+  # separate job. Needs no token: it only writes to the step summary.
+  report:
+    name: Report
+    needs: deploy
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Write Pages URL to the run summary
+        env:
+          PAGES_URL: ${{ needs.deploy.outputs.pages-url }}
+        run: |
+          if [ -n "${PAGES_URL}" ]; then
+            echo "## Deployed docs" >> "${GITHUB_STEP_SUMMARY}"
+            echo "Live site: ${PAGES_URL}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "## Deployed docs" >> "${GITHUB_STEP_SUMMARY}"
+            echo "No Pages URL was reported (deployment skipped)." >> "${GITHUB_STEP_SUMMARY}"
+          fi

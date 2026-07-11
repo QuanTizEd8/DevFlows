@@ -15,7 +15,11 @@ report, investigate, and coordinate a fix and disclosure with you.
 ## Scope and trust model
 
 DevFlows publishes reusable GitHub Actions workflows that other repositories
-call. Understanding what is trusted helps set expectations for reports:
+call. Understanding what is trusted helps set expectations for reports.
+Consumers should also read the catalog-wide
+[security model](https://quantized8.github.io/DevFlows/user-guide/security-model.html),
+which documents the injection-resistance, credential, and integrity guarantees
+in detail.
 
 - **Caller-supplied inputs and secrets are treated as untrusted.** Workflows
   pass untrusted strings through environment variables or structured arguments
@@ -33,7 +37,9 @@ call. Understanding what is trusted helps set expectations for reports:
 
 Findings that are especially in scope include command or expression injection,
 path-traversal in file handling, privilege escalation beyond a workflow's
-declared permissions, and secret exposure.
+declared permissions, secret exposure, forgery of build-provenance or PEP 740
+attestations, and trusted-publisher or OIDC misconfiguration (for example a
+workflow minting or accepting a token for an unintended audience or index).
 
 ## Supported versions
 

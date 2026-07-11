@@ -46,6 +46,24 @@ class Workflow:
         return str(self.metadata.get("status") or "active")
 
     @property
+    def _docs(self) -> dict[str, Any]:
+        docs = self.metadata.get("docs") or {}
+        return docs if isinstance(docs, dict) else {}
+
+    @property
+    def category(self) -> str:
+        """The ``docs.category`` taxonomy label (empty string when unset)."""
+        return str(self._docs.get("category") or "")
+
+    @property
+    def keywords(self) -> list[str]:
+        """The ``docs.keywords`` search terms (empty list when unset)."""
+        raw = self._docs.get("keywords") or []
+        if not isinstance(raw, list):
+            return []
+        return [str(keyword) for keyword in raw]
+
+    @property
     def workflow_call(self) -> dict[str, Any]:
         on_block = self.workflow.get("on") or {}
         if not isinstance(on_block, dict):

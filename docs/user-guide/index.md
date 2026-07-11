@@ -1,18 +1,41 @@
 # User Guide
 
-This guide is for people who want to call DevFlows reusable workflows from
-another repository. The generated {doc}`workflow catalog </reference/catalog>`
-remains the source for exact workflow interfaces.
+This guide is for people who call DevFlows reusable workflows from another
+repository. DevFlows is a catalog of 13 reusable GitHub Actions workflows across
+six categories, each versioned independently and published from
+`.github/workflows`. The generated {doc}`workflow catalog </reference/catalog>`
+is the authoritative source for every workflow's inputs, secrets, outputs,
+permissions, examples, and test scenarios; this guide explains how to use them
+together.
 
-## Quickstart
+## The Catalog At A Glance
 
-DevFlows publishes each promoted workflow from `.github/workflows` and versions
-it independently. A consuming repository calls a workflow as a job:
+Browse the full, always-current listing in the
+{doc}`workflow catalog </reference/catalog>`. The six categories:
+
+- **Containers** —
+  {doc}`build-devcontainer </reference/workflows/build-devcontainer>`,
+  {doc}`binder-build </reference/workflows/binder-build>`
+- **Documents** — {doc}`pandoc </reference/workflows/pandoc>`,
+  {doc}`docs-build </reference/workflows/docs-build>`,
+  {doc}`paper-openjournals </reference/workflows/paper-openjournals>`
+- **Pages** — {doc}`deploy-pages </reference/workflows/deploy-pages>`
+- **Python** — {doc}`python-build </reference/workflows/python-build>`,
+  {doc}`python-test </reference/workflows/python-test>`,
+  {doc}`python-lint </reference/workflows/python-lint>`
+- **Publishing** — {doc}`pypi-publish </reference/workflows/pypi-publish>`,
+  {doc}`anaconda-publish </reference/workflows/anaconda-publish>`,
+  {doc}`zenodo-release </reference/workflows/zenodo-release>`
+- **Utilities** — {doc}`writeback </reference/workflows/writeback>`
+
+## Calling A Workflow
+
+A consuming repository calls a workflow as a job with `jobs.<job_id>.uses`:
 
 ```yaml
 jobs:
   convert-docs:
-    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.2.0
+    uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/vX.Y.Z
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
@@ -22,53 +45,42 @@ jobs:
       artifact-upload-path: site/index.html
 ```
 
-`QuanTizEd8/DevFlows` is the canonical repository. Substitute your own fork's
-owner/name if you consume DevFlows from a fork.
+`QuanTizEd8/DevFlows` is the canonical repository (substitute your own fork if
+you consume DevFlows from one). DevFlows is pre-release, so **no version tags
+are published yet**: pin an exact `<workflow-id>/vX.Y.Z` release tag or a commit
+SHA once releases exist, and replace `vX.Y.Z` with the real version. See
+{doc}`versioning`.
 
-### The Short Version
+## The Short Version
 
 1. Pick a workflow from the {doc}`workflow catalog </reference/catalog>`.
-2. Read its generated reference page for inputs, secrets, outputs, permissions,
-   examples, and test scenarios.
-3. Call the workflow with a versioned reference. Every workflow is currently
-   pre-1.0, so pin an exact release tag or a commit SHA:
+2. Read its generated reference page for inputs, secrets, outputs, the exact
+   caller-permission union, examples, and test scenarios.
+3. Call it with a versioned reference:
    `QuanTizEd8/DevFlows/.github/workflows/<workflow-id>.yaml@<workflow-id>/vX.Y.Z`.
-4. Prefer pinned input values, especially Docker image tags and release tags.
-5. Give the caller workflow only the permissions and secrets it needs.
-6. Use the standard IO channels when available: checkout for source input,
-   artifact download for produced input, artifact upload for produced output,
-   and opt-in commit writeback for repository updates.
-7. Use exact tags or commit SHAs when reproducibility matters more than
-   receiving compatible updates automatically.
+4. Grant the caller job the full permission union the reference page lists —
+   GitHub validates nested permissions at startup, so a missing scope fails the
+   run before any job executes. See {doc}`permissions-and-secrets`.
+5. Prefer pinned input values, especially Docker image tags.
+6. Use the standard IO channels — checkout for source, artifact download for
+   produced input, artifact upload for produced output, and opt-in commit
+   writeback for repository updates. See {doc}`artifacts-and-outputs`.
 
-### Recommended Version References
+## What To Read Next
 
-DevFlows uses per-workflow tags. Every workflow is currently pre-1.0 (`0.x`), so
-pin an exact release tag or a commit SHA. Moving major tags become available
-once a workflow reaches `1.0.0`. For a workflow named `pandoc`:
-
-```yaml
-# Exact workflow release (recommended during 0.x).
-uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.2.0
-
-# Highest assurance, pinned to a commit.
-uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@<commit-sha>
-
-# Available from the 1.0.0 release onward: moving major tag for compatible updates.
-# uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v1
-```
-
-### What To Read Next
+Start with a worked example for your use case (the getting-started pages), then
+dig into the shared concepts.
 
 ```{toctree}
 :maxdepth: 2
 
 using-workflows
+getting-started-python
+getting-started-docs-pages
+getting-started-research
 versioning
 permissions-and-secrets
+security-model
 artifacts-and-outputs
-build-devcontainer
-pandoc
-writeback
 troubleshooting
 ```
