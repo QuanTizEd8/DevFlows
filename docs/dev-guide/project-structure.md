@@ -34,7 +34,7 @@ optional, currently-empty mechanism:
 `catalog.workflow_dirs(include_drafts=True)` (surfaced as
 `devflows validate --include-drafts`) would load workflows from a
 `workflows/_drafts/` directory if one existed, but nothing in the default
-catalog path opts into it. All 13 workflows above are promoted, active, and
+catalog path opts into it. All 14 workflows above are promoted, active, and
 released.
 
 ## Script Modules

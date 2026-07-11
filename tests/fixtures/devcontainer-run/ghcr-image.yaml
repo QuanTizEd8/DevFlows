@@ -1,0 +1,28 @@
+name: Devcontainer Run
+
+on:
+  workflow_dispatch:
+
+# devcontainer-run's run job declares contents: read, actions: read, and
+# packages: read; GitHub validates the nested permissions before the run starts.
+permissions:
+  actions: read
+  contents: read
+  packages: read
+
+jobs:
+  run:
+    # Replace devcontainer-run/v0.1.0 with the latest released tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/devcontainer-run.yaml@devcontainer-run/v0.1.0
+    with:
+      # A prebuilt image published by build-devcontainer (or any image carrying a
+      # devcontainer.metadata label). Pulled without a rebuild; its features and
+      # lifecycle hooks are applied from the label automatically.
+      devcontainer-image: ghcr.io/owner/project-devcontainer:latest
+      run-command: |
+        pre-commit run --all-files
+      container-env: |
+        CI=true
+      docker-login-enabled: true
+    secrets:
+      docker-password: ${{ secrets.GITHUB_TOKEN }}

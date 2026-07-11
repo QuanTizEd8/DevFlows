@@ -106,7 +106,7 @@ forces a permanent failure. (The audit's "deadlock" concern assumed
 `release.major` had to be bumped in a _separate, earlier_ commit on `main`; it
 does not — it rides the release PR.)
 
-Repeat these steps for each of the 13 workflows as it is ready. Each gets its
+Repeat these steps for each of the 14 workflows as it is ready. Each gets its
 own `Release-As` commit and its own release PR, and you bump that workflow's
 `release.major` in its PR — a change to one workflow never forces another to
 promote. (release-please's sticky

@@ -1,7 +1,7 @@
 # User Guide
 
 This guide is for people who call DevFlows reusable workflows from another
-repository. DevFlows is a catalog of 13 reusable GitHub Actions workflows across
+repository. DevFlows is a catalog of 14 reusable GitHub Actions workflows across
 six categories, each versioned independently and published from
 `.github/workflows`. The generated {doc}`workflow catalog </reference/catalog>`
 is the authoritative source for every workflow's inputs, secrets, outputs,

@@ -1,0 +1,191 @@
+id: devcontainer-run
+name: Devcontainer Run
+summary:
+  Run a command inside a PREBUILT devcontainer image (an OCI reference) without
+  rebuilding, using @devcontainers/cli up + exec so the image's metadata label
+  supplies features, lifecycle hooks, remoteUser, and env automatically.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Containers
+  keywords:
+    - devcontainer
+    - docker
+    - run
+    - exec
+    - containers
+io:
+  job: run
+  runtime: true
+  runtime-jobs:
+    - validate
+  checkout: true
+  artifact-download: true
+  artifact-upload: true
+notes:
+  - >-
+    Caller permissions: the run job needs contents: read (to check out the
+    workspace the command sees as its bind mount), actions: read (added by the
+    artifact-download and artifact-upload channels), and packages: read (to pull
+    a private ghcr.io image through the github.token docker-login fallback). A
+    calling job must grant at least permissions: contents: read, actions: read,
+    packages: read - GitHub validates a nested workflow's permissions before the
+    run starts, so the grant is required even for a public image (packages: read
+    is then simply unused). The validate job needs no permissions. There are no
+    write scopes and no id-token.
+  - >-
+    Runs a prebuilt image, never a build: `devcontainer up` against an
+    image-based config pulls the OCI reference (no docker build) and applies the
+    image's devcontainer.metadata label - features, onCreate/postCreate/postStart
+    hooks, remoteUser, and containerEnv - automatically, so a bare
+    {"image": "<ref>"} config gets the whole treatment. The resolved config must
+    yield an "image"; a devcontainer-config-file that only carries a Dockerfile
+    build is rejected loudly rather than silently rebuilt.
+  - >-
+    Pairs with build-devcontainer: its images already carry the
+    devcontainer.metadata label (devcontainers/ci runs `devcontainer build`,
+    which stamps it), so build once (publish an image-ref) then run many commands
+    against that ref with devcontainer-run without rebuilding. This is the
+    capability build-devcontainer intentionally omits (it does not expose a run
+    command).
+  - >-
+    Injection safety: every input reaches a DevFlows script only through env, the
+    `devcontainer up`/`exec` argv are built programmatically (subprocess without a
+    shell), and there is zero ${{ inputs.* }} interpolation in any run: block. The
+    caller's run-command is delivered to the container shell as a single literal
+    argv token via `<run-shell> -c`, so a `$(...)`, `;`, or space in it is inert
+    at the workflow layer; the container shell interprets it, which is the
+    intended, contained behavior. run-command's exit code becomes the step's exit
+    code, so a failing command can never silently pass.
+  - >-
+    The image must contain a POSIX shell (/bin/sh): `devcontainer up` overrides
+    the entrypoint with a /bin/sh keep-alive loop and `exec` runs the command
+    through it, so a distroless image with no shell cannot be kept alive or run.
+    Alpine and other busybox images work but have no bash - use run-shell: sh for
+    them.
+  - >-
+    Multi-arch: `devcontainer up` pulls the runner-architecture image from a
+    multi-arch manifest, so the runner arch must match a manifest entry. An image
+    built only for linux/amd64 must run on an amd64 runner; the explicit docker
+    pull fails fast with a clear "no matching manifest" error otherwise.
+  - >-
+    A private image needs registry auth: set docker-login-enabled and provide
+    docker-password (or rely on the ghcr.io-only github.token fallback, which
+    needs packages: read). The pull rides docker's ambient credentials, so login
+    happens before pull and `up`. The github.token fallback is restricted to
+    ghcr.io; any other registry without an explicit docker-password fails in the
+    validate job.
+  - >-
+    Cleanup is a separate if: always() step (there is no `devcontainer down`), so
+    a container left behind by a failed `up` is still removed. Files the command
+    wrote into the workspace persist on the host bind mount, so the
+    artifact-upload channel (which runs after, on success) still sees them; set
+    remove-container: false to leave the container for debugging.
+examples:
+  - name: Run a command in a prebuilt ghcr image
+    path: tests/fixtures/devcontainer-run/ghcr-image.yaml
+  - name: Chain build-devcontainer into devcontainer-run
+    path: tests/fixtures/devcontainer-run/build-then-run.yaml
+tests:
+  scenarios:
+    # The success scenario is hosted-only: it pulls a public image and runs the
+    # real @devcontainers/cli up + exec, so it cannot run under act. It uses a
+    # tiny config-file with an inline postCreateCommand marker to prove, in one
+    # fast job, that the image was pulled (no build), the creation hook ran, exec
+    # ran the caller command in the same kept-alive container, and a file the
+    # command wrote into the workspace survived on the host bind mount to be
+    # uploaded. alpine has only /bin/sh, so run-shell is sh.
+    - id: hooks-and-exec
+      name: Pull a public image, run its postCreate hook, and exec a command
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/hooks/devcontainer.json
+        run-shell: sh
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/hooks &&
+          test -f /tmp/devflows-postcreate.marker &&
+          printf 'hook-ran-and-command-ran\n' >
+          .devflows-test/devcontainer-run/hooks/result.txt
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-hooks
+        artifact-upload-path: .devflows-test/devcontainer-run/hooks
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: devcontainer-run-hooks
+        path: .devflows-test-artifacts/devcontainer-run/hooks
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: hook-ran-and-command-ran
+    # Failure-path scenarios run validate-inputs.py directly through the
+    # validation-failure harness (no reusable call). Each pins a stable substring
+    # of the rejection it targets and sets a valid run-command so the targeted
+    # field is the one that fails.
+    - id: invalid-image
+      name: A malformed devcontainer-image fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "valid image reference"
+      inputs:
+        devcontainer-image: "alpine:bad:ref"
+        run-command: echo hi
+    - id: neither-image-nor-config
+      name: Neither devcontainer-image nor devcontainer-config-file fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "at least one of devcontainer-image or devcontainer-config-file"
+      inputs:
+        run-command: echo hi
+    - id: invalid-run-shell
+      name: An unsupported run-shell fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "run-shell must be one of"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-shell: zsh
+        run-command: echo hi
+    - id: unsafe-config-file
+      name: A devcontainer-config-file that escapes the workspace fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "must stay inside"
+      inputs:
+        devcontainer-config-file: ../../../etc/passwd
+        run-command: echo hi
+    - id: invalid-features-json
+      name: Non-JSON devcontainer-features fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "devcontainer-features must be valid JSON"
+      inputs:
+        devcontainer-image: alpine:3.20
+        devcontainer-features: "{not json"
+        run-command: echo hi
+    - id: empty-run-command
+      name: An empty run-command fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "run-command is required"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-command: ""

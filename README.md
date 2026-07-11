@@ -1,17 +1,17 @@
 # DevFlows
 
-DevFlows is a catalog of **13 reusable, versioned, security-hardened GitHub
+DevFlows is a catalog of **14 reusable, versioned, security-hardened GitHub
 Actions workflows** that other repositories consume as modular building blocks.
 The catalog spans six categories — **Containers**, **Documents**, **Pages**,
 **Python**, **Publishing**, and **Utilities** — covering a full Python CI tier
 (`python-build`, `python-test`, `python-lint`), package and research publishing
 (`pypi-publish`, `anaconda-publish`, `zenodo-release`), document and paper
 building (`pandoc`, `docs-build`, `paper-openjournals`), GitHub Pages deployment
-(`deploy-pages`), container/Binder image builds (`build-devcontainer`,
-`binder-build`), and repository writeback (`writeback`). Each workflow exposes a
-small typed interface, pins its third-party actions to commit SHAs, and runs
-under least-privilege permissions, so a project can adopt a single workflow or
-compose several into a chain.
+(`deploy-pages`), container/Binder image builds and runs (`build-devcontainer`,
+`binder-build`, `devcontainer-run`), and repository writeback (`writeback`).
+Each workflow exposes a small typed interface, pins its third-party actions to
+commit SHAs, and runs under least-privilege permissions, so a project can adopt
+a single workflow or compose several into a chain.
 
 > **Status: pre-release.** No versions have been published yet and interfaces
 > may change. See [Versioning and pinning](#versioning-and-pinning) below.
@@ -45,7 +45,7 @@ for the full consumer-facing narrative.
 
 ## Workflow catalog
 
-All 13 workflows are promoted and part of the public catalog. Each links to its
+All 14 workflows are promoted and part of the public catalog. Each links to its
 generated reference page (inputs, secrets, outputs, the caller permission union,
 examples, and test scenarios).
 
@@ -63,6 +63,7 @@ examples, and test scenarios).
 | Publishing | `zenodo-release`     | Cut a research-software release from a tag: create/update a GitHub Release and a matching Zenodo deposition with a reserved-or-registered DOI.    | [reference](https://quantized8.github.io/DevFlows/reference/workflows/zenodo-release.html)     |
 | Containers | `build-devcontainer` | Build platform-specific devcontainer images and optionally merge them into a multi-arch image tag.                                                | [reference](https://quantized8.github.io/DevFlows/reference/workflows/build-devcontainer.html) |
 | Containers | `binder-build`       | Build a Binder (repo2docker) image credential-free, push it from an isolated gated job with an SLSA provenance attestation and pinned Dockerfile. | [reference](https://quantized8.github.io/DevFlows/reference/workflows/binder-build.html)       |
+| Containers | `devcontainer-run`   | Run a command inside a prebuilt devcontainer image without rebuilding, applying its `devcontainer.metadata` features, hooks, user, and env.       | [reference](https://quantized8.github.io/DevFlows/reference/workflows/devcontainer-run.html)   |
 | Utilities  | `writeback`          | Commit a validated writeback payload artifact to a repository branch.                                                                             | [reference](https://quantized8.github.io/DevFlows/reference/workflows/writeback.html)          |
 
 ## Usage

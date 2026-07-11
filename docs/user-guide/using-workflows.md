@@ -139,6 +139,15 @@ Two conventions make chains robust:
   `package-version` into the publisher makes tag/artifact skew impossible before
   an irreversible upload.
 
+The container tier composes the same way:
+{doc}`build-devcontainer </reference/workflows/build-devcontainer>` publishes an
+image whose `devcontainer.metadata` label carries its features and lifecycle
+hooks, and {doc}`devcontainer-run </reference/workflows/devcontainer-run>`
+consumes that `image-ref` to run any command inside it **without rebuilding**
+(the label supplies the features, hooks, `remoteUser`, and env automatically).
+Build once, then run many commands — lint, tests, a script — against the same
+prebuilt image.
+
 ## Publishing-Tier Patterns
 
 The Publishing tier (`pypi-publish`, `anaconda-publish`, `zenodo-release`) and
