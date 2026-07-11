@@ -18,6 +18,37 @@ Then rerun:
 task lint
 ```
 
+## `sync` Fails: Non-ASCII Inlined Script
+
+`devflows sync` (and `test-generate`) reject an inlined runtime script that
+contains a non-ASCII character, printing
+`<file>:<line>: inlined runtime script contains a non-ASCII character`. Inlined
+scripts must be ASCII so they render as YAML block literals — a single non-ASCII
+byte collapses the whole materialize `run:` block into an escaped scalar that
+GitHub rejects at startup. Edit the named line to use ASCII (for example replace
+an em-dash `—` with `--`, or curly quotes with straight quotes), then re-run the
+generator.
+
+## `sync` Fails: Generated Workflow Over The Size Cap
+
+Generation fails with
+`generated workflow is <N> bytes, over the 115000-byte cap` when a published or
+scenario workflow exceeds `MAX_GENERATED_WORKFLOW_BYTES`. GitHub startup-rejects
+oversized workflows with an opaque "workflow file issue" that no linter catches,
+so the cap is enforced locally. Reduce the inlined footprint rather than raising
+the cap: split a shared script module so each job inlines only the slice it
+references, move a large scenario into its own workflow, or trim an oversized
+fixture. See {doc}`workflow-lifecycle` and {doc}`testing`.
+
+## `propagation-check` Fails
+
+A published `.github/workflows/<id>.yaml` changed but nothing under
+`workflows/<id>/` did — usually after a shared-generator or action-pin bump.
+Land a real source change under that workflow's package path (so release-please
+can attribute a release to it) in the same pull request, or revert the
+regenerated output if the diff is genuinely consumer-neutral. The runbook is in
+{doc}`release`.
+
 ## `actionlint` Fails Generated Workflows
 
 Check the source generator or workflow metadata first. Generated workflow files

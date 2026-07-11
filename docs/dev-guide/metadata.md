@@ -25,11 +25,16 @@ The `id` must match the workflow directory name. Supported statuses are
 ```yaml
 release:
   type: simple
-  major: 1
+  major: 0
 ```
 
-The release type must match the corresponding release-please package config. The
-major version is used in generated docs to show the current version line.
+The release type must match the corresponding release-please package config.
+`release.major` records the workflow's current released major version line — an
+integer, `0` while the catalog is pre-1.0 (every workflow ships `major: 0`
+today). It drives the version line shown in generated docs, and
+`task release-check` cross-validates that it equals the major component of the
+workflow's release-please manifest version, so the two cannot silently diverge.
+See {doc}`release` for the 0.x contract and the deliberate 1.0 promotion.
 
 ## Docs Metadata
 

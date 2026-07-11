@@ -5,13 +5,28 @@ theme, Sphinx Design, and Sphinx Copybutton.
 
 ## Documentation Layers
 
-Guides : Hand-written documentation under `docs/guides`. Guides explain how to
-use and maintain the project.
+User guide : Hand-written consumer documentation under `docs/user-guide`. It
+orients people who _call_ the workflows: an orientation index, per-tier
+getting-started chains (`getting-started-python.md`,
+`getting-started-docs-pages.md`, `getting-started-research.md`), and the
+cross-cutting concept pages (`using-workflows.md`, `versioning.md`,
+`artifacts-and-outputs.md`, `permissions-and-secrets.md`, `security-model.md`,
+`troubleshooting.md`). There are intentionally **no** hand-written per-workflow
+pages — the generated reference is the single source for each workflow's
+interface (see below).
 
-Generated reference : Ignored pages under `docs/reference`. These pages come
-from workflow metadata and workflow YAML and are generated before Sphinx builds.
+Developer guide : Hand-written maintainer documentation under `docs/dev-guide`
+(this tree). It covers adding workflows, the CLI, the generator and adapter
+model, testing, CI, publishing conventions, and releases.
 
-Examples : Checked-in example workflows under `tests/fixtures`. Generated
+Generated reference : Ignored pages under `docs/reference`. `devflows docs`
+writes `docs/reference/catalog.md` and one `docs/reference/workflows/<id>.md`
+per workflow from workflow metadata and workflow YAML, before Sphinx builds.
+These pages are the **single source** for each workflow's inputs, secrets,
+outputs, caller permission union, examples, and scenario list; hand-written
+guide pages link to them rather than restating interface tables.
+
+Examples : Checked-in example caller workflows under `tests/fixtures`. Generated
 reference pages render these examples inline.
 
 ## Build Docs
@@ -56,7 +71,10 @@ workflow, metadata, example, or generator instead.
 Keep guide pages practical:
 
 - start with the common path
-- link to generated reference pages for exact workflow interfaces
+- link to generated reference pages (`docs/reference/workflows/<id>.md`) for
+  exact inputs, secrets, outputs, and the caller permission union — never
+  restate those tables in a hand-written page, and do not add hand-written
+  per-workflow pages (they duplicate the generated reference and rot)
 - explain why a convention exists when it affects maintainers
 - include commands that can be run from the repository root
 - avoid duplicating large generated tables
