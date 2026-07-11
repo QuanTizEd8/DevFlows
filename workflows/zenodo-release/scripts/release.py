@@ -41,16 +41,18 @@ def compose_body(base_body: str, *, append_doi: bool, doi: str, concept: str, st
     if not append_doi or not doi:
         return base_body
     label = "reserved" if state == "draft" else "registered"
-    footer = ["", "---", f"Zenodo DOI ({label}): {doi}"]
+    footer = ["---", f"Zenodo DOI ({label}): {doi}"]
     if concept:
         footer.append(f"Concept DOI: {concept}")
+    body = "\n".join(footer) + "\n"
+    # A blank line separates existing notes from the DOI rule. With an empty base
+    # body (e.g. a --generate-notes-only release) emit no leading blank line.
     prefix = base_body.rstrip("\n")
-    return (prefix + "\n" if prefix else "") + "\n".join(footer) + "\n"
+    return (prefix + "\n\n" + body) if prefix else body
 
 
 def _create_args(tag: str, notes_file: str, assets: list[str]) -> list[str]:
     args = ["release", "create", tag]
-    args += assets
     args += ["--notes-file", notes_file]
     title = os.environ.get("RELEASE_TITLE", "").strip() or tag
     args += ["--title", title]
@@ -67,6 +69,10 @@ def _create_args(tag: str, notes_file: str, assets: list[str]) -> list[str]:
     category = os.environ.get("RELEASE_DISCUSSION_CATEGORY", "").strip()
     if category:
         args += ["--discussion-category", category]
+    # `--` terminates flag parsing before the asset positionals (kept last, after
+    # every flag) so an asset filename beginning with '-' is never read as a gh flag.
+    if assets:
+        args += ["--", *assets]
     return args
 
 
@@ -111,7 +117,8 @@ def perform_release(gh: GhRunner, *, base_body: str) -> str:
         if exists:
             _checked(gh, _edit_args(tag, notes_file))
             if assets:
-                _checked(gh, ["release", "upload", tag, *assets, "--clobber"])
+                # `--` terminates flags before the asset positionals (see _create_args).
+                _checked(gh, ["release", "upload", tag, "--clobber", "--", *assets])
         else:
             _checked(gh, _create_args(tag, notes_file, assets))
     return _release_url(gh, tag)

@@ -80,21 +80,45 @@ def _outputs(
     }
 
 
+def select_token(*, sandbox: bool, prod_token: str, sandbox_token: str) -> str:
+    """Return the token for the targeted Zenodo instance, hard-erroring if empty.
+
+    Selecting here keeps the correct-token invariant independent of step ordering:
+    a workflow ``sandbox && sandbox-token || token`` expression would silently fall
+    back to the PRODUCTION token when the sandbox token is empty (GitHub treats it
+    as falsy), pointing a sandbox run at zenodo.org. The workflow passes both tokens
+    plus the flag; this chooses one and fails closed when the required one is empty.
+    """
+    token = sandbox_token if sandbox else prod_token
+    if not token:
+        which = "zenodo-sandbox-token" if sandbox else "zenodo-token"
+        target = "sandbox.zenodo.org" if sandbox else "zenodo.org"
+        raise SystemExit(
+            f"The {which} secret is empty, but a real deposit to {target} needs it. "
+            "Store it as an environment secret on the bound zenodo-environment-name and "
+            "pass it with `secrets: inherit`, or run with publish-dry-run-enabled to "
+            "rehearse without a credential."
+        )
+    return token
+
+
 def main() -> int:
     if _bool("PUBLISH_DRY_RUN_ENABLED"):
         print("publish-dry-run-enabled: zenodo-deposit makes no API calls.")
         return 0
 
-    token = os.environ.get("ZENODO_TOKEN", "")
-    if not token:
-        raise SystemExit("ZENODO_TOKEN is empty; the credential preflight should have caught this.")
+    sandbox = _bool("ZENODO_SANDBOX_ENABLED")
+    token = select_token(
+        sandbox=sandbox,
+        prod_token=os.environ.get("ZENODO_TOKEN", ""),
+        sandbox_token=os.environ.get("ZENODO_SANDBOX_TOKEN", ""),
+    )
     metadata = json.loads(os.environ["DEPOSITION_METADATA"])
     asset_paths = [
         Path(line.strip())
         for line in os.environ.get("ZENODO_ASSET_LIST", "").splitlines()
         if line.strip()
     ]
-    sandbox = _bool("ZENODO_SANDBOX_ENABLED")
 
     import requests  # local import: real session only at run time.
 

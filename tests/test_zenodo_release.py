@@ -586,6 +586,22 @@ def test_deposit_main_dry_run_is_noop(env) -> None:
     assert deposit.main() == 0
 
 
+def test_deposit_select_token_picks_correct_token_per_mode() -> None:
+    deposit = _load("deposit.py")
+    assert deposit.select_token(sandbox=False, prod_token="prod", sandbox_token="sand") == "prod"
+    assert deposit.select_token(sandbox=True, prod_token="prod", sandbox_token="sand") == "sand"
+
+
+def test_deposit_select_token_fails_closed_on_empty_token() -> None:
+    deposit = _load("deposit.py")
+    # Sandbox enabled but the sandbox token is empty: refuse rather than silently
+    # falling back to the production token (the GitHub falsy-empty leak this guards).
+    with pytest.raises(SystemExit, match="zenodo-sandbox-token"):
+        deposit.select_token(sandbox=True, prod_token="prod", sandbox_token="")
+    with pytest.raises(SystemExit, match="zenodo-token"):
+        deposit.select_token(sandbox=False, prod_token="", sandbox_token="sand")
+
+
 # --------------------------------------------------------------------------- #
 # release.py (perform_release against a fake gh)                              #
 # --------------------------------------------------------------------------- #
@@ -644,6 +660,60 @@ def test_release_update_edits_and_uploads(env) -> None:
     release.perform_release(gh, base_body="")
     assert any(c[:2] == ["release", "edit"] for c in gh.calls)
     assert any(c[:2] == ["release", "upload"] for c in gh.calls)
+
+
+def _positionals_after_separator(argv: list[str]) -> list[str]:
+    """The tokens following the ``--`` flag terminator in a gh argv."""
+    assert "--" in argv, argv
+    return argv[argv.index("--") + 1 :]
+
+
+def test_release_create_terminates_flags_before_assets(env) -> None:
+    # Defense-in-depth: an asset filename beginning with '-' must never be parsed
+    # as a gh flag. The assets are placed last, after every flag, behind a `--`.
+    release = _load("release.py")
+    env(
+        RELEASE_TAG="v1",
+        RELEASE_EXISTING_MODE="fail",
+        RELEASE_ASSET_LIST="dist/a.tar.gz\ndist/-weird.tar.gz",
+    )
+    gh = FakeGh(exists=False)
+    release.perform_release(gh, base_body="Body")
+    create = next(c for c in gh.calls if c[:2] == ["release", "create"])
+    # Everything after `--` is exactly the assets, in order, and nothing else.
+    assert _positionals_after_separator(create) == ["dist/a.tar.gz", "dist/-weird.tar.gz"]
+    # No flag follows the terminator (the flags precede it).
+    assert "--notes-file" not in create[create.index("--") :]
+
+
+def test_release_upload_terminates_flags_before_assets(env) -> None:
+    release = _load("release.py")
+    env(
+        RELEASE_TAG="v1",
+        RELEASE_EXISTING_MODE="update",
+        RELEASE_ASSET_LIST="dist/a.tar.gz\ndist/-weird.tar.gz",
+    )
+    gh = FakeGh(exists=True)
+    release.perform_release(gh, base_body="")
+    upload = next(c for c in gh.calls if c[:2] == ["release", "upload"])
+    assert _positionals_after_separator(upload) == ["dist/a.tar.gz", "dist/-weird.tar.gz"]
+    # --clobber is a flag and must sit before the terminator, not after it.
+    assert "--clobber" in upload[: upload.index("--")]
+
+
+def test_release_compose_body_no_leading_blank_line_when_empty() -> None:
+    release = _load("release.py")
+    # An empty base body must not emit a leading blank line before the `---` rule.
+    body = release.compose_body(
+        "", append_doi=True, doi="10.5281/zenodo.1", concept="", state="published"
+    )
+    assert body.startswith("---")
+    assert not body.startswith("\n")
+    # A non-empty base body still gets one blank-line separator before the rule.
+    with_body = release.compose_body(
+        "Notes", append_doi=True, doi="10.5281/zenodo.1", concept="", state="draft"
+    )
+    assert with_body.startswith("Notes\n\n---")
 
 
 def test_release_compose_body_doi_footer() -> None:
@@ -1026,6 +1096,40 @@ def test_deposit_binds_environment_and_serial_concurrency() -> None:
     assert deposit["concurrency"]["cancel-in-progress"] is False
     assert "!inputs.publish-dry-run-enabled" in deposit["if"]
     assert "inputs.zenodo-enabled" in deposit["if"]
+
+
+def test_release_job_has_serial_concurrency_parity() -> None:
+    # Phase-2 parity with zenodo-deposit: the environment-bound release job serializes
+    # on its own environment-scoped group so two releases to the same environment
+    # cannot race, and never cancels an in-flight release.
+    release = _published()["jobs"]["release"]
+    assert (
+        release["concurrency"]["group"]
+        == "zenodo-release-release-${{ inputs.release-environment-name }}"
+    )
+    assert release["concurrency"]["cancel-in-progress"] is False
+
+
+def test_both_zenodo_tokens_confined_to_the_deposit_step() -> None:
+    jobs = _published()["jobs"]
+    deposit = jobs["zenodo-deposit"]
+    deposit_step = next(s for s in _steps(deposit) if s.get("id") == "deposit")
+    env = deposit_step["env"]
+    # Both tokens are passed separately (no falsy-empty `&&/||` selector) plus the
+    # sandbox flag, so deposit.py selects and fails closed independent of step order.
+    assert env["ZENODO_TOKEN"] == "${{ secrets.zenodo-token }}"
+    assert env["ZENODO_SANDBOX_TOKEN"] == "${{ secrets.zenodo-sandbox-token }}"
+    assert env["ZENODO_SANDBOX_ENABLED"] == "${{ inputs.zenodo-sandbox-enabled }}"
+    assert "||" not in env["ZENODO_TOKEN"]
+    # Neither token secret leaks onto any other step or any credential-free job.
+    for token_key in ("ZENODO_TOKEN", "ZENODO_SANDBOX_TOKEN"):
+        for step in _steps(deposit):
+            if step is deposit_step:
+                continue
+            assert token_key not in (step.get("env") or {})
+        for job_id in ("validate", "prepare", "release"):
+            for step in _steps(jobs[job_id]):
+                assert token_key not in (step.get("env") or {})
 
 
 def test_validate_and_prepare_never_bind_environment() -> None:

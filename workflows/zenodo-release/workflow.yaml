@@ -94,7 +94,10 @@ on:
         required: false
         default: error
       release-append-doi-enabled:
-        description: When both targets run, append the minted or reserved Zenodo DOI(s) to the release notes as a footer.
+        description:
+          When both targets run, append the minted or reserved Zenodo DOI(s) to the release notes as a
+          footer. With release-generate-notes-enabled, gh treats the notes body as a header and appends
+          its auto-generated notes below it, so the DOI footer reads above the generated changelog.
         type: boolean
         required: false
         default: true
@@ -410,7 +413,12 @@ jobs:
         shell: bash
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
-          ZENODO_TOKEN: ${{ inputs.zenodo-sandbox-enabled && secrets.zenodo-sandbox-token || secrets.zenodo-token }}
+          # Pass BOTH tokens plus the sandbox flag; deposit.py selects the correct one
+          # and fails closed if it is empty. A single `sandbox && sandbox-token ||
+          # token` expression would silently inject the production token into a
+          # sandbox run when the sandbox token is empty (GitHub treats it as falsy).
+          ZENODO_TOKEN: ${{ secrets.zenodo-token }}
+          ZENODO_SANDBOX_TOKEN: ${{ secrets.zenodo-sandbox-token }}
           DEPOSITION_METADATA: ${{ needs.prepare.outputs.deposition-metadata }}
           ZENODO_ASSET_LIST: ${{ needs.prepare.outputs.zenodo-asset-list }}
           ZENODO_CONCEPT_DOI: ${{ inputs.zenodo-concept-doi }}
@@ -442,6 +450,9 @@ jobs:
     environment:
       name: ${{ inputs.release-environment-name }}
       url: ${{ steps.release.outputs.release-url }}
+    concurrency:
+      group: zenodo-release-release-${{ inputs.release-environment-name }}
+      cancel-in-progress: false
     outputs:
       release-url: ${{ steps.release.outputs.release-url }}
     steps:

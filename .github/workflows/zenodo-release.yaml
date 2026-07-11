@@ -88,7 +88,7 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: error
       release-append-doi-enabled:
-        description: When both targets run, append the minted or reserved Zenodo DOI(s) to the release notes as a footer.
+        description: When both targets run, append the minted or reserved Zenodo DOI(s) to the release notes as a footer. With release-generate-notes-enabled, gh treats the notes body as a header and appends its auto-generated notes below it, so the DOI footer reads above the generated changelog.
         type: boolean
         required: false
         default: true
@@ -1989,21 +1989,45 @@ jobs:
               }
 
 
+          def select_token(*, sandbox: bool, prod_token: str, sandbox_token: str) -> str:
+              """Return the token for the targeted Zenodo instance, hard-erroring if empty.
+
+              Selecting here keeps the correct-token invariant independent of step ordering:
+              a workflow ``sandbox && sandbox-token || token`` expression would silently fall
+              back to the PRODUCTION token when the sandbox token is empty (GitHub treats it
+              as falsy), pointing a sandbox run at zenodo.org. The workflow passes both tokens
+              plus the flag; this chooses one and fails closed when the required one is empty.
+              """
+              token = sandbox_token if sandbox else prod_token
+              if not token:
+                  which = "zenodo-sandbox-token" if sandbox else "zenodo-token"
+                  target = "sandbox.zenodo.org" if sandbox else "zenodo.org"
+                  raise SystemExit(
+                      f"The {which} secret is empty, but a real deposit to {target} needs it. "
+                      "Store it as an environment secret on the bound zenodo-environment-name and "
+                      "pass it with `secrets: inherit`, or run with publish-dry-run-enabled to "
+                      "rehearse without a credential."
+                  )
+              return token
+
+
           def main() -> int:
               if _bool("PUBLISH_DRY_RUN_ENABLED"):
                   print("publish-dry-run-enabled: zenodo-deposit makes no API calls.")
                   return 0
 
-              token = os.environ.get("ZENODO_TOKEN", "")
-              if not token:
-                  raise SystemExit("ZENODO_TOKEN is empty; the credential preflight should have caught this.")
+              sandbox = _bool("ZENODO_SANDBOX_ENABLED")
+              token = select_token(
+                  sandbox=sandbox,
+                  prod_token=os.environ.get("ZENODO_TOKEN", ""),
+                  sandbox_token=os.environ.get("ZENODO_SANDBOX_TOKEN", ""),
+              )
               metadata = json.loads(os.environ["DEPOSITION_METADATA"])
               asset_paths = [
                   Path(line.strip())
                   for line in os.environ.get("ZENODO_ASSET_LIST", "").splitlines()
                   if line.strip()
               ]
-              sandbox = _bool("ZENODO_SANDBOX_ENABLED")
 
               import requests  # local import: real session only at run time.
 
@@ -2073,7 +2097,8 @@ jobs:
         shell: bash
         env:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
-          ZENODO_TOKEN: ${{ inputs.zenodo-sandbox-enabled && secrets.zenodo-sandbox-token || secrets.zenodo-token }}
+          ZENODO_TOKEN: ${{ secrets.zenodo-token }}
+          ZENODO_SANDBOX_TOKEN: ${{ secrets.zenodo-sandbox-token }}
           DEPOSITION_METADATA: ${{ needs.prepare.outputs.deposition-metadata }}
           ZENODO_ASSET_LIST: ${{ needs.prepare.outputs.zenodo-asset-list }}
           ZENODO_CONCEPT_DOI: ${{ inputs.zenodo-concept-doi }}
@@ -2100,6 +2125,9 @@ jobs:
     environment:
       name: ${{ inputs.release-environment-name }}
       url: ${{ steps.release.outputs.release-url }}
+    concurrency:
+      group: zenodo-release-release-${{ inputs.release-environment-name }}
+      cancel-in-progress: false
     outputs:
       release-url: ${{ steps.release.outputs.release-url }}
     steps:
@@ -2167,16 +2195,18 @@ jobs:
               if not append_doi or not doi:
                   return base_body
               label = "reserved" if state == "draft" else "registered"
-              footer = ["", "---", f"Zenodo DOI ({label}): {doi}"]
+              footer = ["---", f"Zenodo DOI ({label}): {doi}"]
               if concept:
                   footer.append(f"Concept DOI: {concept}")
+              body = "\n".join(footer) + "\n"
+              # A blank line separates existing notes from the DOI rule. With an empty base
+              # body (e.g. a --generate-notes-only release) emit no leading blank line.
               prefix = base_body.rstrip("\n")
-              return (prefix + "\n" if prefix else "") + "\n".join(footer) + "\n"
+              return (prefix + "\n\n" + body) if prefix else body
 
 
           def _create_args(tag: str, notes_file: str, assets: list[str]) -> list[str]:
               args = ["release", "create", tag]
-              args += assets
               args += ["--notes-file", notes_file]
               title = os.environ.get("RELEASE_TITLE", "").strip() or tag
               args += ["--title", title]
@@ -2193,6 +2223,10 @@ jobs:
               category = os.environ.get("RELEASE_DISCUSSION_CATEGORY", "").strip()
               if category:
                   args += ["--discussion-category", category]
+              # `--` terminates flag parsing before the asset positionals (kept last, after
+              # every flag) so an asset filename beginning with '-' is never read as a gh flag.
+              if assets:
+                  args += ["--", *assets]
               return args
 
 
@@ -2237,7 +2271,8 @@ jobs:
                   if exists:
                       _checked(gh, _edit_args(tag, notes_file))
                       if assets:
-                          _checked(gh, ["release", "upload", tag, *assets, "--clobber"])
+                          # `--` terminates flags before the asset positionals (see _create_args).
+                          _checked(gh, ["release", "upload", tag, "--clobber", "--", *assets])
                   else:
                       _checked(gh, _create_args(tag, notes_file, assets))
               return _release_url(gh, tag)
