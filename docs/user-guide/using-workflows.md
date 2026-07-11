@@ -156,6 +156,29 @@ list):
   `KEY=VALUE` pairs and injects each into both `up` (so lifecycle hooks see it)
   and `exec` (so your command sees it) via `--remote-env`. Because that places
   `KEY=VALUE` in the process list, use it for non-secret configuration only.
+- **Secrets into the container.** Anything sensitive goes through the
+  `run-secrets` **secret** (declared under `on.workflow_call.secrets`, so its
+  value is GitHub-masked) — never `container-env`. The workflow delivers the
+  secrets to the creation hooks (`devcontainer up --secrets-file`) and to your
+  command (through the `exec` override-config's `remoteEnv`, a transient
+  `docker exec -e`), and shreds the 0600 secret files in its cleanup step.
+  Assemble the bundle least-privilege, one value at a time with `toJSON` so each
+  stays individually masked and correctly escaped:
+
+  ```yaml
+  with:
+    devcontainer-image: ${{ needs.build.outputs.image-ref }}
+    run-command: pixi run pytest
+  secrets:
+    run-secrets: |
+      {"API_TOKEN": ${{ toJSON(secrets.API_TOKEN) }}, "DB_PASSWORD": ${{ toJSON(secrets.DB_PASSWORD) }}}
+  ```
+
+  For a quick forward-all (broader, less precise), use `secrets: inherit` with
+  `run-secrets: ${{ toJSON(secrets) }}` — the workflow strips `github_token`
+  defensively so the Actions token is never injected. Rule of thumb: secrets use
+  `run-secrets`, non-secrets use `container-env`.
+
 - **Cache the environment across runs.** Set `cache-enabled: true` with
   `cache-paths` and `cache-key` to restore a workspace cache **before**
   `devcontainer up` runs the creation hooks. For a pixi/conda devcontainer whose

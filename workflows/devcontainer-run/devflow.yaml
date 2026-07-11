@@ -3,7 +3,9 @@ name: Devcontainer Run
 summary:
   Run a command inside a PREBUILT devcontainer image (an OCI reference) without
   rebuilding, using @devcontainers/cli up + exec so the image's metadata label
-  supplies features, lifecycle hooks, remoteUser, and env automatically.
+  supplies features, lifecycle hooks, remoteUser, and env automatically. Injects
+  non-secret env (container-env) and masked caller secrets (run-secrets) into the
+  hooks and the command.
 status: active
 owners:
   - DevFlows maintainers
@@ -94,6 +96,33 @@ notes:
     list. Keep secrets out of it. The value is literal after the first '=' ('=' and
     spaces are fine); a key must be a POSIX env name and an embedded control
     character is rejected.
+  - >-
+    run-secrets injects SECRETS (use it, never container-env, for anything
+    sensitive). It is a DECLARED on.workflow_call secret, so its value is
+    GitHub-masked. The caller assembles it in one of two forms. Least-privilege
+    (primary): a JSON object built with per-value toJSON so each value stays
+    individually masked and correctly escaped -
+    `run-secrets: |` then `  {"API_TOKEN": ${{ toJSON(secrets.API_TOKEN) }}}`.
+    Forward-all (advanced): `secrets: inherit` plus
+    `run-secrets: ${{ toJSON(secrets) }}` - the workflow strips github_token /
+    GITHUB_TOKEN defensively so the Actions token is never injected. A newline
+    KEY=VALUE form (# comments / blank lines skipped) is also accepted. Each key
+    must be a POSIX env name; values are literal.
+  - >-
+    How run-secrets is wired (label-leak-safe): the run step parses the masked
+    RUN_SECRETS env with no echo/set -x and materializes two 0600 files under
+    RUNNER_TEMP - a secrets.json passed to `devcontainer up --secrets-file` (so
+    the creation lifecycle HOOKS get the secrets) and a separate exec
+    override-config whose remoteEnv carries the secrets to the COMMAND. Secrets go
+    in the EXEC override-config only, never the `up` override-config: an `up`
+    remoteEnv would be baked into the persisted `docker run -l
+    devcontainer.metadata` label (a `docker inspect` leak), whereas exec injects
+    them through a transient `docker exec -e KEY=VALUE`. Neither the npx/exec argv
+    nor `--remote-env` ever carries a secret value. The always() cleanup step
+    shreds both 0600 files (even on failure or remove-container: false). One
+    honest residual: the devcontainer CLI's final injection is a `docker exec -e
+    KEY=VALUE` on the runner (unavoidable, single-tenant ephemeral runner, masked
+    in logs).
   - >-
     Caching (cache-enabled) restores workspace paths with actions/cache BEFORE
     `devcontainer up`, so the creation lifecycle hooks reuse them instead of
@@ -216,6 +245,45 @@ tests:
         - type: file-contains
           path: result.txt
           text: env-visible-in-command-and-hook
+    # Secret injection, hosted-only (real `up`/`exec`). run-secrets is passed as a
+    # DECLARED, GitHub-masked secret carrying a NON-sensitive test literal (the
+    # scenario harness's new secrets passthrough emits it under `secrets:`). The
+    # config's postCreateCommand records the secret's LENGTH (a derived marker,
+    # never the value) into a container /tmp marker to prove the hook saw it (up
+    # --secrets-file); the command reads its OWN env var (exec override-config
+    # remoteEnv) and greps that hook marker - proving the secret reaches BOTH the
+    # hook and the command. Only the derived length ('6' for 'ok-123') is written
+    # to the uploaded file, never the raw value. alpine has only /bin/sh, so
+    # run-shell is sh.
+    - id: run-secrets-into-hooks-and-command
+      name: A run-secrets value reaches both the creation hook and the command
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/secrets/devcontainer.json
+        run-shell: sh
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/secrets &&
+          test -n "$DEVFLOWS_TEST_SECRET" &&
+          test "${#DEVFLOWS_TEST_SECRET}" = "6" &&
+          grep -q 'hook-secret-len=6' /tmp/devflows-secret-hook.marker &&
+          printf 'secret-visible-in-command-and-hook\n' >
+          .devflows-test/devcontainer-run/secrets/result.txt
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-secrets
+        artifact-upload-path: .devflows-test/devcontainer-run/secrets
+        artifact-upload-if-no-files-found: error
+      secrets:
+        run-secrets: '{"DEVFLOWS_TEST_SECRET":"ok-123"}'
+      artifact:
+        name: devcontainer-run-secrets
+        path: .devflows-test-artifacts/devcontainer-run/secrets
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: secret-visible-in-command-and-hook
     # Failure-path scenarios run validate-inputs.py directly through the
     # validation-failure harness (no reusable call). Each pins a stable substring
     # of the rejection it targets and sets a valid run-command so the targeted

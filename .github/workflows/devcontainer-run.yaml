@@ -301,6 +301,10 @@ name: '[Reusable]: Devcontainer Run'
       docker-password:
         description: Docker registry password or token. Defaults to github.token for ghcr.io only.
         required: false
+      run-secrets:
+        description: Optional bundle of caller SECRETS injected into the run so they reach the creation lifecycle hooks (via `devcontainer up --secrets-file`) and the command (via the exec override-config remoteEnv, a transient docker exec -e, never a process-list-visible --remote-env). Declared as a secret so its value is GitHub-masked; NEVER pass secrets through the non-secret container-env input. Two forms are accepted. Primary least-privilege form is a JSON object the caller assembles with per-value toJSON so each value stays individually masked and correctly escaped (an object mapping each NAME to its own toJSON(secrets.NAME) expression). Advanced forward-all form sets the caller job secrets to inherit and passes run-secrets as a toJSON(secrets) expression (the workflow strips github_token defensively so the Actions token is never injected). A newline KEY=VALUE form (# comments and blank lines skipped) is also accepted. Each key must be a POSIX env-var name; values are literal. github_token
+          and GITHUB_TOKEN are always dropped.
+        required: false
       checkout-token:
         description: Token used by actions/checkout. Defaults to github.token.
         required: false
@@ -350,6 +354,7 @@ jobs:
           from __future__ import annotations
 
           import json
+          import os
           import re
           import shlex
           from collections.abc import Mapping
@@ -386,6 +391,15 @@ jobs:
           # A pinned @devcontainers/cli npm version. Constraining it here keeps the
           # env-mediated `npm install -g @devcontainers/cli@<version>` install safe.
           _CLI_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+.][0-9A-Za-z.-]+)?$")
+          # Keys defensively dropped from a run-secrets bundle: the ephemeral Actions token,
+          # which a `toJSON(secrets)` + `secrets: inherit` bundle would otherwise carry into
+          # the user command. GitHub exposes it as GITHUB_TOKEN and (in the serialized
+          # secrets context) as github_token, so both spellings are stripped.
+          _DROPPED_SECRET_KEYS = frozenset({"github_token", "GITHUB_TOKEN"})
+          # RUNNER_TEMP subdirectory holding this run's generated override config and the
+          # 0600 secret files. run-devcontainer.py writes them here; cleanup.py shreds the
+          # secret files from the same place in its always() step.
+          _STATE_SUBDIR = "devflows-devcontainer-run"
 
 
           @dataclass(frozen=True)
@@ -543,6 +557,76 @@ jobs:
                       raise SystemExit(f"container-env has an invalid environment variable name: {key!r}.")
                   entries.append(item)
               return tuple(entries)
+
+
+          # --------------------------------------------------------------------------- #
+          # run-secrets bundle (a DECLARED workflow_call secret, GitHub-masked)          #
+          # --------------------------------------------------------------------------- #
+          def parse_run_secrets(raw: str) -> dict[str, str]:
+              """Parse the masked run-secrets bundle into a {KEY: VALUE} dict.
+
+              Accepts a JSON object (primary; text starts with ``{``, values must be
+              strings) or a ``KEY=VALUE``-per-line form (blank/``#`` lines skipped, split on
+              the first ``=``). Each KEY must be a POSIX env name with no control character;
+              a VALUE is an opaque literal. github_token / GITHUB_TOKEN are dropped so a
+              ``toJSON(secrets)`` + ``inherit`` bundle never injects the Actions token.
+              Errors quote only KEY names (never a value), and the JSON error is not chained,
+              so no secret material leaks into the log.
+              """
+              text = raw.strip()
+              if not text:
+                  return {}
+              pairs = _run_secrets_from_json(text) if text.startswith("{") else _run_secrets_from_lines(raw)
+              result: dict[str, str] = {}
+              for key, value in pairs:
+                  if key in _DROPPED_SECRET_KEYS:
+                      continue
+                  if _CONTROL.search(key):
+                      raise SystemExit("run-secrets has a control character in a key name.")
+                  if not _ENV_NAME.match(key):
+                      raise SystemExit(
+                          f"run-secrets has an invalid environment variable name: {key!r}. "
+                          "Keys must match [A-Za-z_][A-Za-z0-9_]*."
+                      )
+                  result[key] = value
+              return result
+
+
+          def _run_secrets_from_json(text: str) -> list[tuple[str, str]]:
+              try:
+                  parsed = json.loads(text)
+              except json.JSONDecodeError:
+                  # `from None`: the decoder message can quote secret material; do not chain.
+                  raise SystemExit(
+                      "run-secrets starts with '{' but is not valid JSON. Provide a JSON object "
+                      "of NAME -> value (assembled with per-value toJSON), or the KEY=VALUE form."
+                  ) from None
+              if not isinstance(parsed, dict):
+                  raise SystemExit("run-secrets JSON must be an object of NAME -> value.")
+              pairs: list[tuple[str, str]] = []
+              for key, value in parsed.items():
+                  if not isinstance(value, str):
+                      raise SystemExit(
+                          f"run-secrets value for {str(key)!r} must be a string; got {type(value).__name__}."
+                      )
+                  pairs.append((str(key), value))
+              return pairs
+
+
+          def _run_secrets_from_lines(raw: str) -> list[tuple[str, str]]:
+              pairs: list[tuple[str, str]] = []
+              for line in raw.split("\n"):
+                  item = line.strip()
+                  if not item or item.startswith("#"):
+                      continue
+                  if "=" not in item:
+                      raise SystemExit(
+                          "run-secrets has a KEY=VALUE line with no '='; each non-blank, non-# "
+                          "line must be KEY=VALUE."
+                      )
+                  key, value = item.split("=", 1)
+                  pairs.append((key, value))
+              return pairs
 
 
           def _validate_cache(env: Mapping[str, str]) -> tuple[bool, tuple[str, ...], str, tuple[str, ...]]:
@@ -751,6 +835,66 @@ jobs:
               return base
 
 
+          def build_exec_override_config(base_override: dict, secrets: Mapping[str, str]) -> dict:
+              """The exec-phase override config: the base plus the run-secrets in remoteEnv.
+
+              Secrets go in remoteEnv only for ``exec`` (never ``up``): exec injects them via
+              a transient ``docker exec -e``, so they never land in the persisted
+              ``devcontainer.metadata`` label an ``up`` remoteEnv would leak. Any caller
+              remoteEnv is preserved; a shallow copy leaves the base (for ``up``) unchanged.
+              """
+              exec_override = dict(base_override)
+              existing = exec_override.get("remoteEnv")
+              remote_env = dict(existing) if isinstance(existing, dict) else {}
+              remote_env.update(secrets)
+              exec_override["remoteEnv"] = remote_env
+              return exec_override
+
+
+          def state_dir(runner_temp: Path) -> Path:
+              """RUNNER_TEMP subdirectory holding this run's generated override + secret files."""
+              return runner_temp / _STATE_SUBDIR
+
+
+          def secret_file_paths(runner_temp: Path) -> tuple[Path, Path]:
+              """The two 0600 secret files (up --secrets-file, exec override); cleanup shreds them."""
+              directory = state_dir(runner_temp)
+              return directory / "secrets.json", directory / "exec-config.json"
+
+
+          def write_secret_file(path: Path, data: object) -> None:
+              """Serialize ``data`` to a 0600 JSON file, never briefly readable and never echoed."""
+              text = json.dumps(data, indent=2) + "\n"
+              fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+              try:
+                  os.write(fd, text.encode("utf-8"))
+              finally:
+                  os.close(fd)
+              os.chmod(path, 0o600)
+
+
+          def shred_file(path: Path) -> bool:
+              """Overwrite with zeros, fsync, then unlink; True if removed, tolerant of absence."""
+              try:
+                  size = path.stat().st_size
+              except FileNotFoundError:
+                  return False
+              try:
+                  fd = os.open(path, os.O_WRONLY)
+                  try:
+                      os.write(fd, b"\0" * size)
+                      os.fsync(fd)
+                  finally:
+                      os.close(fd)
+              except OSError:
+                  pass
+              try:
+                  path.unlink()
+              except FileNotFoundError:
+                  return False
+              return True
+
+
           def cli_invocation(config: Config) -> list[str]:
               """The pinned @devcontainers/cli invocation prefix.
 
@@ -761,8 +905,21 @@ jobs:
               return ["npx", "--yes", f"@devcontainers/cli@{config.cli_version}"]
 
 
-          def build_up_argv(config: Config, workspace: Path, config_path: Path, id_label: str) -> list[str]:
-              """Assemble the `devcontainer up` argv (JSON result, no rebuild)."""
+          def build_up_argv(
+              config: Config,
+              workspace: Path,
+              config_path: Path,
+              id_label: str,
+              secrets_file: Path | None = None,
+          ) -> list[str]:
+              """Assemble the `devcontainer up` argv (JSON result, no rebuild).
+
+              When run-secrets carried values, ``secrets_file`` is the 0600 JSON file added
+              as ``--secrets-file`` so the creation HOOKS get the secrets (only ``up`` accepts
+              the flag; ``exec`` rejects it). Only the PATH lands in the argv, never a value,
+              and secrets are kept out of this config's remoteEnv (which ``up`` would bake
+              into the persisted devcontainer.metadata label).
+              """
               argv = [
                   *cli_invocation(config),
                   "up",
@@ -784,6 +941,8 @@ jobs:
                   argv += ["--additional-features", config.features]
               for entry in config.container_env:
                   argv += ["--remote-env", entry]
+              if secrets_file is not None:
+                  argv += ["--secrets-file", str(secrets_file)]
               return argv
 
 
@@ -1026,6 +1185,7 @@ jobs:
           from __future__ import annotations
 
           import json
+          import os
           import re
           import shlex
           from collections.abc import Mapping
@@ -1062,6 +1222,15 @@ jobs:
           # A pinned @devcontainers/cli npm version. Constraining it here keeps the
           # env-mediated `npm install -g @devcontainers/cli@<version>` install safe.
           _CLI_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+.][0-9A-Za-z.-]+)?$")
+          # Keys defensively dropped from a run-secrets bundle: the ephemeral Actions token,
+          # which a `toJSON(secrets)` + `secrets: inherit` bundle would otherwise carry into
+          # the user command. GitHub exposes it as GITHUB_TOKEN and (in the serialized
+          # secrets context) as github_token, so both spellings are stripped.
+          _DROPPED_SECRET_KEYS = frozenset({"github_token", "GITHUB_TOKEN"})
+          # RUNNER_TEMP subdirectory holding this run's generated override config and the
+          # 0600 secret files. run-devcontainer.py writes them here; cleanup.py shreds the
+          # secret files from the same place in its always() step.
+          _STATE_SUBDIR = "devflows-devcontainer-run"
 
 
           @dataclass(frozen=True)
@@ -1219,6 +1388,76 @@ jobs:
                       raise SystemExit(f"container-env has an invalid environment variable name: {key!r}.")
                   entries.append(item)
               return tuple(entries)
+
+
+          # --------------------------------------------------------------------------- #
+          # run-secrets bundle (a DECLARED workflow_call secret, GitHub-masked)          #
+          # --------------------------------------------------------------------------- #
+          def parse_run_secrets(raw: str) -> dict[str, str]:
+              """Parse the masked run-secrets bundle into a {KEY: VALUE} dict.
+
+              Accepts a JSON object (primary; text starts with ``{``, values must be
+              strings) or a ``KEY=VALUE``-per-line form (blank/``#`` lines skipped, split on
+              the first ``=``). Each KEY must be a POSIX env name with no control character;
+              a VALUE is an opaque literal. github_token / GITHUB_TOKEN are dropped so a
+              ``toJSON(secrets)`` + ``inherit`` bundle never injects the Actions token.
+              Errors quote only KEY names (never a value), and the JSON error is not chained,
+              so no secret material leaks into the log.
+              """
+              text = raw.strip()
+              if not text:
+                  return {}
+              pairs = _run_secrets_from_json(text) if text.startswith("{") else _run_secrets_from_lines(raw)
+              result: dict[str, str] = {}
+              for key, value in pairs:
+                  if key in _DROPPED_SECRET_KEYS:
+                      continue
+                  if _CONTROL.search(key):
+                      raise SystemExit("run-secrets has a control character in a key name.")
+                  if not _ENV_NAME.match(key):
+                      raise SystemExit(
+                          f"run-secrets has an invalid environment variable name: {key!r}. "
+                          "Keys must match [A-Za-z_][A-Za-z0-9_]*."
+                      )
+                  result[key] = value
+              return result
+
+
+          def _run_secrets_from_json(text: str) -> list[tuple[str, str]]:
+              try:
+                  parsed = json.loads(text)
+              except json.JSONDecodeError:
+                  # `from None`: the decoder message can quote secret material; do not chain.
+                  raise SystemExit(
+                      "run-secrets starts with '{' but is not valid JSON. Provide a JSON object "
+                      "of NAME -> value (assembled with per-value toJSON), or the KEY=VALUE form."
+                  ) from None
+              if not isinstance(parsed, dict):
+                  raise SystemExit("run-secrets JSON must be an object of NAME -> value.")
+              pairs: list[tuple[str, str]] = []
+              for key, value in parsed.items():
+                  if not isinstance(value, str):
+                      raise SystemExit(
+                          f"run-secrets value for {str(key)!r} must be a string; got {type(value).__name__}."
+                      )
+                  pairs.append((str(key), value))
+              return pairs
+
+
+          def _run_secrets_from_lines(raw: str) -> list[tuple[str, str]]:
+              pairs: list[tuple[str, str]] = []
+              for line in raw.split("\n"):
+                  item = line.strip()
+                  if not item or item.startswith("#"):
+                      continue
+                  if "=" not in item:
+                      raise SystemExit(
+                          "run-secrets has a KEY=VALUE line with no '='; each non-blank, non-# "
+                          "line must be KEY=VALUE."
+                      )
+                  key, value = item.split("=", 1)
+                  pairs.append((key, value))
+              return pairs
 
 
           def _validate_cache(env: Mapping[str, str]) -> tuple[bool, tuple[str, ...], str, tuple[str, ...]]:
@@ -1427,6 +1666,66 @@ jobs:
               return base
 
 
+          def build_exec_override_config(base_override: dict, secrets: Mapping[str, str]) -> dict:
+              """The exec-phase override config: the base plus the run-secrets in remoteEnv.
+
+              Secrets go in remoteEnv only for ``exec`` (never ``up``): exec injects them via
+              a transient ``docker exec -e``, so they never land in the persisted
+              ``devcontainer.metadata`` label an ``up`` remoteEnv would leak. Any caller
+              remoteEnv is preserved; a shallow copy leaves the base (for ``up``) unchanged.
+              """
+              exec_override = dict(base_override)
+              existing = exec_override.get("remoteEnv")
+              remote_env = dict(existing) if isinstance(existing, dict) else {}
+              remote_env.update(secrets)
+              exec_override["remoteEnv"] = remote_env
+              return exec_override
+
+
+          def state_dir(runner_temp: Path) -> Path:
+              """RUNNER_TEMP subdirectory holding this run's generated override + secret files."""
+              return runner_temp / _STATE_SUBDIR
+
+
+          def secret_file_paths(runner_temp: Path) -> tuple[Path, Path]:
+              """The two 0600 secret files (up --secrets-file, exec override); cleanup shreds them."""
+              directory = state_dir(runner_temp)
+              return directory / "secrets.json", directory / "exec-config.json"
+
+
+          def write_secret_file(path: Path, data: object) -> None:
+              """Serialize ``data`` to a 0600 JSON file, never briefly readable and never echoed."""
+              text = json.dumps(data, indent=2) + "\n"
+              fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+              try:
+                  os.write(fd, text.encode("utf-8"))
+              finally:
+                  os.close(fd)
+              os.chmod(path, 0o600)
+
+
+          def shred_file(path: Path) -> bool:
+              """Overwrite with zeros, fsync, then unlink; True if removed, tolerant of absence."""
+              try:
+                  size = path.stat().st_size
+              except FileNotFoundError:
+                  return False
+              try:
+                  fd = os.open(path, os.O_WRONLY)
+                  try:
+                      os.write(fd, b"\0" * size)
+                      os.fsync(fd)
+                  finally:
+                      os.close(fd)
+              except OSError:
+                  pass
+              try:
+                  path.unlink()
+              except FileNotFoundError:
+                  return False
+              return True
+
+
           def cli_invocation(config: Config) -> list[str]:
               """The pinned @devcontainers/cli invocation prefix.
 
@@ -1437,8 +1736,21 @@ jobs:
               return ["npx", "--yes", f"@devcontainers/cli@{config.cli_version}"]
 
 
-          def build_up_argv(config: Config, workspace: Path, config_path: Path, id_label: str) -> list[str]:
-              """Assemble the `devcontainer up` argv (JSON result, no rebuild)."""
+          def build_up_argv(
+              config: Config,
+              workspace: Path,
+              config_path: Path,
+              id_label: str,
+              secrets_file: Path | None = None,
+          ) -> list[str]:
+              """Assemble the `devcontainer up` argv (JSON result, no rebuild).
+
+              When run-secrets carried values, ``secrets_file`` is the 0600 JSON file added
+              as ``--secrets-file`` so the creation HOOKS get the secrets (only ``up`` accepts
+              the flag; ``exec`` rejects it). Only the PATH lands in the argv, never a value,
+              and secrets are kept out of this config's remoteEnv (which ``up`` would bake
+              into the persisted devcontainer.metadata label).
+              """
               argv = [
                   *cli_invocation(config),
                   "up",
@@ -1460,6 +1772,8 @@ jobs:
                   argv += ["--additional-features", config.features]
               for entry in config.container_env:
                   argv += ["--remote-env", entry]
+              if secrets_file is not None:
+                  argv += ["--secrets-file", str(secrets_file)]
               return argv
 
 
@@ -1540,19 +1854,28 @@ jobs:
 
             1. Resolve the override config (minimal {"image": ref} or the caller's
                devcontainer.json merged with the image/remote-user overrides), written to
-               RUNNER_TEMP so the checkout is never mutated.
+               RUNNER_TEMP so the checkout is never mutated. When the caller supplied a
+               run-secrets bundle (a declared, GitHub-masked secret), it is parsed here and
+               materialized into two 0600 files under RUNNER_TEMP: a secrets.json (the
+               `up --secrets-file` shape, delivering secrets to the lifecycle HOOKS) and a
+               secrets-bearing exec override-config whose remoteEnv carries the secrets to
+               the COMMAND via a transient `docker exec -e` (no persisted label). Secrets
+               are never placed in the `up` override-config remoteEnv or in any argv.
             2. `docker pull` the resolved image first for a clean, fast failure when the
                ref is wrong or the registry credentials are missing (the pull otherwise
                rides `docker run` auto-pull deep inside `up`).
             3. `devcontainer up --override-config ... --id-label ... --log-format json`
-               against the workspace bind mount (no rebuild), parse the JSON result, emit
-               container-id / remote-user outputs, and fail loudly on outcome: error.
-            4. `devcontainer exec ... -- <run-shell> -c <run-command>` and exit with the
-               command's own exit code (faithful propagation: a nonzero command fails the
-               step, so a misconfigured call can never silently pass).
+               (+ --secrets-file when run-secrets was set) against the workspace bind mount
+               (no rebuild), parse the JSON result, emit container-id / remote-user
+               outputs, and fail loudly on outcome: error.
+            4. `devcontainer exec --override-config <exec-config> ... -- <run-shell> -c
+               <run-command>` and exit with the command's own exit code (faithful
+               propagation: a nonzero command fails the step, so a misconfigured call can
+               never silently pass).
 
-          Cleanup (docker rm) is a separate always() step, so a container left behind by a
-          failed `up` is still removed.
+          Cleanup (docker rm + shredding the two secret files) is a separate always()
+          step, so a container or secret file left behind by a failed `up` is still
+          removed.
           """
 
           from __future__ import annotations
@@ -1575,19 +1898,38 @@ jobs:
               if not id_label:
                   raise SystemExit("ID_LABEL is required; it correlates `up`, `exec`, and cleanup.")
 
+              # RUN_SECRETS is a DECLARED, GitHub-masked workflow_call secret (never an
+              # input, so never in the inputs-only validate job). Parse+validate here, in
+              # the run step, with no echo/set -x around it; a bad KEY fails the step loudly.
+              run_secrets = dcrun.parse_run_secrets(os.environ.get("RUN_SECRETS", ""))
+
               caller_config = dcrun.load_caller_config(workspace, config.config_file)
               override = dcrun.synthesize_override_config(config, caller_config)
 
               runner_temp = Path(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())
-              config_dir = runner_temp / "devflows-devcontainer-run"
-              config_dir.mkdir(parents=True, exist_ok=True)
-              config_path = config_dir / "devcontainer.json"
+              state_dir = dcrun.state_dir(runner_temp)
+              state_dir.mkdir(parents=True, exist_ok=True)
+              # The `up` override config carries NO secrets in remoteEnv (that would leak
+              # them into the persisted devcontainer.metadata label).
+              config_path = state_dir / "devcontainer.json"
               config_path.write_text(json.dumps(override, indent=2) + "\n", encoding="utf-8")
+
+              secrets_file: Path | None = None
+              exec_config_path = config_path
+              if run_secrets:
+                  secrets_path, exec_path = dcrun.secret_file_paths(runner_temp)
+                  # up --secrets-file shape: {"KEY": "VALUE", ...}, injected into the hooks.
+                  dcrun.write_secret_file(secrets_path, run_secrets)
+                  secrets_file = secrets_path
+                  # exec override-config: base + secrets in remoteEnv, reaching the command
+                  # via a transient `docker exec -e` (no persisted label). 0600, cleaned up.
+                  dcrun.write_secret_file(exec_path, dcrun.build_exec_override_config(override, run_secrets))
+                  exec_config_path = exec_path
 
               resolved_image = override["image"]
               _pull(resolved_image)
 
-              up_result = _up(config, workspace, config_path, id_label)
+              up_result = _up(config, workspace, config_path, id_label, secrets_file)
               _emit_outputs(up_result)
               outcome = up_result.get("outcome")
               if outcome != "success":
@@ -1598,7 +1940,7 @@ jobs:
                   )
                   raise SystemExit(f"devcontainer up failed ({outcome}): {message}")
 
-              return _exec(config, workspace, config_path, id_label)
+              return _exec(config, workspace, exec_config_path, id_label)
 
 
           def _pull(image: str) -> None:
@@ -1612,8 +1954,15 @@ jobs:
                   )
 
 
-          def _up(config: dcrun.Config, workspace: Path, config_path: Path, id_label: str) -> dict:
-              argv = dcrun.build_up_argv(config, workspace, config_path, id_label)
+          def _up(
+              config: dcrun.Config,
+              workspace: Path,
+              config_path: Path,
+              id_label: str,
+              secrets_file: Path | None,
+          ) -> dict:
+              argv = dcrun.build_up_argv(config, workspace, config_path, id_label, secrets_file)
+              # The echoed argv carries only the --secrets-file PATH, never a secret value.
               print("+ " + " ".join(shlex.quote(part) for part in argv), flush=True)
               completed = subprocess.run(argv, stdout=subprocess.PIPE, text=True)  # noqa: PLW1510
               sys.stdout.write(completed.stdout)
@@ -1650,12 +1999,20 @@ jobs:
           cat > "$RUNNER_TEMP/devflows/devcontainer-run/cleanup.py" <<'DEVFLOWS_SCRIPT_EOF'
           """Remove the devcontainer this run started (always() cleanup step).
 
-          There is no `devcontainer down`, so cleanup is by Docker: list every container
-          carrying this run's id-label and `docker rm -f` each one. Runs even when `up` or
-          the caller command failed (the workflow gates it with if: always()), so a
-          container left behind by a failed `up` is still removed. Container-written files
-          persist on the host bind mount, so the artifact-upload channel that runs after
-          this still sees them. Tolerant of "none found" and of a container already gone.
+          Two responsibilities, both under if: always():
+
+            1. Shred the run-secrets files. run-devcontainer.py may have written two 0600
+               files under RUNNER_TEMP (the up --secrets-file secrets.json and the
+               secrets-bearing exec override-config). They are overwritten and unlinked
+               here UNCONDITIONALLY -- before, and independent of, remove-container -- so a
+               failed run or remove-container: false never leaves secret material on disk.
+            2. Remove the container. There is no `devcontainer down`, so cleanup is by
+               Docker: list every container carrying this run's id-label and `docker rm -f`
+               each one. Container-written files persist on the host bind mount, so the
+               artifact-upload channel that runs after this still sees them.
+
+          Runs even when `up` or the caller command failed, and is tolerant of a missing
+          secret file, "none found", and a container already gone.
           """
 
           from __future__ import annotations
@@ -1663,11 +2020,15 @@ jobs:
           import os
           import subprocess
           import sys
+          import tempfile
+          from pathlib import Path
 
           import dcrun
 
 
           def main() -> int:
+              _shred_secret_files()
+
               if not _truthy(os.environ.get("REMOVE_CONTAINER", "")):
                   print("remove-container is false; leaving the container in place.")
                   return 0
@@ -1694,6 +2055,14 @@ jobs:
                   else:
                       print(f"Warning: could not remove container {container_id} (already gone?).")
               return 0
+
+
+          def _shred_secret_files() -> None:
+              """Overwrite and unlink the run-secrets files, if run-devcontainer.py wrote them."""
+              runner_temp = Path(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())
+              for path in dcrun.secret_file_paths(runner_temp):
+                  if dcrun.shred_file(path):
+                      print(f"Shredded secret file {path.name}.")
 
 
           def _truthy(value: str) -> bool:
@@ -1740,6 +2109,7 @@ jobs:
           CONTAINER_ENV: ${{ inputs.container-env }}
           DEVCONTAINER_FEATURES: ${{ inputs.devcontainer-features }}
           DEVCONTAINER_CLI_VERSION: ${{ inputs.devcontainer-cli-version }}
+          RUN_SECRETS: ${{ secrets.run-secrets }}
         run: |
           # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
           python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/run-devcontainer.py"

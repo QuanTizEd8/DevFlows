@@ -1,11 +1,19 @@
 """Remove the devcontainer this run started (always() cleanup step).
 
-There is no `devcontainer down`, so cleanup is by Docker: list every container
-carrying this run's id-label and `docker rm -f` each one. Runs even when `up` or
-the caller command failed (the workflow gates it with if: always()), so a
-container left behind by a failed `up` is still removed. Container-written files
-persist on the host bind mount, so the artifact-upload channel that runs after
-this still sees them. Tolerant of "none found" and of a container already gone.
+Two responsibilities, both under if: always():
+
+  1. Shred the run-secrets files. run-devcontainer.py may have written two 0600
+     files under RUNNER_TEMP (the up --secrets-file secrets.json and the
+     secrets-bearing exec override-config). They are overwritten and unlinked
+     here UNCONDITIONALLY -- before, and independent of, remove-container -- so a
+     failed run or remove-container: false never leaves secret material on disk.
+  2. Remove the container. There is no `devcontainer down`, so cleanup is by
+     Docker: list every container carrying this run's id-label and `docker rm -f`
+     each one. Container-written files persist on the host bind mount, so the
+     artifact-upload channel that runs after this still sees them.
+
+Runs even when `up` or the caller command failed, and is tolerant of a missing
+secret file, "none found", and a container already gone.
 """
 
 from __future__ import annotations
@@ -13,11 +21,15 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 import dcrun
 
 
 def main() -> int:
+    _shred_secret_files()
+
     if not _truthy(os.environ.get("REMOVE_CONTAINER", "")):
         print("remove-container is false; leaving the container in place.")
         return 0
@@ -44,6 +56,14 @@ def main() -> int:
         else:
             print(f"Warning: could not remove container {container_id} (already gone?).")
     return 0
+
+
+def _shred_secret_files() -> None:
+    """Overwrite and unlink the run-secrets files, if run-devcontainer.py wrote them."""
+    runner_temp = Path(os.environ.get("RUNNER_TEMP") or tempfile.gettempdir())
+    for path in dcrun.secret_file_paths(runner_temp):
+        if dcrun.shred_file(path):
+            print(f"Shredded secret file {path.name}.")
 
 
 def _truthy(value: str) -> bool:

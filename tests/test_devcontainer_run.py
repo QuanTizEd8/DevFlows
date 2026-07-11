@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -565,6 +566,140 @@ def test_run_command_stays_a_single_argv_token(command) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# run-secrets parsing                                                         #
+# --------------------------------------------------------------------------- #
+def test_parse_run_secrets_json_object_form() -> None:
+    parsed = dcrun.parse_run_secrets('{"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}')
+    assert parsed == {"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}
+
+
+def test_parse_run_secrets_key_value_line_form() -> None:
+    # Value is literal after the first '=' ('=' and ':' inside a value are fine).
+    parsed = dcrun.parse_run_secrets("API_TOKEN=abc\nDB_PASSWORD=p@ss=w:rd")
+    assert parsed == {"API_TOKEN": "abc", "DB_PASSWORD": "p@ss=w:rd"}
+
+
+def test_parse_run_secrets_skips_blank_and_comment_lines() -> None:
+    parsed = dcrun.parse_run_secrets("\n# a comment\nA=1\n\n  # indented comment\nB=2\n")
+    assert parsed == {"A": "1", "B": "2"}
+
+
+def test_parse_run_secrets_empty_is_empty_dict() -> None:
+    assert dcrun.parse_run_secrets("") == {}
+    assert dcrun.parse_run_secrets("   \n  ") == {}
+
+
+def test_parse_run_secrets_empty_json_object() -> None:
+    assert dcrun.parse_run_secrets("{}") == {}
+
+
+@pytest.mark.parametrize("token_key", ["github_token", "GITHUB_TOKEN"])
+def test_parse_run_secrets_drops_github_token(token_key) -> None:
+    # A toJSON(secrets)+inherit bundle carries the Actions token; it must be dropped
+    # so it is never injected into the user command.
+    parsed = dcrun.parse_run_secrets(f'{{"{token_key}": "ghs_xxx", "REAL": "v"}}')
+    assert parsed == {"REAL": "v"}
+    line_form = dcrun.parse_run_secrets(f"{token_key}=ghs_xxx\nREAL=v")
+    assert line_form == {"REAL": "v"}
+
+
+@pytest.mark.parametrize("key", ["1BAD", "has space", "has-dash", "a.b", ""])
+def test_parse_run_secrets_rejects_invalid_key(key) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_run_secrets(json.dumps({key: "v"}))
+    assert "invalid environment variable name" in str(excinfo.value)
+
+
+def test_parse_run_secrets_rejects_control_char_in_key() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_run_secrets(json.dumps({"A\x01B": "v"}))
+    assert "control character" in str(excinfo.value)
+
+
+def test_parse_run_secrets_rejects_non_string_value() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_run_secrets('{"A": 123}')
+    assert "must be a string" in str(excinfo.value)
+
+
+def test_parse_run_secrets_line_without_equals_is_rejected() -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_run_secrets("NOEQUALS")
+    assert "no '='" in str(excinfo.value)
+
+
+def test_parse_run_secrets_bad_json_error_does_not_leak_value() -> None:
+    # A malformed JSON bundle must fail WITHOUT echoing its (secret) content or
+    # chaining the json decoder's message (which would quote the raw text).
+    secret_material = "s3cr3t-do-not-leak"
+    with pytest.raises(SystemExit) as excinfo:
+        dcrun.parse_run_secrets('{"A": "' + secret_material)  # unterminated
+    message = str(excinfo.value)
+    assert "not valid JSON" in message
+    assert secret_material not in message
+    assert excinfo.value.__cause__ is None
+
+
+# --------------------------------------------------------------------------- #
+# run-secrets materialization: exec override, file perms, argv wiring         #
+# --------------------------------------------------------------------------- #
+def test_build_exec_override_config_merges_secrets_into_remote_env() -> None:
+    base = {"image": "alpine:3.20"}
+    result = dcrun.build_exec_override_config(base, {"API_TOKEN": "abc"})
+    assert result == {"image": "alpine:3.20", "remoteEnv": {"API_TOKEN": "abc"}}
+    # The base override (used for `up`) is not mutated (no secrets leak into it).
+    assert base == {"image": "alpine:3.20"}
+
+
+def test_build_exec_override_config_preserves_existing_remote_env() -> None:
+    base = {"image": "x:1", "remoteEnv": {"PATH_HINT": "/opt/bin"}}
+    result = dcrun.build_exec_override_config(base, {"API_TOKEN": "abc"})
+    assert result["remoteEnv"] == {"PATH_HINT": "/opt/bin", "API_TOKEN": "abc"}
+
+
+def test_up_argv_gets_secrets_file_only_when_provided() -> None:
+    without = dcrun.build_up_argv(_config(), _WS, _CFG, _LABEL)
+    assert "--secrets-file" not in without
+    with_secrets = dcrun.build_up_argv(_config(), _WS, _CFG, _LABEL, Path("/tmp/s/secrets.json"))
+    assert with_secrets[with_secrets.index("--secrets-file") + 1] == "/tmp/s/secrets.json"
+
+
+def test_exec_argv_never_gets_secrets_file_or_secret_remote_env() -> None:
+    # exec REJECTS --secrets-file, and secrets must NOT ride --remote-env (argv is
+    # process-list visible). Secrets reach exec only through the override-config.
+    argv = dcrun.build_exec_argv(_config(container_env=("CI=true",)), _WS, _CFG, _LABEL)
+    assert "--secrets-file" not in argv
+    remote_envs = [argv[i + 1] for i, tok in enumerate(argv) if tok == "--remote-env"]
+    # Only the non-secret container-env stays on --remote-env.
+    assert remote_envs == ["CI=true"]
+
+
+def test_write_secret_file_is_0600_and_roundtrips(tmp_path) -> None:
+    path = tmp_path / "secrets.json"
+    dcrun.write_secret_file(path, {"API_TOKEN": "abc"})
+    assert json.loads(path.read_text(encoding="utf-8")) == {"API_TOKEN": "abc"}
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_secret_file_paths_are_under_runner_state_dir(tmp_path) -> None:
+    secrets_path, exec_path = dcrun.secret_file_paths(tmp_path)
+    state = dcrun.state_dir(tmp_path)
+    assert secrets_path == state / "secrets.json"
+    assert exec_path == state / "exec-config.json"
+
+
+def test_shred_file_overwrites_and_removes(tmp_path) -> None:
+    path = tmp_path / "secrets.json"
+    path.write_text('{"A": "secret"}', encoding="utf-8")
+    assert dcrun.shred_file(path) is True
+    assert not path.exists()
+
+
+def test_shred_file_tolerates_missing(tmp_path) -> None:
+    assert dcrun.shred_file(tmp_path / "nope.json") is False
+
+
+# --------------------------------------------------------------------------- #
 # up-JSON parsing                                                             #
 # --------------------------------------------------------------------------- #
 def test_parse_up_result_success() -> None:
@@ -745,8 +880,155 @@ def test_run_devcontainer_merges_config_file(tmp_path, monkeypatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# run-devcontainer.py: run-secrets end-to-end wiring                          #
+# --------------------------------------------------------------------------- #
+def _secret_files(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """(secrets.json, exec-config.json, up-override devcontainer.json) under temp."""
+    state = tmp_path / "runner-temp" / "devflows-devcontainer-run"
+    return state / "secrets.json", state / "exec-config.json", state / "devcontainer.json"
+
+
+def test_run_devcontainer_wires_secrets_into_up_and_exec(tmp_path, monkeypatch) -> None:
+    module = _load_script("run-devcontainer.py")
+    fake = _FakeDocker(up_stdout='{"outcome":"success","containerId":"x","remoteUser":"root"}\n')
+    monkeypatch.setattr(module.subprocess, "run", fake)
+    env = _run_env(tmp_path, RUN_SECRETS='{"API_TOKEN": "abc123"}')
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert module.main() == 0
+    secrets_json, exec_config, up_config = _secret_files(tmp_path)
+
+    # up gets --secrets-file pointing at the secrets.json (KEY->VALUE shape).
+    up = next(c for c in fake.calls if _verb(c) == "up")
+    assert up[up.index("--secrets-file") + 1] == str(secrets_json)
+    assert json.loads(secrets_json.read_text(encoding="utf-8")) == {"API_TOKEN": "abc123"}
+    assert stat.S_IMODE(secrets_json.stat().st_mode) == 0o600
+
+    # The `up` override-config carries NO secrets in remoteEnv (no label leak).
+    assert "remoteEnv" not in json.loads(up_config.read_text(encoding="utf-8"))
+    assert up[up.index("--override-config") + 1] == str(up_config)
+
+    # exec uses the secrets-bearing override-config (secret in remoteEnv), NOT
+    # --secrets-file and NOT --remote-env.
+    ex = next(c for c in fake.calls if _verb(c) == "exec")
+    assert ex[ex.index("--override-config") + 1] == str(exec_config)
+    assert "--secrets-file" not in ex
+    assert "--remote-env" not in ex
+    written_exec = json.loads(exec_config.read_text(encoding="utf-8"))
+    assert written_exec["remoteEnv"] == {"API_TOKEN": "abc123"}
+    assert stat.S_IMODE(exec_config.stat().st_mode) == 0o600
+    # The secret VALUE never appears anywhere in the constructed argv tokens.
+    assert not any("abc123" in tok for call in fake.calls for tok in call)
+
+
+def test_run_devcontainer_without_secrets_writes_no_secret_files(tmp_path, monkeypatch) -> None:
+    module = _load_script("run-devcontainer.py")
+    fake = _FakeDocker(up_stdout='{"outcome":"success","containerId":"x","remoteUser":"root"}\n')
+    monkeypatch.setattr(module.subprocess, "run", fake)
+    for key, value in _run_env(tmp_path).items():  # RUN_SECRETS unset
+        monkeypatch.setenv(key, value)
+
+    assert module.main() == 0
+    secrets_json, exec_config, up_config = _secret_files(tmp_path)
+    assert not secrets_json.exists()
+    assert not exec_config.exists()
+    up = next(c for c in fake.calls if _verb(c) == "up")
+    assert "--secrets-file" not in up
+    # exec falls back to the plain up override-config.
+    ex = next(c for c in fake.calls if _verb(c) == "exec")
+    assert ex[ex.index("--override-config") + 1] == str(up_config)
+
+
+def test_run_devcontainer_never_echoes_the_secret(tmp_path, monkeypatch, capsys) -> None:
+    module = _load_script("run-devcontainer.py")
+    fake = _FakeDocker(up_stdout='{"outcome":"success","containerId":"x","remoteUser":"root"}\n')
+    monkeypatch.setattr(module.subprocess, "run", fake)
+    env = _run_env(tmp_path, RUN_SECRETS='{"API_TOKEN": "top-secret-value"}')
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+
+    assert module.main() == 0
+    captured = capsys.readouterr()
+    assert "top-secret-value" not in captured.out
+    assert "top-secret-value" not in captured.err
+
+
+def test_run_devcontainer_rejects_bad_secret_key(tmp_path, monkeypatch) -> None:
+    # A bad KEY in run-secrets fails the run step (the secret is never seen by the
+    # inputs-only validate job, so validation lives here in the materialize path).
+    module = _load_script("run-devcontainer.py")
+    fake = _FakeDocker(up_stdout="")
+    monkeypatch.setattr(module.subprocess, "run", fake)
+    env = _run_env(tmp_path, RUN_SECRETS='{"1BAD": "x"}')
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    assert "invalid environment variable name" in str(excinfo.value)
+    # Nothing ran: the bad bundle is rejected before docker is touched.
+    assert fake.calls == []
+
+
+# --------------------------------------------------------------------------- #
 # cleanup.py                                                                  #
 # --------------------------------------------------------------------------- #
+def test_cleanup_shreds_both_secret_files(tmp_path, monkeypatch) -> None:
+    module = _load_script("cleanup.py")
+    state = tmp_path / "runner-temp" / "devflows-devcontainer-run"
+    state.mkdir(parents=True)
+    secrets_json = state / "secrets.json"
+    exec_config = state / "exec-config.json"
+    secrets_json.write_text('{"API_TOKEN": "abc"}', encoding="utf-8")
+    exec_config.write_text('{"remoteEnv": {"API_TOKEN": "abc"}}', encoding="utf-8")
+
+    def _run(argv, **kwargs):  # noqa: ANN001
+        if argv[:2] == ["docker", "ps"]:
+            return subprocess.CompletedProcess(argv, 0, stdout="\n")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(module.subprocess, "run", _run)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner-temp"))
+    monkeypatch.setenv("REMOVE_CONTAINER", "true")
+    monkeypatch.setenv("ID_LABEL", _LABEL)
+    assert module.main() == 0
+    assert not secrets_json.exists()
+    assert not exec_config.exists()
+
+
+def test_cleanup_shreds_secrets_even_when_remove_container_disabled(tmp_path, monkeypatch) -> None:
+    # Secret files are shredded unconditionally, before/independent of the container
+    # removal, so remove-container: false never leaves secret material on disk.
+    module = _load_script("cleanup.py")
+    state = tmp_path / "runner-temp" / "devflows-devcontainer-run"
+    state.mkdir(parents=True)
+    secrets_json = state / "secrets.json"
+    secrets_json.write_text('{"API_TOKEN": "abc"}', encoding="utf-8")
+    monkeypatch.setattr(
+        module.subprocess, "run", lambda *a, **k: pytest.fail("must not call docker")
+    )
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner-temp"))
+    monkeypatch.setenv("REMOVE_CONTAINER", "false")
+    monkeypatch.setenv("ID_LABEL", _LABEL)
+    assert module.main() == 0
+    assert not secrets_json.exists()
+
+
+def test_cleanup_tolerates_absent_secret_files(tmp_path, monkeypatch) -> None:
+    module = _load_script("cleanup.py")
+
+    def _run(argv, **kwargs):  # noqa: ANN001
+        if argv[:2] == ["docker", "ps"]:
+            return subprocess.CompletedProcess(argv, 0, stdout="\n")
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(module.subprocess, "run", _run)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner-temp"))
+    monkeypatch.setenv("REMOVE_CONTAINER", "true")
+    monkeypatch.setenv("ID_LABEL", _LABEL)
+    assert module.main() == 0
+
+
 def test_cleanup_removes_labelled_containers(tmp_path, monkeypatch) -> None:
     module = _load_script("cleanup.py")
     calls: list[list[str]] = []
@@ -758,6 +1040,7 @@ def test_cleanup_removes_labelled_containers(tmp_path, monkeypatch) -> None:
         return subprocess.CompletedProcess(argv, 0)
 
     monkeypatch.setattr(module.subprocess, "run", _run)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner-temp"))
     monkeypatch.setenv("REMOVE_CONTAINER", "true")
     monkeypatch.setenv("ID_LABEL", _LABEL)
     assert module.main() == 0
@@ -770,6 +1053,7 @@ def test_cleanup_skips_when_remove_disabled(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         module.subprocess, "run", lambda *a, **k: pytest.fail("must not call docker")
     )
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner-temp"))
     monkeypatch.setenv("REMOVE_CONTAINER", "false")
     monkeypatch.setenv("ID_LABEL", _LABEL)
     assert module.main() == 0
@@ -784,6 +1068,7 @@ def test_cleanup_tolerates_no_matches(tmp_path, monkeypatch) -> None:
         pytest.fail("docker rm must not run when nothing matched")
 
     monkeypatch.setattr(module.subprocess, "run", _run)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path / "runner-temp"))
     monkeypatch.setenv("REMOVE_CONTAINER", "true")
     monkeypatch.setenv("ID_LABEL", _LABEL)
     assert module.main() == 0
@@ -940,17 +1225,36 @@ def test_permissions_are_least_privilege() -> None:
         assert "id-token" not in perms
 
 
-def test_run_needs_validate_and_only_docker_secret() -> None:
+def test_run_needs_validate_and_declared_secrets() -> None:
     published = _published()
     assert published["jobs"]["run"]["needs"] == "validate"
     secrets = _workflow_call(published).get("secrets", {})
     assert "docker-password" in secrets
+    # run-secrets carries the caller's masked secret bundle; it is declared (not an
+    # input) so its value is redacted in logs, and it is required: false.
+    assert "run-secrets" in secrets
+    assert secrets["run-secrets"].get("required") is False
     assert set(secrets) <= {
         "docker-password",
+        "run-secrets",
         "checkout-token",
         "checkout-ssh-key",
         "artifact-download-token",
     }
+
+
+def test_run_secrets_is_a_declared_secret_not_an_input() -> None:
+    # Secrets MUST NOT be inputs (inputs are not masked); run-secrets is a secret.
+    call = _workflow_call(_published())
+    assert "run-secrets" not in call.get("inputs", {})
+    assert "run-secrets" in call.get("secrets", {})
+
+
+def test_run_step_maps_run_secrets_env_from_the_secret() -> None:
+    # The run step reads the masked secret through an env var (never an argv/input).
+    steps = _run_steps(_published())
+    run_step = steps[_step_index(steps, "Run command in devcontainer")]
+    assert run_step["env"]["RUN_SECRETS"] == "${{ secrets.run-secrets }}"
 
 
 def test_no_input_is_interpolated_into_a_run_block() -> None:

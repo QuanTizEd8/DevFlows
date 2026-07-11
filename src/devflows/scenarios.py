@@ -253,6 +253,7 @@ class Scenario:
     name: str
     runs: tuple[str, ...]
     inputs: dict[str, Any]
+    secrets: dict[str, str]
     assertions: tuple[dict[str, Any], ...]
     cleanup: tuple[str, ...]
     artifact: dict[str, Any]
@@ -284,6 +285,10 @@ def load_scenarios(workflows: list[Workflow]) -> list[Scenario]:
                     name=str(raw_scenario.get("name") or raw_scenario.get("id") or ""),
                     runs=tuple(str(item) for item in raw_scenario.get("runs", []) or []),
                     inputs=dict(raw_scenario.get("inputs") or {}),
+                    secrets={
+                        str(name): str(value)
+                        for name, value in (raw_scenario.get("secrets") or {}).items()
+                    },
                     assertions=tuple(
                         dict(assertion) for assertion in raw_scenario.get("assertions", []) or []
                     ),
@@ -348,6 +353,7 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                 ("mutation", bool(scenario.mutation)),
                 ("writeback-payload", bool(scenario.writeback_payload)),
                 ("cleanup", bool(scenario.cleanup)),
+                ("secrets", bool(scenario.secrets)),
             ):
                 if present:
                     errors.append(
@@ -392,6 +398,15 @@ def validate_scenarios(workflows: list[Workflow]) -> list[str]:
                         errors.append(f"{prefix}: workflow-output-equals assertions require name.")
                     if "value" not in assertion:
                         errors.append(f"{prefix}: workflow-output-equals assertions require value.")
+        if scenario.secrets and not scenario.is_validation_failure:
+            declared = published_workflow_call(scenario.workflow).get("secrets") or {}
+            for name in scenario.secrets:
+                if name not in declared:
+                    errors.append(
+                        f"{prefix}: secret {name!r} is not declared under "
+                        f"{scenario.workflow.id}'s on.workflow_call.secrets; the call job "
+                        "can only pass secrets the reusable workflow declares."
+                    )
         if "hosted" in scenario.runs and _has_file_assertions(scenario) and not scenario.artifact:
             errors.append(f"{prefix}: hosted file assertions require artifact metadata.")
         if scenario.artifact and not scenario.artifact.get("name"):
@@ -864,6 +879,11 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
     permissions = _required_call_permissions(scenario.workflow)
     if permissions:
         job["permissions"] = permissions
+    # Pass declared secrets to the reusable call. GitHub masks these values in the
+    # called workflow's logs. Scenarios use NON-sensitive test literals only; the
+    # harness emits them verbatim (never a ${{ secrets.* }} lookup).
+    if scenario.secrets:
+        job["secrets"] = dict(scenario.secrets)
     if runner == "hosted" and scenario.mutation:
         setup_job_id = f"{scenario.job_prefix}_setup"
         job["with"] = {

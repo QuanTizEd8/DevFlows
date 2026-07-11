@@ -170,6 +170,79 @@ def test_call_job_grants_packages_write_for_build_devcontainer() -> None:
     assert job["permissions"]["packages"] == "write"
 
 
+# --- scenario secrets passthrough (devcontainer-run run-secrets) ---
+
+
+def test_call_job_passes_scenario_secrets_to_the_reusable_workflow() -> None:
+    # A scenario that declares `secrets:` has the call job forward them under
+    # `secrets:` so the reusable workflow receives GitHub-masked values.
+    job = _call_job(
+        _scenario("devcontainer-run", "run-secrets-into-hooks-and-command"), runner="hosted"
+    )
+
+    assert job["secrets"] == {"run-secrets": '{"DEVFLOWS_TEST_SECRET":"ok-123"}'}
+
+
+def test_call_job_omits_secrets_when_scenario_declares_none() -> None:
+    job = _call_job(_scenario("devcontainer-run", "hooks-and-exec"), runner="hosted")
+
+    assert "secrets" not in job
+
+
+def test_scenario_secrets_are_loaded_as_a_mapping() -> None:
+    scenario = _scenario("devcontainer-run", "run-secrets-into-hooks-and-command")
+
+    assert scenario.secrets == {"run-secrets": '{"DEVFLOWS_TEST_SECRET":"ok-123"}'}
+
+
+def test_hosted_secrets_scenario_renders_secrets_block() -> None:
+    rendered = render_test_workflow(
+        load_scenarios(load_catalog()),
+        runner="hosted",
+        name="Hosted",
+    )
+
+    assert "devcontainer_run_run_secrets_into_hooks_and_command_call" in rendered
+    assert "run-secrets:" in rendered
+
+
+def test_scenario_secrets_must_be_declared_by_the_target_workflow() -> None:
+    workflow = _with_scenarios(
+        "devcontainer-run",
+        [
+            {
+                "id": "bad-secret-name",
+                "runs": ["hosted"],
+                "inputs": {"devcontainer-image": "alpine:3.20", "run-command": "echo hi"},
+                "secrets": {"not-declared": "x"},
+                "assertions": [{"type": "file-glob-exists", "path": "r.txt"}],
+                "artifact": {"name": "a"},
+            }
+        ],
+    )
+    errors = validate_scenarios([workflow])
+
+    assert any("not declared" in error and "not-declared" in error for error in errors)
+
+
+def test_validation_failure_scenario_cannot_declare_secrets() -> None:
+    workflow = _with_scenarios(
+        "devcontainer-run",
+        [
+            {
+                "id": "vf-with-secret",
+                "runs": ["hosted"],
+                "expect": "validation-failure",
+                "inputs": {"devcontainer-image": "alpine:bad:ref", "run-command": "echo hi"},
+                "secrets": {"run-secrets": "x"},
+            }
+        ],
+    )
+    errors = validate_scenarios([workflow])
+
+    assert any("cannot declare secrets" in error for error in errors)
+
+
 # --- task 2: hosted setup/assert jobs check out before running any script ---
 
 

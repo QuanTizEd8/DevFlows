@@ -202,6 +202,11 @@
           "items": { "type": "string" }
         },
         "inputs": { "type": "object" },
+        "secrets": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Secrets passed to the reusable workflow by the generated call job, as a NAME -> value map (e.g. {\"run-secrets\": \"{...}\"}). The generated call job emits them under `secrets:` so the reusable workflow receives GitHub-masked values. Use NON-sensitive test literals only; the scenario harness passes them verbatim (no ${{ secrets.* }} lookup). Not valid for expect: validation-failure scenarios, which run the inputs-only validate script directly and never see secrets."
+        },
         "artifact": {
           "type": "object",
           "additionalProperties": false,

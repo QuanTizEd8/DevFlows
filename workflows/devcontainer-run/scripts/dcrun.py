@@ -16,6 +16,7 @@ workflow. This is the whole point of the env-mediated design.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 from collections.abc import Mapping
@@ -52,6 +53,15 @@ _REMOTE_USER = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 # A pinned @devcontainers/cli npm version. Constraining it here keeps the
 # env-mediated `npm install -g @devcontainers/cli@<version>` install safe.
 _CLI_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+.][0-9A-Za-z.-]+)?$")
+# Keys defensively dropped from a run-secrets bundle: the ephemeral Actions token,
+# which a `toJSON(secrets)` + `secrets: inherit` bundle would otherwise carry into
+# the user command. GitHub exposes it as GITHUB_TOKEN and (in the serialized
+# secrets context) as github_token, so both spellings are stripped.
+_DROPPED_SECRET_KEYS = frozenset({"github_token", "GITHUB_TOKEN"})
+# RUNNER_TEMP subdirectory holding this run's generated override config and the
+# 0600 secret files. run-devcontainer.py writes them here; cleanup.py shreds the
+# secret files from the same place in its always() step.
+_STATE_SUBDIR = "devflows-devcontainer-run"
 
 
 @dataclass(frozen=True)
@@ -209,6 +219,76 @@ def _validate_container_env(value: str) -> tuple[str, ...]:
             raise SystemExit(f"container-env has an invalid environment variable name: {key!r}.")
         entries.append(item)
     return tuple(entries)
+
+
+# --------------------------------------------------------------------------- #
+# run-secrets bundle (a DECLARED workflow_call secret, GitHub-masked)          #
+# --------------------------------------------------------------------------- #
+def parse_run_secrets(raw: str) -> dict[str, str]:
+    """Parse the masked run-secrets bundle into a {KEY: VALUE} dict.
+
+    Accepts a JSON object (primary; text starts with ``{``, values must be
+    strings) or a ``KEY=VALUE``-per-line form (blank/``#`` lines skipped, split on
+    the first ``=``). Each KEY must be a POSIX env name with no control character;
+    a VALUE is an opaque literal. github_token / GITHUB_TOKEN are dropped so a
+    ``toJSON(secrets)`` + ``inherit`` bundle never injects the Actions token.
+    Errors quote only KEY names (never a value), and the JSON error is not chained,
+    so no secret material leaks into the log.
+    """
+    text = raw.strip()
+    if not text:
+        return {}
+    pairs = _run_secrets_from_json(text) if text.startswith("{") else _run_secrets_from_lines(raw)
+    result: dict[str, str] = {}
+    for key, value in pairs:
+        if key in _DROPPED_SECRET_KEYS:
+            continue
+        if _CONTROL.search(key):
+            raise SystemExit("run-secrets has a control character in a key name.")
+        if not _ENV_NAME.match(key):
+            raise SystemExit(
+                f"run-secrets has an invalid environment variable name: {key!r}. "
+                "Keys must match [A-Za-z_][A-Za-z0-9_]*."
+            )
+        result[key] = value
+    return result
+
+
+def _run_secrets_from_json(text: str) -> list[tuple[str, str]]:
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        # `from None`: the decoder message can quote secret material; do not chain.
+        raise SystemExit(
+            "run-secrets starts with '{' but is not valid JSON. Provide a JSON object "
+            "of NAME -> value (assembled with per-value toJSON), or the KEY=VALUE form."
+        ) from None
+    if not isinstance(parsed, dict):
+        raise SystemExit("run-secrets JSON must be an object of NAME -> value.")
+    pairs: list[tuple[str, str]] = []
+    for key, value in parsed.items():
+        if not isinstance(value, str):
+            raise SystemExit(
+                f"run-secrets value for {str(key)!r} must be a string; got {type(value).__name__}."
+            )
+        pairs.append((str(key), value))
+    return pairs
+
+
+def _run_secrets_from_lines(raw: str) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for line in raw.split("\n"):
+        item = line.strip()
+        if not item or item.startswith("#"):
+            continue
+        if "=" not in item:
+            raise SystemExit(
+                "run-secrets has a KEY=VALUE line with no '='; each non-blank, non-# "
+                "line must be KEY=VALUE."
+            )
+        key, value = item.split("=", 1)
+        pairs.append((key, value))
+    return pairs
 
 
 def _validate_cache(env: Mapping[str, str]) -> tuple[bool, tuple[str, ...], str, tuple[str, ...]]:
@@ -417,6 +497,66 @@ def synthesize_override_config(config: Config, caller_config: dict | None) -> di
     return base
 
 
+def build_exec_override_config(base_override: dict, secrets: Mapping[str, str]) -> dict:
+    """The exec-phase override config: the base plus the run-secrets in remoteEnv.
+
+    Secrets go in remoteEnv only for ``exec`` (never ``up``): exec injects them via
+    a transient ``docker exec -e``, so they never land in the persisted
+    ``devcontainer.metadata`` label an ``up`` remoteEnv would leak. Any caller
+    remoteEnv is preserved; a shallow copy leaves the base (for ``up``) unchanged.
+    """
+    exec_override = dict(base_override)
+    existing = exec_override.get("remoteEnv")
+    remote_env = dict(existing) if isinstance(existing, dict) else {}
+    remote_env.update(secrets)
+    exec_override["remoteEnv"] = remote_env
+    return exec_override
+
+
+def state_dir(runner_temp: Path) -> Path:
+    """RUNNER_TEMP subdirectory holding this run's generated override + secret files."""
+    return runner_temp / _STATE_SUBDIR
+
+
+def secret_file_paths(runner_temp: Path) -> tuple[Path, Path]:
+    """The two 0600 secret files (up --secrets-file, exec override); cleanup shreds them."""
+    directory = state_dir(runner_temp)
+    return directory / "secrets.json", directory / "exec-config.json"
+
+
+def write_secret_file(path: Path, data: object) -> None:
+    """Serialize ``data`` to a 0600 JSON file, never briefly readable and never echoed."""
+    text = json.dumps(data, indent=2) + "\n"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, text.encode("utf-8"))
+    finally:
+        os.close(fd)
+    os.chmod(path, 0o600)
+
+
+def shred_file(path: Path) -> bool:
+    """Overwrite with zeros, fsync, then unlink; True if removed, tolerant of absence."""
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError:
+        return False
+    try:
+        fd = os.open(path, os.O_WRONLY)
+        try:
+            os.write(fd, b"\0" * size)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def cli_invocation(config: Config) -> list[str]:
     """The pinned @devcontainers/cli invocation prefix.
 
@@ -427,8 +567,21 @@ def cli_invocation(config: Config) -> list[str]:
     return ["npx", "--yes", f"@devcontainers/cli@{config.cli_version}"]
 
 
-def build_up_argv(config: Config, workspace: Path, config_path: Path, id_label: str) -> list[str]:
-    """Assemble the `devcontainer up` argv (JSON result, no rebuild)."""
+def build_up_argv(
+    config: Config,
+    workspace: Path,
+    config_path: Path,
+    id_label: str,
+    secrets_file: Path | None = None,
+) -> list[str]:
+    """Assemble the `devcontainer up` argv (JSON result, no rebuild).
+
+    When run-secrets carried values, ``secrets_file`` is the 0600 JSON file added
+    as ``--secrets-file`` so the creation HOOKS get the secrets (only ``up`` accepts
+    the flag; ``exec`` rejects it). Only the PATH lands in the argv, never a value,
+    and secrets are kept out of this config's remoteEnv (which ``up`` would bake
+    into the persisted devcontainer.metadata label).
+    """
     argv = [
         *cli_invocation(config),
         "up",
@@ -450,6 +603,8 @@ def build_up_argv(config: Config, workspace: Path, config_path: Path, id_label: 
         argv += ["--additional-features", config.features]
     for entry in config.container_env:
         argv += ["--remote-env", entry]
+    if secrets_file is not None:
+        argv += ["--secrets-file", str(secrets_file)]
     return argv
 
 
