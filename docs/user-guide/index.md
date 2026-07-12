@@ -14,7 +14,7 @@ Browse the full, always-current listing in the
 {doc}`workflow catalog </reference/catalog>`. The six categories:
 
 - **Containers** —
-  {doc}`build-devcontainer </reference/workflows/build-devcontainer>`,
+  {doc}`devcontainer-build </reference/workflows/devcontainer-build>`,
   {doc}`binder-build </reference/workflows/binder-build>`
 - **Documents** — {doc}`pandoc </reference/workflows/pandoc>`,
   {doc}`docs-build </reference/workflows/docs-build>`,

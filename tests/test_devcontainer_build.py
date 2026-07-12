@@ -536,7 +536,7 @@ def _parse_output(path: Path) -> dict[str, str]:
 
 
 def _load_script(name: str) -> ModuleType:
-    path = Path("workflows/build-devcontainer/scripts") / name
+    path = Path("workflows/devcontainer-build/scripts") / name
     spec = importlib.util.spec_from_file_location(name.removesuffix(".py"), path)
     assert spec is not None
     assert spec.loader is not None

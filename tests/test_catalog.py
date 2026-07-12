@@ -10,8 +10,8 @@ def test_catalog_loads_active_workflows() -> None:
     assert [item.id for item in workflows] == [
         "anaconda-publish",
         "binder-build",
-        "build-devcontainer",
         "deploy-pages",
+        "devcontainer-build",
         "devcontainer-run",
         "docs-build",
         "pandoc",
@@ -28,7 +28,7 @@ def test_catalog_loads_active_workflows() -> None:
         == "pandoc/latex:3-ubuntu"
     )
     assert (
-        workflows_by_id["build-devcontainer"].workflow_call["inputs"]["image-name"]["required"]
+        workflows_by_id["devcontainer-build"].workflow_call["inputs"]["image-name"]["required"]
         is True
     )
     assert (

@@ -17,7 +17,7 @@ body:
       description: Select the workflow (or the CLI) the bug affects.
       options:
         - pandoc
-        - build-devcontainer
+        - devcontainer-build
         - writeback
         - devflows CLI
         - other / not sure

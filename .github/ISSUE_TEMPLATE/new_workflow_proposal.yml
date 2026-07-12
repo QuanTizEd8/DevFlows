@@ -14,7 +14,7 @@ body:
     attributes:
       label: Proposed workflow ID
       description:
-        A stable, lowercase, hyphenated identifier (e.g. build-devcontainer).
+        A stable, lowercase, hyphenated identifier (e.g. devcontainer-build).
       placeholder: "my-workflow"
     validations:
       required: true

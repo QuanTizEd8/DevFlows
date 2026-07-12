@@ -14,7 +14,7 @@ body:
       label: Which workflow or component?
       options:
         - pandoc
-        - build-devcontainer
+        - devcontainer-build
         - writeback
         - devflows CLI
         - general / catalog-wide

@@ -4,7 +4,7 @@
 # them because GitHub caps the fork token to read and would fail the nested-permission
 # check at startup. Same-repo pull requests, pushes to main, and workflow_dispatch
 # still run every scenario.
-name: 'DevFlows Hosted Scenarios: Build Devcontainer'
+name: 'DevFlows Hosted Scenarios: Devcontainer Build'
 'on':
   pull_request: null
   push:
@@ -15,13 +15,13 @@ permissions:
   contents: read
   actions: read
 jobs:
-  build_devcontainer_build_only_minimal_call:
-    name: 'Build Devcontainer: Build a minimal devcontainer without pushing'
-    uses: ./.github/workflows/build-devcontainer.yaml
+  devcontainer_build_build_only_minimal_call:
+    name: 'Devcontainer Build: Build a minimal devcontainer without pushing'
+    uses: ./.github/workflows/devcontainer-build.yaml
     with:
       image-name: devflows-e2e-devcontainer
       image-tags: e2e
-      devcontainer-config-file: tests/scenarios/build-devcontainer/minimal/devcontainer.json
+      devcontainer-config-file: tests/scenarios/devcontainer-build/minimal/devcontainer.json
       docker-login-enabled: false
       devcontainer-push: never
       devcontainer-cache-registry-enabled: false
@@ -33,10 +33,10 @@ jobs:
       contents: read
       packages: write
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-  build_devcontainer_build_only_minimal_assert:
-    name: 'Build Devcontainer: Build a minimal devcontainer without pushing assertions'
+  devcontainer_build_build_only_minimal_assert:
+    name: 'Devcontainer Build: Build a minimal devcontainer without pushing assertions'
     runs-on: ubuntu-latest
-    needs: build_devcontainer_build_only_minimal_call
+    needs: devcontainer_build_build_only_minimal_call
     if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - name: Checkout repository
@@ -46,23 +46,23 @@ jobs:
       - name: Assert scenario succeeded
         shell: bash
         env:
-          ACTUAL_RESULT: ${{ needs.build_devcontainer_build_only_minimal_call.result }}
+          ACTUAL_RESULT: ${{ needs.devcontainer_build_build_only_minimal_call.result }}
         run: python harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: build-only-digest-linux-amd64
-          path: .devflows-test-artifacts/build-devcontainer/build-only
+          path: .devflows-test-artifacts/devcontainer-build/build-only
       - name: Assert output image-ref
         shell: bash
         env:
           ASSERT_NAME: image-ref
           EXPECTED: ''
-          ACTUAL: ${{ needs.build_devcontainer_build_only_minimal_call.outputs.image-ref }}
+          ACTUAL: ${{ needs.devcontainer_build_build_only_minimal_call.outputs.image-ref }}
         run: python harness/scenarios/assert-equals.py
       - name: 'Assert file contains: linux-amd64'
         shell: bash
         env:
-          ASSERT_PATH: .devflows-test-artifacts/build-devcontainer/build-only/linux-amd64
+          ASSERT_PATH: .devflows-test-artifacts/devcontainer-build/build-only/linux-amd64
           ASSERT_TEXT: 'sha256:'
         run: python harness/scenarios/assert-file-contains.py

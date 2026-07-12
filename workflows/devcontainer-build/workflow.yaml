@@ -1,4 +1,4 @@
-name: "[Reusable]: Build Devcontainer"
+name: "[Reusable]: Devcontainer Build"
 
 on:
   workflow_call:
@@ -323,7 +323,7 @@ jobs:
           DOCKER_PASSWORD_SET: ${{ secrets.docker-password != '' }}
           DOCKER_REGISTRY: ${{ inputs.docker-registry }}
           IMAGE_TAGS: ${{ inputs.image-tags }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/validate-inputs.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-build/validate-inputs.py"
 
   build-devcontainer:
     name: Build (${{ matrix.platform }})
@@ -359,7 +359,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
           IMAGE_NAME: ${{ inputs.image-name }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/resolve-build-settings.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-build/resolve-build-settings.py"
 
       - name: Docker login
         if: inputs.docker-login-enabled
@@ -428,7 +428,7 @@ jobs:
           IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_TAG: ${{ needs.validate.outputs.primary-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-build/capture-digest.py"
 
       - name: Upload platform digest
         if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
@@ -459,7 +459,7 @@ jobs:
           IMAGE_NAME: ${{ inputs.image-name }}
           IMAGE_TAG: ${{ needs.validate.outputs.primary-tag }}
           MATRIX_PLATFORM_TAG: ${{ matrix.platform_tag }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/capture-digest.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-build/capture-digest.py"
 
       - name: Upload build-only image digest
         if: inputs.build-digest-artifact-name != '' && inputs.devcontainer-push == 'never'
@@ -530,4 +530,4 @@ jobs:
           IMAGE_SHA_TAG_PREFIX: ${{ inputs.image-sha-tag-prefix }}
           IMAGE_TAGS: ${{ inputs.image-tags }}
           SOURCE_SHA: ${{ github.sha }}
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/build-devcontainer/merge-manifest.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-build/merge-manifest.py"

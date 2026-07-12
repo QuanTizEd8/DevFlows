@@ -64,17 +64,17 @@ notes:
     false, push-environment-name is required so the one credentialed side effect is always
     gated by a protected GitHub Environment.
   - >-
-    The registry-auth input group matches build-devcontainer's canonical docker-* shape
+    The registry-auth input group matches devcontainer-build's canonical docker-* shape
     (docker-login-enabled, docker-registry, docker-username, and the docker-password
     secret) with identical defaults, and reuses its exact login pattern: the github.token
     password fallback is restricted to ghcr.io, so any other registry must supply
     docker-password or the push job's tokenless preflight fails loudly (validate cannot
     inspect secret presence, so that check lives in the push job, not validate).
     image-tags is a plural newline list (binder pushes multiple tags), matching
-    build-devcontainer's image-tags input verbatim; the reproducibility Dockerfile
+    devcontainer-build's image-tags input verbatim; the reproducibility Dockerfile
     always pins by @sha256 digest regardless of which tags are pushed.
   - >-
-    The build-devcontainer registry-auth inputs docker-ecr, docker-scope, and docker-logout
+    The devcontainer-build registry-auth inputs docker-ecr, docker-scope, and docker-logout
     were intentionally scoped OUT of binder v1 (binder's single ghcr-style push needs none of
     ECR credential-helper login, multi-registry scope, or an explicit logout step). They are
     additive, backward-compatible inputs to introduce later if a consumer needs them.
@@ -99,7 +99,7 @@ notes:
     The build/push handoff artifacts (binder-build-image, binder-build-proof) are internal
     and run-scoped by artifact name, so a single workflow run should call binder-build once;
     invoking it multiple times in one run would collide on those names (matching
-    build-devcontainer's per-run digest-artifact naming). Cross-run reuse is safe because
+    devcontainer-build's per-run digest-artifact naming). Cross-run reuse is safe because
     artifacts are scoped to their run.
   - >-
     The mybinder cache warm is best-effort and non-asserted. warm-binder-cache runs only
@@ -124,7 +124,7 @@ notes:
     sentinel in a sandbox repo pushing to a throwaway ghcr namespace under a scoped
     environment secret, never in PR CI. The anonymous base image repo2docker pulls from
     docker.io is rate-limited on shared hosted-runner egress, so a burst of scenario runs
-    can flake there (mirroring build-devcontainer's build-only scenario).
+    can flake there (mirroring devcontainer-build's build-only scenario).
   - All jobs run on ubuntu-latest in v1; adding per-job runner inputs later is a
     backward-compatible minor change.
 examples:

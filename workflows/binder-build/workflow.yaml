@@ -44,7 +44,7 @@ on:
         required: false
         default: 30
       docker-login-enabled:
-        description: Whether the push-image job logs in to the registry before pushing. Mirrors build-devcontainer's docker-login-enabled.
+        description: Whether the push-image job logs in to the registry before pushing. Mirrors devcontainer-build's docker-login-enabled.
         type: boolean
         required: false
         default: true

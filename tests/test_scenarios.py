@@ -148,7 +148,7 @@ def test_required_call_permissions_unions_declared_permissions() -> None:
         "actions": "read",
         "contents": "write",
     }
-    assert _required_call_permissions(workflows["build-devcontainer"]) == {
+    assert _required_call_permissions(workflows["devcontainer-build"]) == {
         "actions": "read",
         "contents": "read",
         "packages": "write",
@@ -164,8 +164,8 @@ def test_call_job_grants_writeback_permissions_even_when_read_only() -> None:
     assert job["permissions"] == {"actions": "read", "contents": "write"}
 
 
-def test_call_job_grants_packages_write_for_build_devcontainer() -> None:
-    job = _call_job(_scenario("build-devcontainer", "build-only-minimal"), runner="hosted")
+def test_call_job_grants_packages_write_for_devcontainer_build() -> None:
+    job = _call_job(_scenario("devcontainer-build", "build-only-minimal"), runner="hosted")
 
     assert job["permissions"]["packages"] == "write"
 
@@ -342,7 +342,7 @@ def test_missing_mutation_inputs_generalizes_beyond_writeback() -> None:
 
     assert _missing_mutation_inputs(workflows["writeback"]) == []
     assert "writeback-artifact-name" in _missing_mutation_inputs(workflows["pandoc"])
-    assert len(_missing_mutation_inputs(workflows["build-devcontainer"])) == 4
+    assert len(_missing_mutation_inputs(workflows["devcontainer-build"])) == 4
 
 
 def test_mutation_scenario_rejected_for_workflow_without_writeback_inputs() -> None:
@@ -390,11 +390,11 @@ def test_cleanup_job_keys_on_deterministic_branch_prefix() -> None:
 # --- task 6: coverage additions ---
 
 
-def test_build_devcontainer_has_build_only_scenario() -> None:
+def test_devcontainer_build_has_build_only_scenario() -> None:
     build = [
         scenario
         for scenario in load_scenarios(load_catalog())
-        if scenario.workflow.id == "build-devcontainer"
+        if scenario.workflow.id == "devcontainer-build"
     ]
 
     assert [scenario.id for scenario in build] == ["build-only-minimal"]
@@ -418,7 +418,7 @@ def test_writeback_scenario_exercises_absent_deletion() -> None:
 
 
 def test_requires_write_true_for_all_promoted_workflows() -> None:
-    for wf_id in ("pandoc", "writeback", "build-devcontainer"):
+    for wf_id in ("pandoc", "writeback", "devcontainer-build"):
         scenario = next(s for s in load_scenarios(load_catalog()) if s.workflow.id == wf_id)
         assert _requires_write(scenario)
 
@@ -586,7 +586,7 @@ def test_hosted_file_glob_assertion_requires_artifact_metadata() -> None:
 # --- expect: validation-failure scenarios (validate-script harness) ---
 #
 # Promoted catalog workflows do not (yet) expose an inputs-only validate step:
-# build-devcontainer's validate env references secrets.* and writeback has no
+# devcontainer-build's validate env references secrets.* and writeback has no
 # validate step, so both are correctly rejected by the harness (see the
 # rejection tests below). The mechanism is therefore exercised against this
 # synthetic fixture; the five incoming Python workflows adopt the same shape at
@@ -809,16 +809,16 @@ def test_failure_message_contains_only_valid_with_validation_failure() -> None:
 
 
 def test_promoted_workflows_without_inputs_only_validate_are_rejected() -> None:
-    # build-devcontainer has a validate step but its env references secrets.*;
+    # devcontainer-build has a validate step but its env references secrets.*;
     # writeback has no validate step. Both must be rejected so the mechanism
     # never silently generates an incomplete env.
     catalog = {item.id: item for item in load_catalog()}
 
     bdc = _with_scenarios(
-        "build-devcontainer",
+        "devcontainer-build",
         [{"id": "nb", "runs": ["hosted"], "expect": "validation-failure", "inputs": {}}],
     )
-    assert _find_validate_step(catalog["build-devcontainer"]) is not None
+    assert _find_validate_step(catalog["devcontainer-build"]) is not None
     assert any("references" in error for error in validate_scenarios([bdc]))
 
     wb = _with_scenarios(
@@ -927,11 +927,11 @@ def test_write_splits_into_per_workflow_files_and_drops_monolith(tmp_path, monke
     changed = write_generated_test_workflows(load_catalog())
 
     # One hosted file per workflow with hosted scenarios; a local file only when the
-    # workflow also owns local scenarios (build-devcontainer/writeback have none).
+    # workflow also owns local scenarios (devcontainer-build/writeback have none).
     assert (tmp_path / "devflows-scenarios-pandoc.yaml").exists()
     assert (tmp_path / "devflows-scenarios-pandoc.local.yaml").exists()
-    assert (tmp_path / "devflows-scenarios-build-devcontainer.yaml").exists()
-    assert not (tmp_path / "devflows-scenarios-build-devcontainer.local.yaml").exists()
+    assert (tmp_path / "devflows-scenarios-devcontainer-build.yaml").exists()
+    assert not (tmp_path / "devflows-scenarios-devcontainer-build.local.yaml").exists()
     assert not (tmp_path / "devflows-scenarios-writeback.local.yaml").exists()
     # The retired monolithic files are never (re)produced.
     assert not (tmp_path / "devflows-scenarios.yaml").exists()

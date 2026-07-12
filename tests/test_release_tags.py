@@ -55,10 +55,10 @@ def test_mixed_paths_only_major_ge_1() -> None:
 def test_hyphenated_component_name() -> None:
     outputs = {
         "releases_created": "true",
-        "paths_released": '["workflows/build-devcontainer"]',
-        **_release("workflows/build-devcontainer", "build-devcontainer/v1.0.0", "sha-bd", "1"),
+        "paths_released": '["workflows/devcontainer-build"]',
+        **_release("workflows/devcontainer-build", "devcontainer-build/v1.0.0", "sha-bd", "1"),
     }
-    assert compute_major_tag_moves(outputs) == [("build-devcontainer/v1", "sha-bd")]
+    assert compute_major_tag_moves(outputs) == [("devcontainer-build/v1", "sha-bd")]
 
 
 def test_incomplete_outputs_are_skipped() -> None:

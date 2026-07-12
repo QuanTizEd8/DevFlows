@@ -4,7 +4,7 @@ name: '[Reusable]: Devcontainer Run'
   workflow_call:
     inputs:
       devcontainer-image:
-        description: OCI image reference of a PREBUILT devcontainer to run, [registry/]name[:tag][@digest]. Required unless devcontainer-config-file supplies an image. Validated syntactically and pulled without a rebuild; when it carries a devcontainer.metadata label (every build-devcontainer image does) its features, lifecycle hooks, remoteUser, and env are applied automatically. When devcontainer-config-file is also set, this overrides that config's image.
+        description: OCI image reference of a PREBUILT devcontainer to run, [registry/]name[:tag][@digest]. Required unless devcontainer-config-file supplies an image. Validated syntactically and pulled without a rebuild; when it carries a devcontainer.metadata label (every devcontainer-build image does) its features, lifecycle hooks, remoteUser, and env are applied automatically. When devcontainer-config-file is also set, this overrides that config's image.
         type: string
         required: false
         default: ''
@@ -68,7 +68,7 @@ name: '[Reusable]: Devcontainer Run'
         required: false
         default: 30
       docker-login-enabled:
-        description: Whether to log in to a Docker registry before pulling and running the image. Defaults to false (build-devcontainer defaults true) because a run usually pulls a public or ghcr.io image that needs no explicit login - ghcr.io uses the github.token fallback with the packages read scope. Set true only to pull a private image from a registry that requires authentication, and provide docker-password (or a non-ghcr.io registry).
+        description: Whether to log in to a Docker registry before pulling and running the image. Defaults to false (devcontainer-build defaults true) because a run usually pulls a public or ghcr.io image that needs no explicit login - ghcr.io uses the github.token fallback with the packages read scope. Set true only to pull a private image from a registry that requires authentication, and provide docker-password (or a non-ghcr.io registry).
         type: boolean
         required: false
         default: false
@@ -700,7 +700,7 @@ jobs:
           def validate_registry_auth(env: Mapping[str, str]) -> None:
               """Refuse to send github.token to a registry other than ghcr.io.
 
-              Verbatim from build-devcontainer: the docker-login password falls back to
+              Verbatim from devcontainer-build: the docker-login password falls back to
               github.token only for ghcr.io. Any other registry must supply an explicit
               docker-password secret, otherwise the caller could silently leak github.token
               to a third-party registry. This runs in its own validate-job step because it
@@ -765,7 +765,7 @@ jobs:
 
           Refuses to fall back to github.token for any registry other than ghcr.io when
           docker-login-enabled and no docker-password secret was provided (verbatim from
-          build-devcontainer). This is a separate step from validate-inputs.py because it
+          devcontainer-build). This is a separate step from validate-inputs.py because it
           reads DOCKER_PASSWORD_SET (a `secrets.docker-password != ''` expression), which
           the inputs-only validation-failure scenario harness cannot reconstruct.
           """
@@ -1185,7 +1185,7 @@ jobs:
           def validate_registry_auth(env: Mapping[str, str]) -> None:
               """Refuse to send github.token to a registry other than ghcr.io.
 
-              Verbatim from build-devcontainer: the docker-login password falls back to
+              Verbatim from devcontainer-build: the docker-login password falls back to
               github.token only for ghcr.io. Any other registry must supply an explicit
               docker-password secret, otherwise the caller could silently leak github.token
               to a third-party registry. This runs in its own validate-job step because it

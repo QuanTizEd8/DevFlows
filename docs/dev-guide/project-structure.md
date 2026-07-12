@@ -4,7 +4,7 @@ DevFlows separates source files, generated files, fixtures, and tests so that
 workflow promotion stays reviewable.
 
 The catalog currently holds 13 active workflows — `anaconda-publish`,
-`binder-build`, `build-devcontainer`, `deploy-pages`, `docs-build`, `pandoc`,
+`binder-build`, `deploy-pages`, `devcontainer-build`, `docs-build`, `pandoc`,
 `paper-openjournals`, `pypi-publish`, `python-build`, `python-lint`,
 `python-test`, `writeback`, and `zenodo-release` — each a
 `workflows/<workflow-id>/` directory.

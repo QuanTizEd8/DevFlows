@@ -57,7 +57,7 @@ jobs:
 
   # Dogfood the catalog: deploy to GitHub Pages by CALLING the repository's own
   # reusable deploy-pages workflow (same pattern as devflows-devcontainer.yaml
-  # calling build-devcontainer), instead of hand-rolling configure/upload/deploy.
+  # calling devcontainer-build), instead of hand-rolling configure/upload/deploy.
   deploy:
     name: Deploy
     needs: build

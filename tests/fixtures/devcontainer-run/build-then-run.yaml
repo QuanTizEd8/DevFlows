@@ -9,7 +9,7 @@ jobs:
   # Build once: publish a multi-arch devcontainer image whose devcontainer.metadata
   # label carries the features and lifecycle hooks.
   build:
-    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v0.1.0
+    uses: QuanTizEd8/DevFlows/.github/workflows/devcontainer-build.yaml@devcontainer-build/v0.1.0
     permissions:
       actions: read
       contents: read

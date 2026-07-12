@@ -81,7 +81,7 @@ created before Sphinx runs.
 `Deploy` dogfoods the catalog: rather than hand-rolling configure/upload/deploy,
 it downloads the built site artifact and **calls the repository's own
 `deploy-pages` reusable workflow** to package and publish it to GitHub Pages
-(the same pattern as `devflows-devcontainer.yaml` calling `build-devcontainer`).
+(the same pattern as `devflows-devcontainer.yaml` calling `devcontainer-build`).
 Because that is a nested reusable-workflow call, the `Deploy` job grants the
 full permission union `deploy-pages` requires (`pages: write`,
 `id-token: write`, `contents: read`, `actions: read`) — GitHub validates that at
@@ -104,7 +104,7 @@ analysis (no custom query packs) with every action SHA-pinned.
 ## Devcontainer Image Workflow
 
 `.github/workflows/devflows-devcontainer.yaml` dogfoods the catalog: it calls
-the repository's own `build-devcontainer` reusable workflow to prebuild and
+the repository's own `devcontainer-build` reusable workflow to prebuild and
 publish the CI/development devcontainer image plus a registry build cache to
 GHCR. It runs on `.devcontainer/**` changes on `main`, weekly, and on demand;
 `devflows-ci.yaml` and `devflows-docs.yaml` reuse the cache.
