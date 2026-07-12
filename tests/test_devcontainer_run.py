@@ -1248,9 +1248,11 @@ def test_cache_step_is_pinned_gated_and_restores_before_up() -> None:
 
 def test_outputs_echo_the_run_job() -> None:
     outputs = _workflow_call(_published())["outputs"]
-    assert set(outputs) == {"container-id", "remote-user"}
+    # Author domain outputs are preserved alongside the universal job-output channel.
+    assert set(outputs) == {"container-id", "remote-user", "job-outputs"}
     assert outputs["container-id"]["value"] == "${{ jobs.run.outputs.container-id }}"
     assert outputs["remote-user"]["value"] == "${{ jobs.run.outputs.remote-user }}"
+    assert outputs["job-outputs"]["value"] == "${{ jobs.run.outputs.job-outputs }}"
 
 
 def test_permissions_are_least_privilege() -> None:

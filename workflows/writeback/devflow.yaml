@@ -17,6 +17,7 @@ docs:
 io:
   job: writeback
   runtime: true
+  job-output: true
 notes:
   - Writeback consumes a manifest-based payload artifact rather than a raw tar
     archive.

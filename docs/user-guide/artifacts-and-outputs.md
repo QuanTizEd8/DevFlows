@@ -50,6 +50,54 @@ Two conventions keep chains honest:
 The full worked chains are in {doc}`getting-started-python` and
 {doc}`getting-started-research`.
 
+## Job Outputs
+
+The workflow outputs above are fixed by each workflow's author. When you need to
+surface a value the workflow does not already expose, use the **job-output**
+channel: a single, universal output named `job-outputs` that holds a JSON object
+you populate. Any workflow whose reference page lists a `job-output-map` input
+supports it, and it forces **no extra caller permissions** and adds no nested
+job.
+
+Map arbitrary keys with `job-output-map`, one `key=SOURCE` per line, where
+`SOURCE` is either `env:VARNAME` (the value of that environment variable) or
+`file:relative/path` (the file's content, resolved relative to the workspace):
+
+```yaml
+jobs:
+  build-docs:
+    uses: QuanTizEd8/DevFlows/.github/workflows/docs-build.yaml@docs-build/vX.Y.Z
+    with:
+      docs-env-manager: pip
+      pip-install-targets: |
+        sphinx
+      job-output-map: |
+        # key=SOURCE — SOURCE is env:VARNAME or file:relative/path
+        site-dir=env:DOCS_OUTPUT_DIRECTORY
+        commit-note=file:build/commit-note.txt
+```
+
+Blank lines and lines beginning with `#` are skipped, and a missing environment
+variable or file resolves to the empty string. Consumers read a single key with
+`fromJSON`:
+
+```yaml
+publish:
+  needs: build-docs
+  runs-on: ubuntu-latest
+  env:
+    SITE_DIR: ${{ fromJSON(needs.build-docs.outputs.job-outputs).site-dir }}
+  steps:
+    - run: echo "site is at $SITE_DIR"
+```
+
+Because every value is JSON-encoded into one output under a random delimiter, no
+mapped value — however it is crafted — can inject an extra output. Prefer a
+workflow's purpose-built outputs when one already exists; reach for
+`job-output-map` when you need a value the workflow does not otherwise expose.
+The channel is only available on non-matrix jobs, so a fan-out matrix workflow
+whose per-leg values are nondeterministic does not offer it.
+
 ## Artifacts
 
 Artifacts are best for files and directories. DevFlows workflows use

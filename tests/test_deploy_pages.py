@@ -267,7 +267,8 @@ def test_workflow_specific_inputs_match_conventions() -> None:
 
 def test_outputs_use_pages_prefix() -> None:
     outputs = _workflow_call(_published())["outputs"]
-    assert set(outputs) == {"pages-url", "pages-artifact-id"}
+    # job-outputs is the universal job-output channel; the domain outputs keep the pages prefix.
+    assert set(outputs) == {"pages-url", "pages-artifact-id", "job-outputs"}
     # page-url was renamed to pages-url (convention #13); upstream page_url mapping.
     assert "page-url" not in outputs
     assert outputs["pages-url"]["value"] == "${{ jobs.deploy.outputs.pages-url }}"
@@ -280,6 +281,8 @@ def test_package_job_is_least_privilege_read_only() -> None:
     assert package["outputs"] == {
         "pages-artifact-id": "${{ steps.upload.outputs.artifact_id }}",
         "deploy-timeout-ms": "${{ steps.validate.outputs.deploy-timeout-ms }}",
+        # The job-output channel merges its universal output alongside the domain ones.
+        "job-outputs": "${{ steps.devflows-job-output.outputs.job-outputs }}",
     }
     # Generator injects checkout + artifact-download + materialize before the
     # domain steps; validation runs before packaging.

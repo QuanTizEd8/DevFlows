@@ -1033,12 +1033,14 @@ def _steps(job: dict) -> list[dict]:
 
 def test_generated_workflow_stays_under_size_budget() -> None:
     # anaconda-publish tripped GitHub's undocumented workflow-size limit at ~135 KB.
-    # Hold the generated file well under 100 KB so a re-inlined shared module cannot
-    # silently reintroduce the startup failure, and keep the sync-time cap below the
-    # 135 KB-class regression. (The scenario suite is now split into per-workflow
-    # _scenarios-<id>.yaml files, each far under the cap and size-guarded too.)
+    # Hold the generated file well under the ~109 KB empirically-safe startup line so a
+    # re-inlined shared module cannot silently reintroduce the startup failure, and keep
+    # the sync-time cap below the 135 KB-class regression. (The job-output channel inlines
+    # its ~2 KB collector, lifting the floor from ~99 KB to ~103 KB; the budget stays a
+    # tight guard against the multi-KB shared-module class of bloat. The scenario suite is
+    # split into per-workflow _scenarios-<id>.yaml files, each far under the cap too.)
     rendered = render_published_workflow(load_workflow(REPO / "workflows" / "anaconda-publish"))
-    assert len(rendered.encode("utf-8")) < 100_000
+    assert len(rendered.encode("utf-8")) < 106_000
     assert MAX_GENERATED_WORKFLOW_BYTES == 115_000
 
 

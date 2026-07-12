@@ -191,6 +191,8 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
             f"devflows-{item.id}-writeback-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}"
         )
         secrets.update(deepcopy(COMMIT_SECRETS))
+    if _enabled(io_config, "job-output"):
+        inputs.update(deepcopy(JOB_OUTPUT_INPUTS))
 
     job_id = str(io_config.get("job") or _first_runner_job_id(workflow))
     jobs = workflow.setdefault("jobs", {})
@@ -211,6 +213,8 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
     if _enabled(io_config, "writeback"):
         suffix_steps.extend(_create_writeback_steps())
         jobs["commit"] = _commit_job(job_id)
+    if _enabled(io_config, "job-output"):
+        suffix_steps.append(_job_output_step())
 
     original_steps = list(job.get("steps", []))
     assembled = prefix_steps + original_steps + suffix_steps
@@ -219,6 +223,18 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
         # before the domain steps that invoke them.
         assembled.insert(len(prefix_steps), _materialize_step(item, assembled))
     job["steps"] = assembled
+
+    if _enabled(io_config, "job-output"):
+        # Merge (never overwrite) so any author-declared domain outputs on this job
+        # -- e.g. devcontainer-run's container-id/remote-user -- survive alongside the
+        # single universal job-outputs channel.
+        job.setdefault("outputs", {})["job-outputs"] = (
+            "${{ steps.devflows-job-output.outputs.job-outputs }}"
+        )
+        workflow_call.setdefault("outputs", {})["job-outputs"] = {
+            "description": _JOB_OUTPUT_OUTPUT_DESCRIPTION,
+            "value": f"${{{{ jobs.{job_id}.outputs.job-outputs }}}}",
+        }
 
     workflow_permissions_raw = workflow.get("permissions")
     workflow_permissions = (
@@ -293,6 +309,7 @@ def validate_publish_config(item: Workflow) -> list[str]:
         "checkout",
         "checkout-jobs",
         "job",
+        "job-output",
         "runtime",
         "writeback",
         "runtime-jobs",
@@ -304,6 +321,8 @@ def validate_publish_config(item: Workflow) -> list[str]:
         errors.append(f"{item.metadata_path}: io.writeback requires io.runtime.")
     job_id = str(config.get("job") or "")
     jobs = item.workflow.get("jobs") or {}
+    if _enabled(config, "job-output"):
+        errors.extend(_validate_job_output(item, config, jobs, job_id))
     if job_id:
         job = jobs.get(job_id)
         if not isinstance(job, dict) or "steps" not in job:
@@ -349,6 +368,49 @@ def validate_publish_config(item: Workflow) -> list[str]:
                     "${DEVFLOWS_SCRIPT_ROOT} but is neither io.job nor listed in "
                     "io.runtime-jobs, so no materialize step exports script-root for it."
                 )
+    return errors
+
+
+def _validate_job_output(
+    item: Workflow,
+    config: dict[str, Any],
+    jobs: dict[str, Any],
+    job_id: str,
+) -> list[str]:
+    """Validate the job-output channel: needs runtime, a non-matrix io.job, no key clash.
+
+    The channel exposes a single statically-declared ``job-outputs`` output built by a
+    bash step that runs the collector via ``$DEVFLOWS_SCRIPT_ROOT`` (so it requires
+    io.runtime to materialize that script). A ``strategy.matrix`` io.job is rejected
+    because per-leg outputs are nondeterministic (GitHub keeps only the last leg's
+    value), and an author output already named ``job-outputs`` would collide with the
+    channel's reserved output name.
+    """
+    errors: list[str] = []
+    if not _enabled(config, "runtime"):
+        errors.append(f"{item.metadata_path}: io.job-output requires io.runtime.")
+    resolved_job_id = job_id or _safe_first_runner_job_id(jobs)
+    job = jobs.get(resolved_job_id)
+    if isinstance(job, dict):
+        strategy = job.get("strategy")
+        if isinstance(strategy, dict) and "matrix" in strategy:
+            errors.append(
+                f"{item.metadata_path}: io.job-output cannot target the matrix job "
+                f"{resolved_job_id!r}; per-leg outputs are nondeterministic. Retarget a "
+                "non-matrix aggregation job or leave job-output off."
+            )
+        job_outputs = job.get("outputs")
+        if isinstance(job_outputs, dict) and "job-outputs" in job_outputs:
+            errors.append(
+                f"{item.metadata_path}: job {resolved_job_id!r} already declares an output "
+                "named 'job-outputs', which the job-output channel reserves."
+            )
+    call_outputs = item.workflow_call.get("outputs")
+    if isinstance(call_outputs, dict) and "job-outputs" in call_outputs:
+        errors.append(
+            f"{item.metadata_path}: on.workflow_call already declares an output named "
+            "'job-outputs', which the job-output channel reserves."
+        )
     return errors
 
 
@@ -686,6 +748,23 @@ def _create_writeback_steps() -> list[dict[str, Any]]:
             },
         },
     ]
+
+
+def _job_output_step() -> dict[str, Any]:
+    # Inputs reach the collector only through env, never interpolated into the run
+    # body, so a crafted job-output-map cannot inject shell. The collector JSON-encodes
+    # every value and writes a single job-outputs entry with a random heredoc delimiter.
+    return {
+        "name": "Collect job outputs",
+        "id": "devflows-job-output",
+        "if": "inputs.job-output-map != ''",
+        "env": {
+            "DEVFLOWS_SCRIPT_ROOT": "${{ steps.devflows-runtime.outputs.script-root }}",
+            "DEVFLOWS_JOB_OUTPUT_MAP": "${{ inputs.job-output-map }}",
+        },
+        "shell": "bash",
+        "run": 'python "${DEVFLOWS_SCRIPT_ROOT}/_channels/collect-job-outputs.py"',
+    }
 
 
 def _commit_job(needs: str) -> dict[str, Any]:
@@ -1073,3 +1152,27 @@ COMMIT_SECRETS: dict[str, dict[str, Any]] = {
         "required": False,
     },
 }
+
+JOB_OUTPUT_INPUTS: dict[str, dict[str, Any]] = {
+    "job-output-map": {
+        "description": (
+            "Newline-delimited key=SOURCE entries assembled into the single job-outputs "
+            "workflow output (a JSON object). SOURCE is either env:VARNAME (value is the "
+            "value of that environment variable) or file:relative/path (value is the file's "
+            "content, resolved workspace-relative). Blank lines and lines starting with # "
+            "are skipped; a missing environment variable or file resolves to the empty "
+            "string. Requires no extra caller permissions and adds no nested job. Consumers "
+            "read a key with fromJSON(needs.<call>.outputs.job-outputs).<key>."
+        ),
+        "type": "string",
+        "required": False,
+        "default": "",
+    },
+}
+
+# Description carried on the statically-declared workflow_call output that every
+# job-output-enabled workflow exposes.
+_JOB_OUTPUT_OUTPUT_DESCRIPTION = (
+    "JSON object of caller-mapped job outputs assembled from job-output-map. Read a key "
+    "with fromJSON(needs.<call>.outputs.job-outputs).<key>; empty object when unmapped."
+)

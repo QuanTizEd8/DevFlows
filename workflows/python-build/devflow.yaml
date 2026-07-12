@@ -24,6 +24,7 @@ docs:
 io:
   job: dist
   runtime: true
+  job-output: true
   checkout: true
   artifact-download: true
   checkout-jobs:

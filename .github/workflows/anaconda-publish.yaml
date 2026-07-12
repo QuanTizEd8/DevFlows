@@ -181,6 +181,16 @@ name: '[Reusable]: Anaconda Publish'
         type: string
         required: false
         default: error
+      job-output-map:
+        description: 'Newline-delimited key=SOURCE entries assembled into the single job-outputs workflow
+          output (a JSON object). SOURCE is either env:VARNAME (value is the value of that environment
+          variable) or file:relative/path (value is the file''s content, resolved workspace-relative).
+          Blank lines and lines starting with # are skipped; a missing environment variable or file resolves
+          to the empty string. Requires no extra caller permissions and adds no nested job. Consumers
+          read a key with fromJSON(needs.<call>.outputs.job-outputs).<key>.'
+        type: string
+        required: false
+        default: ''
     secrets:
       anaconda-token:
         description: anaconda.org API token (api:write on the target owner) for upload/move/remove. required
@@ -212,6 +222,10 @@ name: '[Reusable]: Anaconda Publish'
         description: Newline-separated owner-qualified specs removed by maintain (or, in dry-run, planned).
           Empty when maintain-enabled is false.
         value: ${{ jobs.verify.outputs.removed-specs }}
+      job-outputs:
+        description: JSON object of caller-mapped job outputs assembled from job-output-map. Read a key
+          with fromJSON(needs.<call>.outputs.job-outputs).<key>; empty object when unmapped.
+        value: ${{ jobs.verify.outputs.job-outputs }}
 permissions: {}
 jobs:
   validate:
@@ -693,6 +707,7 @@ jobs:
       uploaded-files: ${{ steps.verify.outputs.uploaded-files }}
       promoted-specs: ${{ steps.verify.outputs.promoted-specs }}
       removed-specs: ${{ steps.verify.outputs.removed-specs }}
+      job-outputs: ${{ steps.devflows-job-output.outputs.job-outputs }}
     steps:
       - name: Download artifacts
         if: inputs.artifact-download-enabled
@@ -1143,6 +1158,62 @@ jobs:
           if __name__ == "__main__":
               raise SystemExit(main())
           DEVFLOWS_SCRIPT_EOF
+          mkdir -p "$RUNNER_TEMP/devflows/_channels"
+          cat > "$RUNNER_TEMP/devflows/_channels/collect-job-outputs.py" <<'DEVFLOWS_SCRIPT_EOF'
+          # Assemble the caller-mapped job-outputs JSON object for the job-output channel.
+          # Reads DEVFLOWS_JOB_OUTPUT_MAP (newline-delimited key=SOURCE) and writes one
+          # job-outputs GITHUB_OUTPUT entry. Values are JSON-encoded under a random heredoc
+          # delimiter, so no crafted value can inject an extra output line.
+          from __future__ import annotations
+
+          import json
+          import os
+          import re
+          import secrets
+          from pathlib import Path
+
+          _KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
+
+
+          def _resolve(key: str, source: str) -> str:
+              kind, sep, rest = source.partition(":")
+              if not sep or kind not in {"env", "file"}:
+                  raise SystemExit(f"job-output-map key {key!r}: source must be 'env:VAR' or 'file:path'.")
+              if kind == "env":
+                  return os.environ.get(rest, "")
+              path = Path(rest)
+              if not rest or rest == "." or path.is_absolute() or ".." in path.parts:
+                  raise SystemExit(f"job-output-map key {key!r}: file path must be workspace-relative.")
+              return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+          def main() -> int:
+              outputs: dict[str, str] = {}
+              for raw in os.environ.get("DEVFLOWS_JOB_OUTPUT_MAP", "").splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  key, sep, source = line.partition("=")
+                  key = key.strip()
+                  if not sep or not _KEY.match(key):
+                      raise SystemExit(f"job-output-map entry for key {key!r}: expected 'key=SOURCE'.")
+                  outputs[key] = _resolve(key, source.strip())
+
+              github_output = os.environ.get("GITHUB_OUTPUT")
+              if not github_output:
+                  raise SystemExit("GITHUB_OUTPUT is not set.")
+              payload = json.dumps(outputs, separators=(",", ":"), sort_keys=True)
+              delimiter = f"ghadelim_{secrets.token_hex(16)}"
+              if delimiter in payload:  # pragma: no cover - astronomically unlikely
+                  raise SystemExit("output delimiter collision; retry.")
+              with Path(github_output).open("a", encoding="utf-8") as handle:
+                  handle.write(f"job-outputs<<{delimiter}\n{payload}\n{delimiter}\n")
+              return 0
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          DEVFLOWS_SCRIPT_EOF
           echo "script-root=$RUNNER_TEMP/devflows" >> "$GITHUB_OUTPUT"
       - name: Verify distributions and compute plan
         id: verify
@@ -1163,6 +1234,14 @@ jobs:
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/manifest.py
           # imports ${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/digest.py
           python "${DEVFLOWS_SCRIPT_ROOT}/anaconda-publish/verify-dist.py"
+      - name: Collect job outputs
+        id: devflows-job-output
+        if: inputs.job-output-map != ''
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DEVFLOWS_JOB_OUTPUT_MAP: ${{ inputs.job-output-map }}
+        shell: bash
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/_channels/collect-job-outputs.py"
   upload:
     name: Upload to anaconda.org
     needs:
