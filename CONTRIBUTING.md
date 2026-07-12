@@ -77,7 +77,7 @@ Use a workflow ID as the scope for changes to that workflow's behavior:
 ```text
 feat(pandoc): add working-directory scenario coverage
 fix(writeback): stage only paths that exist after mutation
-docs(build-devcontainer): document the merge job permissions
+docs(devcontainer-build): document the merge job permissions
 test(pandoc): add hosted artifact assertions
 ```
 

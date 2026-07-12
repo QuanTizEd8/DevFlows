@@ -4,11 +4,15 @@ name: '[Reusable]: Pandoc'
   workflow_call:
     inputs:
       pandoc-arguments:
-        description: Arguments passed to the pandoc command. Required; a bare call must not silently do nothing.
+        description: Arguments passed to the pandoc command. Required; a bare call must not silently do
+          nothing.
         type: string
         required: true
       pandoc-image:
-        description: Pandoc Docker image reference to run, as [registry/]name[:tag][@digest]. Any syntactically valid reference is accepted (official images, GHCR mirrors, or derived pandoc-filter images), so the caller is trusted to supply an image whose contents they trust; it runs with the workspace mounted.
+        description: Pandoc Docker image reference to run, as [registry/]name[:tag][@digest]. Any syntactically
+          valid reference is accepted (official images, GHCR mirrors, or derived pandoc-filter images),
+          so the caller is trusted to supply an image whose contents they trust; it runs with the workspace
+          mounted.
         type: string
         required: false
         default: pandoc/latex:3-ubuntu
@@ -218,7 +222,10 @@ name: '[Reusable]: Pandoc'
         required: false
         default: true
       commit-enabled:
-        description: "Whether to commit selected generated files back to a repository. The writeback commit runs in a nested job that statically requires contents: write (and actions: read), so any job calling this workflow must grant permissions: contents: write, actions: read even when this is false \u2014 GitHub validates the nested permissions before the run starts."
+        description: "Whether to commit selected generated files back to a repository. The writeback commit\
+          \ runs in a nested job that statically requires contents: write (and actions: read), so any\
+          \ job calling this workflow must grant permissions: contents: write, actions: read even when\
+          \ this is false \u2014 GitHub validates the nested permissions before the run starts."
         type: boolean
         required: false
         default: false
@@ -268,7 +275,9 @@ name: '[Reusable]: Pandoc'
         required: false
         default: ''
       commit-internal-artifact-name:
-        description: Internal artifact name used to transfer the writeback payload. Defaults to a run-scoped name. Callers that invoke a commit-enabled workflow multiple times within one run must pass distinct values, because input defaults cannot disambiguate per invocation.
+        description: Internal artifact name used to transfer the writeback payload. Defaults to a run-scoped
+          name. Callers that invoke a commit-enabled workflow multiple times within one run must pass
+          distinct values, because input defaults cannot disambiguate per invocation.
         type: string
         required: false
         default: devflows-pandoc-writeback-${{ github.run_id }}-${{ github.run_attempt }}
@@ -283,7 +292,8 @@ name: '[Reusable]: Pandoc'
         description: Token used to download artifacts from another repository or run.
         required: false
       commit-token:
-        description: Token used by the writeback job. Must be able to write contents when commit-enabled is true.
+        description: Token used by the writeback job. Must be able to write contents when commit-enabled
+          is true.
         required: false
 permissions:
   contents: read

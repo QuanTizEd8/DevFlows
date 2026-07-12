@@ -1036,7 +1036,7 @@ def test_generated_workflow_stays_under_size_budget() -> None:
     # Hold the generated file well under 100 KB so a re-inlined shared module cannot
     # silently reintroduce the startup failure, and keep the sync-time cap below the
     # 135 KB-class regression. (The scenario suite is now split into per-workflow
-    # devflows-scenarios-<id>.yaml files, each far under the cap and size-guarded too.)
+    # _scenarios-<id>.yaml files, each far under the cap and size-guarded too.)
     rendered = render_published_workflow(load_workflow(REPO / "workflows" / "anaconda-publish"))
     assert len(rendered.encode("utf-8")) < 100_000
     assert MAX_GENERATED_WORKFLOW_BYTES == 115_000

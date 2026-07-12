@@ -8,7 +8,7 @@ on:
           OCI image reference of a PREBUILT devcontainer to run, [registry/]name[:tag][@digest].
           Required unless devcontainer-config-file supplies an image. Validated syntactically and
           pulled without a rebuild; when it carries a devcontainer.metadata label (every
-          build-devcontainer image does) its features, lifecycle hooks, remoteUser, and env are
+          devcontainer-build image does) its features, lifecycle hooks, remoteUser, and env are
           applied automatically. When devcontainer-config-file is also set, this overrides that
           config's image.
         type: string
@@ -109,7 +109,7 @@ on:
       docker-login-enabled:
         description:
           Whether to log in to a Docker registry before pulling and running the image. Defaults to
-          false (build-devcontainer defaults true) because a run usually pulls a public or ghcr.io
+          false (devcontainer-build defaults true) because a run usually pulls a public or ghcr.io
           image that needs no explicit login - ghcr.io uses the github.token fallback with the
           packages read scope. Set true only to pull a private image from a registry that requires
           authentication, and provide docker-password (or a non-ghcr.io registry).

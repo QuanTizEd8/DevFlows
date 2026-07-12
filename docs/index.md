@@ -59,7 +59,7 @@ the caller permission union, examples, and test scenarios. See the full
 {doc}`zenodo-release </reference/workflows/zenodo-release>`
 
 **Containers** —
-{doc}`build-devcontainer </reference/workflows/build-devcontainer>` ·
+{doc}`devcontainer-build </reference/workflows/devcontainer-build>` ·
 {doc}`binder-build </reference/workflows/binder-build>` ·
 {doc}`devcontainer-run </reference/workflows/devcontainer-run>`
 

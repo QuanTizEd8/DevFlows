@@ -41,7 +41,7 @@ jobs:
           configFile: .devcontainer/devcontainer.json
           push: never
           # Reuse the prebuilt CI image / registry cache published by
-          # devflows-devcontainer.yaml so CI stops rebuilding from scratch. Until
+          # _devcontainer.yaml so CI stops rebuilding from scratch. Until
           # that pipeline first runs the cache simply misses and the build falls
           # back to the pinned base image.
           cacheFrom: ghcr.io/quantized8/devflows-devcontainer:cache-linux-amd64

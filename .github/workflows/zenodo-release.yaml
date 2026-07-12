@@ -4,7 +4,8 @@ name: '[Reusable]: Zenodo Release'
   workflow_call:
     inputs:
       publish-dry-run-enabled:
-        description: Credential-free rehearsal; prepare previews the full plan while zenodo-deposit and release are skipped at the job level (no environment, no token, no side effect).
+        description: Credential-free rehearsal; prepare previews the full plan while zenodo-deposit and
+          release are skipped at the job level (no environment, no token, no side effect).
         type: boolean
         required: false
         default: false
@@ -14,16 +15,19 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: 15
       release-enabled:
-        description: Create/update the GitHub Release. At least one of release-enabled / zenodo-enabled must be true.
+        description: Create/update the GitHub Release. At least one of release-enabled / zenodo-enabled
+          must be true.
         type: boolean
         required: false
         default: true
       release-tag:
-        description: REQUIRED. Tag the release is cut from and the blast-radius anchor (zenodo-publish-confirm must equal it for a real publish). Validated git-ref-safe.
+        description: REQUIRED. Tag the release is cut from and the blast-radius anchor (zenodo-publish-confirm
+          must equal it for a real publish). Validated git-ref-safe.
         type: string
         required: true
       release-target:
-        description: Commitish gh tags when release-tag does not yet exist (gh release create --target); empty releases the tag as-is.
+        description: Commitish gh tags when release-tag does not yet exist (gh release create --target);
+          empty releases the tag as-is.
         type: string
         required: false
         default: ''
@@ -38,7 +42,8 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: ''
       release-notes-file:
-        description: Workspace-relative path (checkout) to a release-body file, read in prepare. Mutually exclusive with release-notes.
+        description: Workspace-relative path (checkout) to a release-body file, read in prepare. Mutually
+          exclusive with release-notes.
         type: string
         required: false
         default: ''
@@ -63,22 +68,26 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: true
       release-discussion-category:
-        description: Repository discussion category to open a linked release discussion in (gh --discussion-category); empty = none. Incompatible with release-draft-enabled.
+        description: Repository discussion category to open a linked release discussion in (gh --discussion-category);
+          empty = none. Incompatible with release-draft-enabled.
         type: string
         required: false
         default: ''
       release-existing-mode:
-        description: Behavior when a release already exists for release-tag -- fail (default), update, or skip.
+        description: Behavior when a release already exists for release-tag -- fail (default), update,
+          or skip.
         type: string
         required: false
         default: fail
       release-asset-globs:
-        description: Newline globs (relative to release-asset-source-path) to attach to the release; non-empty requires artifact-download-enabled.
+        description: Newline globs (relative to release-asset-source-path) to attach to the release; non-empty
+          requires artifact-download-enabled.
         type: string
         required: false
         default: ''
       release-asset-source-path:
-        description: Workspace-relative directory the release assets were downloaded into; empty defaults to artifact-download-path.
+        description: Workspace-relative directory the release assets were downloaded into; empty defaults
+          to artifact-download-path.
         type: string
         required: false
         default: ''
@@ -88,72 +97,87 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: error
       release-append-doi-enabled:
-        description: When both targets run, append the minted or reserved Zenodo DOI(s) to the release notes as a footer. With release-generate-notes-enabled, gh treats the notes body as a header and appends its auto-generated notes below it, so the DOI footer reads above the generated changelog.
+        description: When both targets run, append the minted or reserved Zenodo DOI(s) to the release
+          notes as a footer. With release-generate-notes-enabled, gh treats the notes body as a header
+          and appends its auto-generated notes below it, so the DOI footer reads above the generated changelog.
         type: boolean
         required: false
         default: true
       release-environment-name:
-        description: Optional GitHub environment the release job binds to (empty = unbound, GITHUB_TOKEN-only precedent).
+        description: Optional GitHub environment the release job binds to (empty = unbound, GITHUB_TOKEN-only
+          precedent).
         type: string
         required: false
         default: ''
       zenodo-enabled:
-        description: Create/update a Zenodo deposition. Default false so GitHub-release-only is the zero-config path.
+        description: Create/update a Zenodo deposition. Default false so GitHub-release-only is the zero-config
+          path.
         type: boolean
         required: false
         default: false
       zenodo-sandbox-enabled:
-        description: Target sandbox.zenodo.org with zenodo-sandbox-token instead of zenodo.org with zenodo-token (discardable 10.5072 DOIs).
+        description: Target sandbox.zenodo.org with zenodo-sandbox-token instead of zenodo.org with zenodo-token
+          (discardable 10.5072 DOIs).
         type: boolean
         required: false
         default: false
       zenodo-publish-enabled:
-        description: IRREVERSIBLE. False keeps a draft with a reserved DOI; true POSTs publish and permanently registers the DOI (a real publish also needs zenodo-publish-confirm).
+        description: IRREVERSIBLE. False keeps a draft with a reserved DOI; true POSTs publish and permanently
+          registers the DOI (a real publish also needs zenodo-publish-confirm).
         type: boolean
         required: false
         default: false
       zenodo-publish-confirm:
-        description: Type-the-name arm switch; must equal release-tag for a real (non-sandbox, non-dry-run) publish.
+        description: Type-the-name arm switch; must equal release-tag for a real (non-sandbox, non-dry-run)
+          publish.
         type: string
         required: false
         default: ''
       zenodo-concept-doi:
-        description: Concept DOI of an existing record to add a NEW VERSION to; empty creates a brand-new deposition.
+        description: Concept DOI of an existing record to add a NEW VERSION to; empty creates a brand-new
+          deposition.
         type: string
         required: false
         default: ''
       zenodo-new-version-file-mode:
-        description: New-version file handling -- replace (default, upload only this release's assets) or keep (retain inherited files).
+        description: New-version file handling -- replace (default, upload only this release's assets)
+          or keep (retain inherited files).
         type: string
         required: false
         default: replace
       zenodo-environment-name:
-        description: GitHub environment the credentialed zenodo-deposit job binds to; required when zenodo-enabled (unprotected for sandbox, protected for real Zenodo).
+        description: GitHub environment the credentialed zenodo-deposit job binds to; required when zenodo-enabled
+          (unprotected for sandbox, protected for real Zenodo).
         type: string
         required: false
         default: ''
       zenodo-upload-type:
-        description: Zenodo upload_type (software, publication, dataset, poster, presentation, image, video, lesson, physicalobject, other).
+        description: Zenodo upload_type (software, publication, dataset, poster, presentation, image,
+          video, lesson, physicalobject, other).
         type: string
         required: false
         default: software
       zenodo-title:
-        description: Deposition title. Required when zenodo-enabled and no CFF path; overrides CFF when set.
+        description: Deposition title. Required when zenodo-enabled and no CFF path; overrides CFF when
+          set.
         type: string
         required: false
         default: ''
       zenodo-creators:
-        description: Newline creators as 'Family, Given | Affiliation | ORCID' (last two optional). Required when zenodo-enabled and no CFF path; parsed by DevFlows, never shell-interpolated.
+        description: Newline creators as 'Family, Given | Affiliation | ORCID' (last two optional). Required
+          when zenodo-enabled and no CFF path; parsed by DevFlows, never shell-interpolated.
         type: string
         required: false
         default: ''
       zenodo-description:
-        description: Deposition description/abstract (HTML allowed). Required when zenodo-enabled and no CFF path; overrides CFF.
+        description: Deposition description/abstract (HTML allowed). Required when zenodo-enabled and
+          no CFF path; overrides CFF.
         type: string
         required: false
         default: ''
       zenodo-version:
-        description: Version recorded in the deposition; empty derives it from release-tag (leading 'v' stripped).
+        description: Version recorded in the deposition; empty derives it from release-tag (leading 'v'
+          stripped).
         type: string
         required: false
         default: ''
@@ -168,22 +192,26 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: ''
       zenodo-metadata-cff-path:
-        description: Workspace-relative path (checkout) to a CITATION.cff pre-filling metadata (explicit zenodo-* inputs override it); parsed only in prepare.
+        description: Workspace-relative path (checkout) to a CITATION.cff pre-filling metadata (explicit
+          zenodo-* inputs override it); parsed only in prepare.
         type: string
         required: false
         default: ''
       zenodo-metadata-extra:
-        description: JSON object merged into the deposition metadata for advanced fields; DevFlows-owned/derived keys rejected.
+        description: JSON object merged into the deposition metadata for advanced fields; DevFlows-owned/derived
+          keys rejected.
         type: string
         required: false
         default: ''
       zenodo-asset-globs:
-        description: Newline globs (relative to zenodo-asset-source-path) to upload to Zenodo; required when zenodo-enabled and, when set, requires artifact-download-enabled.
+        description: Newline globs (relative to zenodo-asset-source-path) to upload to Zenodo; required
+          when zenodo-enabled and, when set, requires artifact-download-enabled.
         type: string
         required: false
         default: ''
       zenodo-asset-source-path:
-        description: Workspace-relative directory the Zenodo assets were downloaded into; empty defaults to artifact-download-path.
+        description: Workspace-relative directory the Zenodo assets were downloaded into; empty defaults
+          to artifact-download-path.
         type: string
         required: false
         default: ''
@@ -193,7 +221,9 @@ name: '[Reusable]: Zenodo Release'
         required: false
         default: error
       publish-dist-manifest:
-        description: Optional schema-1 dist-manifest covering the Zenodo assets; when set, files are sha256+size verified bidirectionally in prepare and re-verified before upload. When empty, assets upload as-is.
+        description: Optional schema-1 dist-manifest covering the Zenodo assets; when set, files are sha256+size
+          verified bidirectionally in prepare and re-verified before upload. When empty, assets upload
+          as-is.
         type: string
         required: false
         default: ''
@@ -349,10 +379,12 @@ name: '[Reusable]: Zenodo Release'
         default: error
     secrets:
       zenodo-token:
-        description: Zenodo (zenodo.org) token with scopes deposit:write and deposit:actions. required:false (dry-run/sandbox need none); exposed as ZENODO_TOKEN on the single deposit step only.
+        description: Zenodo (zenodo.org) token with scopes deposit:write and deposit:actions. required:false
+          (dry-run/sandbox need none); exposed as ZENODO_TOKEN on the single deposit step only.
         required: false
       zenodo-sandbox-token:
-        description: Zenodo Sandbox (sandbox.zenodo.org) token with the same scopes, used only when zenodo-sandbox-enabled; isolated to the same single deposit step.
+        description: Zenodo Sandbox (sandbox.zenodo.org) token with the same scopes, used only when zenodo-sandbox-enabled;
+          isolated to the same single deposit step.
         required: false
       checkout-token:
         description: Token used by actions/checkout. Defaults to github.token.
@@ -368,13 +400,15 @@ name: '[Reusable]: Zenodo Release'
         description: Resolved release version (from zenodo-version or the tag); honest in dry-run.
         value: ${{ jobs.prepare.outputs.package-version }}
       release-url:
-        description: html_url of the created/updated GitHub Release; empty when release disabled, skipped, or in dry-run.
+        description: html_url of the created/updated GitHub Release; empty when release disabled, skipped,
+          or in dry-run.
         value: ${{ jobs.release.outputs.release-url }}
       release-tag:
         description: The release tag that was cut (echo of release-tag).
         value: ${{ jobs.prepare.outputs.release-tag }}
       zenodo-doi:
-        description: Version DOI for this release (reserved in draft mode, registered after publish); empty when disabled or dry-run.
+        description: Version DOI for this release (reserved in draft mode, registered after publish);
+          empty when disabled or dry-run.
         value: ${{ jobs.zenodo-deposit.outputs.zenodo-doi }}
       zenodo-concept-doi:
         description: Concept DOI, stable across versions; empty when disabled or dry-run.
@@ -2115,7 +2149,9 @@ jobs:
       - validate
       - prepare
       - zenodo-deposit
-    if: ${{ !cancelled() && inputs.release-enabled && !inputs.publish-dry-run-enabled && needs.prepare.result == 'success' && (needs.zenodo-deposit.result == 'success' || needs.zenodo-deposit.result == 'skipped') }}
+    if: ${{ !cancelled() && inputs.release-enabled && !inputs.publish-dry-run-enabled && needs.prepare.result
+      == 'success' && (needs.zenodo-deposit.result == 'success' || needs.zenodo-deposit.result == 'skipped')
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

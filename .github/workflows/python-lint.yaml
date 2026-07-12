@@ -4,32 +4,47 @@ name: '[Reusable]: Python Lint'
   workflow_call:
     inputs:
       lint-paths:
-        description: Newline-separated files or directories (relative to lint-working-directory) passed as target arguments to ruff check, ruff format, and the type checker. Each path must exist and stay inside the workspace; an empty value fails validation.
+        description: Newline-separated files or directories (relative to lint-working-directory) passed
+          as target arguments to ruff check, ruff format, and the type checker. Each path must exist and
+          stay inside the workspace; an empty value fails validation.
         type: string
         required: false
         default: .
       lint-working-directory:
-        description: Directory under the checked-out workspace where all tools run (monorepo support). Must exist and stay inside GITHUB_WORKSPACE.
+        description: Directory under the checked-out workspace where all tools run (monorepo support).
+          Must exist and stay inside GITHUB_WORKSPACE.
         type: string
         required: false
         default: .
       lint-enforce:
-        description: When true (default), the job fails if any enabled tool reports findings. When false, findings are still fully reported (job summary, annotations, outputs, report files) but the job succeeds -- advisory mode for gradual adoption. Never suppresses input-validation errors or tool crashes; a misconfigured call always fails loudly.
+        description: When true (default), the job fails if any enabled tool reports findings. When false,
+          findings are still fully reported (job summary, annotations, outputs, report files) but the
+          job succeeds -- advisory mode for gradual adoption. Never suppresses input-validation errors
+          or tool crashes; a misconfigured call always fails loudly.
         type: boolean
         required: false
         default: true
       lint-annotations-enabled:
-        description: Whether to emit GitHub inline annotations for findings, capped at 10 per tool. The job summary and outputs are unaffected. Annotations are emitted by the DevFlows scripts from structured tool output, so paths are workspace-relative.
+        description: Whether to emit GitHub inline annotations for findings, capped at 10 per tool. The
+          job summary and outputs are unaffected. Annotations are emitted by the DevFlows scripts from
+          structured tool output, so paths are workspace-relative.
         type: boolean
         required: false
         default: true
       lint-report-directory:
-        description: When set, machine-readable reports are written there (results.json, ruff-check.json, ruff-format.diff, typecheck-<pyver>.txt) and the workflow uploads them as the lint-report-artifact-name artifact even when the job fails (see that input). Relative to the workspace; must stay inside it. Empty (default) disables file reports; the job summary is always rendered.
+        description: When set, machine-readable reports are written there (results.json, ruff-check.json,
+          ruff-format.diff, typecheck-<pyver>.txt) and the workflow uploads them as the lint-report-artifact-name
+          artifact even when the job fails (see that input). Relative to the workspace; must stay inside
+          it. Empty (default) disables file reports; the job summary is always rendered.
         type: string
         required: false
         default: ''
       lint-report-artifact-name:
-        description: Name of the workflow-owned artifact that publishes the lint-report-directory contents. Uploaded on '!cancelled()' whenever lint-report-directory is set, so findings that fail the job (lint-enforce) are still published -- unlike the success-gated generic artifact-upload channel, which stays reserved for build outputs. Callers invoking this workflow more than once in the same run must pass distinct names.
+        description: Name of the workflow-owned artifact that publishes the lint-report-directory contents.
+          Uploaded on '!cancelled()' whenever lint-report-directory is set, so findings that fail the
+          job (lint-enforce) are still published -- unlike the success-gated generic artifact-upload channel,
+          which stays reserved for build outputs. Callers invoking this workflow more than once in the
+          same run must pass distinct names.
         type: string
         required: false
         default: python-lint-report
@@ -39,27 +54,36 @@ name: '[Reusable]: Python Lint'
         required: false
         default: 15
       lint-python-version:
-        description: Python version passed to setup-uv (sets the interpreter environment). Empty (default) lets uv resolve from the project's .python-version/pyproject.toml, falling back to the latest stable CPython. Per-target-version type checking is controlled separately by typecheck-python-versions.
+        description: Python version passed to setup-uv (sets the interpreter environment). Empty (default)
+          lets uv resolve from the project's .python-version/pyproject.toml, falling back to the latest
+          stable CPython. Per-target-version type checking is controlled separately by typecheck-python-versions.
         type: string
         required: false
         default: ''
       uv-version:
-        description: uv version passed to setup-uv. Empty (default) resolves from the caller's uv.toml/pyproject.toml, then the latest release.
+        description: uv version passed to setup-uv. Empty (default) resolves from the caller's uv.toml/pyproject.toml,
+          then the latest release.
         type: string
         required: false
         default: ''
       uv-cache-mode:
-        description: setup-uv cache passthrough (its enable-cache input). One of auto, true, or false; auto (default) enables the uv cache only on GitHub-hosted runners.
+        description: setup-uv cache passthrough (its enable-cache input). One of auto, true, or false;
+          auto (default) enables the uv cache only on GitHub-hosted runners.
         type: string
         required: false
         default: auto
       uv-sync-enabled:
-        description: When true, runs 'uv sync' in lint-working-directory before the tools, and the type checker resolves first-party imports against that project environment. Requires the caller repo to be a uv project (pyproject.toml present, validated). Default false runs tools in isolated uvx environments with zero project assumptions.
+        description: When true, runs 'uv sync' in lint-working-directory before the tools, and the type
+          checker resolves first-party imports against that project environment. Requires the caller repo
+          to be a uv project (pyproject.toml present, validated). Default false runs tools in isolated
+          uvx environments with zero project assumptions.
         type: boolean
         required: false
         default: false
       uv-sync-arguments:
-        description: Extra arguments appended to 'uv sync' (for example --locked --all-extras --group typing). Shlex-split via env-var mediation; only used when uv-sync-enabled is true (setting it otherwise fails validation).
+        description: Extra arguments appended to 'uv sync' (for example --locked --all-extras --group
+          typing). Shlex-split via env-var mediation; only used when uv-sync-enabled is true (setting
+          it otherwise fails validation).
         type: string
         required: false
         default: ''
@@ -69,22 +93,28 @@ name: '[Reusable]: Python Lint'
         required: false
         default: true
       ruff-check-arguments:
-        description: Extra arguments appended to 'ruff check' (for example --select, --preview, --config path). Shlex-split via env-var mediation. Validation rejects --fix / --fix-only / --unsafe-fixes (this workflow is read-only) and --output-format (the workflow owns output capture for reporting).
+        description: Extra arguments appended to 'ruff check' (for example --select, --preview, --config
+          path). Shlex-split via env-var mediation. Validation rejects --fix / --fix-only / --unsafe-fixes
+          (this workflow is read-only) and --output-format (the workflow owns output capture for reporting).
         type: string
         required: false
         default: ''
       ruff-format-enabled:
-        description: Whether to run 'ruff format --check --diff' (formatting gate). The diff is rendered into the job summary, truncated to a documented byte cap.
+        description: Whether to run 'ruff format --check --diff' (formatting gate). The diff is rendered
+          into the job summary, truncated to a documented byte cap.
         type: boolean
         required: false
         default: true
       ruff-format-arguments:
-        description: Extra arguments appended to 'ruff format' after the fixed --check --diff flags (for example --config path, --preview). Shlex-split via env-var mediation. Arguments incompatible with --check surface as a tool crash, which fails loudly regardless of lint-enforce.
+        description: Extra arguments appended to 'ruff format' after the fixed --check --diff flags (for
+          example --config path, --preview). Shlex-split via env-var mediation. Arguments incompatible
+          with --check surface as a tool crash, which fails loudly regardless of lint-enforce.
         type: string
         required: false
         default: ''
       ruff-version:
-        description: Exact ruff version to run (bare PEP 440 version, for example 0.14.2; no specifiers or whitespace). Empty (default) runs the latest ruff via uvx. Pin this for reproducible gates.
+        description: Exact ruff version to run (bare PEP 440 version, for example 0.14.2; no specifiers
+          or whitespace). Empty (default) runs the latest ruff via uvx. Pin this for reproducible gates.
         type: string
         required: false
         default: ''
@@ -94,27 +124,40 @@ name: '[Reusable]: Python Lint'
         required: false
         default: true
       typecheck-tool:
-        description: 'Type checker to run: mypy (default, mature ecosystem and plugin support), pyright (highest typing-spec conformance; runs via the PyPI wrapper which bootstraps Node on the runner), or ty (Astral''s checker; experimental/beta as of mid-2026). Any other value fails input validation loudly.'
+        description: 'Type checker to run: mypy (default, mature ecosystem and plugin support), pyright
+          (highest typing-spec conformance; runs via the PyPI wrapper which bootstraps Node on the runner),
+          or ty (Astral''s checker; experimental/beta as of mid-2026). Any other value fails input validation
+          loudly.'
         type: string
         required: false
         default: mypy
       typecheck-version:
-        description: Exact version of the selected type checker (bare PEP 440 version; validated). Empty runs the latest release. Pin for reproducible gates.
+        description: Exact version of the selected type checker (bare PEP 440 version; validated). Empty
+          runs the latest release. Pin for reproducible gates.
         type: string
         required: false
         default: ''
       typecheck-arguments:
-        description: Extra arguments passed to the type checker (for example --strict, --config-file path, --platform win32 for mypy). Shlex-split via env-var mediation. Target paths come from lint-paths; the per-version flag is owned by typecheck-python-versions (a caller-supplied --python-version/--pythonversion here is rejected to avoid conflicting duplicates).
+        description: Extra arguments passed to the type checker (for example --strict, --config-file path,
+          --platform win32 for mypy). Shlex-split via env-var mediation. Target paths come from lint-paths;
+          the per-version flag is owned by typecheck-python-versions (a caller-supplied --python-version/--pythonversion
+          here is rejected to avoid conflicting duplicates).
         type: string
         required: false
         default: ''
       typecheck-python-versions:
-        description: Newline-separated target Python versions, for example 3.11 then 3.13 on its own line. Each entry must match a 3.<minor> pattern. Each entry produces one checker invocation with the tool's target-version flag inside the single job -- no job matrix, no interpreter installs per version. Empty (default) runs one invocation with the tool's own default.
+        description: Newline-separated target Python versions, for example 3.11 then 3.13 on its own line.
+          Each entry must match a 3.<minor> pattern. Each entry produces one checker invocation with the
+          tool's target-version flag inside the single job -- no job matrix, no interpreter installs per
+          version. Empty (default) runs one invocation with the tool's own default.
         type: string
         required: false
         default: ''
       typecheck-with:
-        description: Newline-separated additional PyPI requirement specifiers installed alongside the type checker (stub packages like types-requests, checker plugins, or '.' to install the caller's project into the checker environment). Passed as repeated --with flags to uvx / uv run; each line is validated as a requirement specifier.
+        description: Newline-separated additional PyPI requirement specifiers installed alongside the
+          type checker (stub packages like types-requests, checker plugins, or '.' to install the caller's
+          project into the checker environment). Passed as repeated --with flags to uvx / uv run; each
+          line is validated as a requirement specifier.
         type: string
         required: false
         default: ''
@@ -315,7 +358,9 @@ name: '[Reusable]: Python Lint'
         default: true
     outputs:
       lint-outcome:
-        description: '"success" when every enabled tool passed; "failure" when any enabled tool reported findings or crashed. Set even when lint-enforce is false and the job succeeds, so callers can gate downstream jobs in advisory mode (guard needs with if !cancelled()).'
+        description: '"success" when every enabled tool passed; "failure" when any enabled tool reported
+          findings or crashed. Set even when lint-enforce is false and the job succeeds, so callers can
+          gate downstream jobs in advisory mode (guard needs with if !cancelled()).'
         value: ${{ jobs.python-lint.outputs.lint-outcome }}
       ruff-check-outcome:
         description: '"success", "failure", or "skipped" (when ruff-check-enabled is false).'
@@ -327,7 +372,9 @@ name: '[Reusable]: Python Lint'
         description: '"success", "failure", or "skipped". Failure if any target-version run failed.'
         value: ${{ jobs.python-lint.outputs.typecheck-outcome }}
       lint-results:
-        description: Stable-schema JSON (sorted keys, no timestamps) describing per-tool outcomes and counts. The same document is written to lint-report-directory/results.json when that input is set.
+        description: Stable-schema JSON (sorted keys, no timestamps) describing per-tool outcomes and
+          counts. The same document is written to lint-report-directory/results.json when that input is
+          set.
         value: ${{ jobs.python-lint.outputs.lint-results }}
     secrets:
       checkout-token:

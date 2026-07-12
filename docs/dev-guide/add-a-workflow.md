@@ -6,10 +6,10 @@ the checklist in {doc}`workflow-lifecycle` into concrete steps. Follow it start
 to finish; a workflow is not done until every step passes.
 
 Throughout, replace `<id>` with your workflow's ID (lowercase, hyphenated, and
-**not** starting with `devflows-`, which is reserved for internal workflows).
-`pandoc` is the simplest model to read; `python-build` models a matrix with
-extra channel jobs; the publishing workflows model credentialed jobs (see
-{doc}`publishing-conventions`).
+**not** starting with `_` or `devflows-`, which are reserved for internal
+workflows). `pandoc` is the simplest model to read; `python-build` models a
+matrix with extra channel jobs; the publishing workflows model credentialed jobs
+(see {doc}`publishing-conventions`).
 
 ## 1. Create The Directory And Source Workflow
 
@@ -276,7 +276,7 @@ Regenerate the committed generated files, then run the full suite:
 
 ```bash
 task sync            # writes .github/workflows/<id>.yaml
-task test-generate   # writes devflows-scenarios-<id>.yaml (+ .local.yaml)
+task test-generate   # writes _scenarios-<id>.yaml (+ .local.yaml)
 task docs            # regenerates reference pages and builds Sphinx (0 warnings)
 
 task validate

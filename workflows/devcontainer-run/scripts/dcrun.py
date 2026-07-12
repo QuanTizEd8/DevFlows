@@ -304,7 +304,7 @@ def _workspace_relative(value: str, workspace: Path, field: str) -> str:
 def validate_registry_auth(env: Mapping[str, str]) -> None:
     """Refuse to send github.token to a registry other than ghcr.io.
 
-    Verbatim from build-devcontainer: the docker-login password falls back to
+    Verbatim from devcontainer-build: the docker-login password falls back to
     github.token only for ghcr.io. Any other registry must supply an explicit
     docker-password secret, otherwise the caller could silently leak github.token
     to a third-party registry. This runs in its own validate-job step because it

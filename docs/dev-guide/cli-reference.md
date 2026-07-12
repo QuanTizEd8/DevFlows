@@ -40,11 +40,11 @@ task validate
 
 Loads `.config/project.yaml` (verifying the identity config is present and
 well-formed) and every workflow under `workflows/`, then runs the full metadata
-check: schema errors, catalog rules (`id` matches the directory, reserved
-`devflows-` prefix rejected, valid `status`, `on.workflow_call` present, release
-config present), IO-channel publish config, and scenario validation. Prints
-`validated <n> workflows` on success; prints each error to stderr and exits `1`
-otherwise.
+check: schema errors, catalog rules (`id` matches the directory, reserved `_`
+prefix rejected — `devflows-` too, for back-compat — valid `status`,
+`on.workflow_call` present, release config present), IO-channel publish config,
+and scenario validation. Prints `validated <n> workflows` on success; prints
+each error to stderr and exits `1` otherwise.
 
 `--include-drafts` : Also load workflows from a `workflows/_drafts/` directory.
 That directory does not exist today, so the flag is a no-op against the current
@@ -94,9 +94,10 @@ task test-generate
 ```
 
 Generates the per-workflow scenario workflows from `tests.scenarios` metadata:
-`devflows-scenarios-<id>.yaml` (hosted) and, when the workflow declares local
-scenarios, `devflows-scenarios-<id>.local.yaml`. Also prunes stale scenario
-files (including the retired monolithic `devflows-scenarios.yaml` /
+`_scenarios-<id>.yaml` (hosted) and, when the workflow declares local scenarios,
+`_scenarios-<id>.local.yaml`. Also prunes stale scenario files (a workflow that
+loses its scenarios, the pre-rename `devflows-scenarios-<id>.yaml` files, and
+the retired monolithic `devflows-scenarios.yaml` /
 `devflows-local-scenarios.yaml`) and fails if any generated file exceeds the
 byte cap.
 

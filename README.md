@@ -7,7 +7,7 @@ The catalog spans six categories — **Containers**, **Documents**, **Pages**,
 (`python-build`, `python-test`, `python-lint`), package and research publishing
 (`pypi-publish`, `anaconda-publish`, `zenodo-release`), document and paper
 building (`pandoc`, `docs-build`, `paper-openjournals`), GitHub Pages deployment
-(`deploy-pages`), container/Binder image builds and runs (`build-devcontainer`,
+(`deploy-pages`), container/Binder image builds and runs (`devcontainer-build`,
 `binder-build`, `devcontainer-run`), and repository writeback (`writeback`).
 Each workflow exposes a small typed interface, pins its third-party actions to
 commit SHAs, and runs under least-privilege permissions, so a project can adopt
@@ -61,7 +61,7 @@ examples, and test scenarios).
 | Publishing | `pypi-publish`       | Publish a digest-verified sdist/wheel set to PyPI or TestPyPI via OIDC trusted publishing only, with PEP 740 attestations and a dry run.          | [reference](https://quantized8.github.io/DevFlows/reference/workflows/pypi-publish.html)       |
 | Publishing | `anaconda-publish`   | Publish `python-build`'s conda artifact to anaconda.org under a staging label and promote it, every mutating step digest-verified and gated.      | [reference](https://quantized8.github.io/DevFlows/reference/workflows/anaconda-publish.html)   |
 | Publishing | `zenodo-release`     | Cut a research-software release from a tag: create/update a GitHub Release and a matching Zenodo deposition with a reserved-or-registered DOI.    | [reference](https://quantized8.github.io/DevFlows/reference/workflows/zenodo-release.html)     |
-| Containers | `build-devcontainer` | Build platform-specific devcontainer images and optionally merge them into a multi-arch image tag.                                                | [reference](https://quantized8.github.io/DevFlows/reference/workflows/build-devcontainer.html) |
+| Containers | `devcontainer-build` | Build platform-specific devcontainer images and optionally merge them into a multi-arch image tag.                                                | [reference](https://quantized8.github.io/DevFlows/reference/workflows/devcontainer-build.html) |
 | Containers | `binder-build`       | Build a Binder (repo2docker) image credential-free, push it from an isolated gated job with an SLSA provenance attestation and pinned Dockerfile. | [reference](https://quantized8.github.io/DevFlows/reference/workflows/binder-build.html)       |
 | Containers | `devcontainer-run`   | Run a command inside a prebuilt devcontainer image without rebuilding, applying its `devcontainer.metadata` features, hooks, user, and env.       | [reference](https://quantized8.github.io/DevFlows/reference/workflows/devcontainer-run.html)   |
 | Utilities  | `writeback`          | Commit a validated writeback payload artifact to a repository branch.                                                                             | [reference](https://quantized8.github.io/DevFlows/reference/workflows/writeback.html)          |

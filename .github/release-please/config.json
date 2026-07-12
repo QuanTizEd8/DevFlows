@@ -18,17 +18,17 @@
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
-    "workflows/build-devcontainer": {
-      "component": "build-devcontainer",
-      "release-type": "simple",
-      "package-name": "build-devcontainer",
-      "changelog-path": "CHANGELOG.md",
-      "initial-version": "0.1.0"
-    },
     "workflows/deploy-pages": {
       "component": "deploy-pages",
       "release-type": "simple",
       "package-name": "deploy-pages",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
+    "workflows/devcontainer-build": {
+      "component": "devcontainer-build",
+      "release-type": "simple",
+      "package-name": "devcontainer-build",
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },

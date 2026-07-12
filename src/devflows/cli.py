@@ -11,14 +11,17 @@ from pathlib import Path
 from devflows.catalog import (
     CATALOG_DIR,
     PUBLISHED_DIR,
-    RESERVED_ID_PREFIX,
     load_catalog,
     validate_workflow,
 )
 from devflows.docs import write_generated_docs
 from devflows.errors import DevflowsError
 from devflows.project import find_root, load_project
-from devflows.propagation import changed_paths_since, propagation_violations
+from devflows.propagation import (
+    changed_paths_since,
+    propagation_violations,
+    published_content_changed,
+)
 from devflows.publish import render_published_workflow, validate_publish_config
 from devflows.scenarios import (
     run_local_scenarios,
@@ -27,7 +30,11 @@ from devflows.scenarios import (
 )
 from devflows.schema import schema_errors
 
-INTERNAL_PREFIX = RESERVED_ID_PREFIX
+# The orphan sweep must skip BOTH the current internal namespace ("_", which owns
+# every renamed internal workflow file) and the legacy "devflows-" prefix (kept for
+# back-compat during the rename). Without "_" here, `devflows sync` would delete
+# every generated `_scenarios-*.yaml`. Passed straight to str.startswith(tuple).
+INTERNAL_PREFIX = ("_", "devflows-")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -190,7 +197,10 @@ def _orphans(workflows: list) -> list[Path]:
 
     Published workflows no longer carry a `.github/workflows/<id>/` script tree, so
     any non-internal directory there is orphaned, as is any `<name>.yaml`/`<name>.yml`
-    that no active workflow produces. Internal `devflows-*` files/dirs are left alone.
+    that no active workflow produces. Internal files/dirs whose name starts with any
+    INTERNAL_PREFIX entry (``_`` for the current internal namespace, ``devflows-`` for
+    legacy back-compat) are left alone -- this is what keeps the generated
+    ``_scenarios-*.yaml`` files from being swept.
     """
     expected = {item.published_path for item in workflows}
     orphans: list[Path] = []
@@ -291,7 +301,13 @@ def _propagation_check(*, base: str | None) -> int:
         return 0
     workflows = _require_catalog()
     changed = changed_paths_since(base_ref)
-    violations = propagation_violations(changed, [item.id for item in workflows])
+    violations = propagation_violations(
+        changed,
+        [item.id for item in workflows],
+        # Drop candidates whose published output only changed cosmetically (same
+        # parsed content); a formatting-only re-render strands no consumer.
+        published_semantically_changed=lambda wid: published_content_changed(base_ref, wid),
+    )
     if violations:
         for violation in violations:
             print(f"error: {violation}", file=sys.stderr)

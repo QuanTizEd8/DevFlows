@@ -20,7 +20,8 @@ jobs:
     uses: ./.github/workflows/pandoc.yaml
     with:
       pandoc-image: pandoc/core:3.8
-      pandoc-arguments: --standalone --output=.devflows-test/pandoc/markdown-html-artifact/example.html README.md
+      pandoc-arguments: --standalone --output=.devflows-test/pandoc/markdown-html-artifact/example.html
+        README.md
       artifact-upload-enabled: true
       artifact-upload-name: pandoc-markdown-html
       artifact-upload-path: .devflows-test/pandoc/markdown-html-artifact/example.html
@@ -33,7 +34,8 @@ jobs:
     name: 'Pandoc: Markdown to HTML with artifact upload assertions'
     runs-on: ubuntu-latest
     needs: pandoc_markdown_html_artifact_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -79,7 +81,8 @@ jobs:
     name: 'Pandoc: Working directory conversion with artifact upload assertions'
     runs-on: ubuntu-latest
     needs: pandoc_working_directory_artifact_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -157,7 +160,8 @@ jobs:
     name: 'Pandoc: Markdown to HTML from downloaded artifact assertions'
     runs-on: ubuntu-latest
     needs: pandoc_artifact_download_html_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0

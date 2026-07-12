@@ -106,9 +106,9 @@ def test_writeback_publishes_with_inlined_apply_payload() -> None:
     assert "github.workflow_ref" not in rendered
 
 
-def test_build_devcontainer_source_replaces_monolithic_config() -> None:
-    build_devcontainer = _workflow("build-devcontainer")
-    inputs = build_devcontainer.workflow_call["inputs"]
+def test_devcontainer_build_source_replaces_monolithic_config() -> None:
+    devcontainer_build = _workflow("devcontainer-build")
+    inputs = devcontainer_build.workflow_call["inputs"]
 
     assert "config" not in inputs
     assert inputs["image-name"]["required"] is True
@@ -119,8 +119,8 @@ def test_build_devcontainer_source_replaces_monolithic_config() -> None:
     assert "cache-save-always" not in inputs
 
 
-def test_build_devcontainer_published_workflow_injects_checkout_and_runtime_job() -> None:
-    workflow = build_published_workflow(_workflow("build-devcontainer"))
+def test_devcontainer_build_published_workflow_injects_checkout_and_runtime_job() -> None:
+    workflow = build_published_workflow(_workflow("devcontainer-build"))
     build_steps = workflow["jobs"]["build-devcontainer"]["steps"]
     merge_steps = workflow["jobs"]["merge-devcontainer"]["steps"]
 
@@ -137,8 +137,8 @@ def test_build_devcontainer_published_workflow_injects_checkout_and_runtime_job(
     ]
 
 
-def test_build_devcontainer_published_workflow_filters_conflicting_action_inputs() -> None:
-    rendered = render_published_workflow(_workflow("build-devcontainer"))
+def test_devcontainer_build_published_workflow_filters_conflicting_action_inputs() -> None:
+    rendered = render_published_workflow(_workflow("devcontainer-build"))
 
     assert "fromJSON(inputs.config)" not in rendered
     assert "runCmd:" not in rendered
@@ -152,10 +152,10 @@ def test_build_devcontainer_published_workflow_filters_conflicting_action_inputs
     assert "devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca" in rendered
 
 
-def test_build_devcontainer_exposes_build_only_digest_proof() -> None:
+def test_devcontainer_build_exposes_build_only_digest_proof() -> None:
     # item 13: a build-only run can prove an image was produced by capturing the
     # local digest and uploading it under build-digest-artifact-name.
-    build = _workflow("build-devcontainer")
+    build = _workflow("devcontainer-build")
     inputs = build.workflow_call["inputs"]
     assert "build-digest-artifact-name" in inputs
 

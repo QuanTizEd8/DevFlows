@@ -70,11 +70,11 @@ notes:
     dockerComposeFile) is stripped so `up` pulls rather than builds. A config-file
     that yields no image at all is rejected loudly rather than silently rebuilt.
   - >-
-    Pairs with build-devcontainer: its images already carry the
+    Pairs with devcontainer-build: its images already carry the
     devcontainer.metadata label (devcontainers/ci runs `devcontainer build`,
     which stamps it), so build once (publish an image-ref) then run many commands
     against that ref with devcontainer-run without rebuilding. This is the
-    capability build-devcontainer intentionally omits (it does not expose a run
+    capability devcontainer-build intentionally omits (it does not expose a run
     command).
   - >-
     Injection safety: every input reaches a DevFlows script only through env, the
@@ -109,7 +109,7 @@ notes:
   - >-
     A private image needs registry auth: set docker-login-enabled and provide
     docker-password (or rely on the ghcr.io-only github.token fallback, which
-    needs packages: read). docker-login-enabled defaults false (build-devcontainer
+    needs packages: read). docker-login-enabled defaults false (devcontainer-build
     defaults true) because a run usually pulls a public or ghcr.io image that needs
     no explicit login; enable it only for a private image. The pull rides docker's
     ambient credentials, so login happens before pull and `up`. The github.token
@@ -171,7 +171,7 @@ notes:
 examples:
   - name: Run a command in a prebuilt ghcr image
     path: tests/fixtures/devcontainer-run/ghcr-image.yaml
-  - name: Chain build-devcontainer into devcontainer-run
+  - name: Chain devcontainer-build into devcontainer-run
     path: tests/fixtures/devcontainer-run/build-then-run.yaml
 tests:
   scenarios:

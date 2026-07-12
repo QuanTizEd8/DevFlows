@@ -17,7 +17,7 @@ jobs:
     # Replace devcontainer-run/v0.1.0 with the latest released tag.
     uses: QuanTizEd8/DevFlows/.github/workflows/devcontainer-run.yaml@devcontainer-run/v0.1.0
     with:
-      # A prebuilt image published by build-devcontainer (or any image carrying a
+      # A prebuilt image published by devcontainer-build (or any image carrying a
       # devcontainer.metadata label). Pulled without a rebuild; its features and
       # lifecycle hooks are applied from the label automatically.
       devcontainer-image: ghcr.io/owner/project-devcontainer:latest

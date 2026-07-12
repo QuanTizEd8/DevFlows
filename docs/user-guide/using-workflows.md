@@ -140,7 +140,7 @@ Two conventions make chains robust:
   an irreversible upload.
 
 The container tier composes the same way:
-{doc}`build-devcontainer </reference/workflows/build-devcontainer>` publishes an
+{doc}`devcontainer-build </reference/workflows/devcontainer-build>` publishes an
 image whose `devcontainer.metadata` label carries its features and lifecycle
 hooks, and {doc}`devcontainer-run </reference/workflows/devcontainer-run>`
 consumes that `image-ref` to run any command inside it **without rebuilding**

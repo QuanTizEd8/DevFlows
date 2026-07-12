@@ -4,16 +4,20 @@ name: '[Reusable]: Binder Build'
   workflow_call:
     inputs:
       image-name:
-        description: Fully-qualified image reference WITHOUT a tag, including the registry when not Docker Hub (e.g. ghcr.io/owner/repo-binder). Used verbatim as the attestation subject-name and the FROM base of the pinned Dockerfile. Required; a bare call must not silently do nothing.
+        description: Fully-qualified image reference WITHOUT a tag, including the registry when not Docker
+          Hub (e.g. ghcr.io/owner/repo-binder). Used verbatim as the attestation subject-name and the
+          FROM base of the pinned Dockerfile. Required; a bare call must not silently do nothing.
         type: string
         required: true
       image-tags:
-        description: Newline-separated list of tags to apply to the built image at push time. Validated non-empty; each token must be a valid Docker tag. Only used by the push-image job.
+        description: Newline-separated list of tags to apply to the built image at push time. Validated
+          non-empty; each token must be a valid Docker tag. Only used by the push-image job.
         type: string
         required: false
         default: latest
       image-sha-tag-enabled:
-        description: When true, additionally tag and push image-sha-tag-prefix + github.sha for an immutable commit-addressed tag. The pinned Dockerfile always pins by @sha256 digest regardless.
+        description: When true, additionally tag and push image-sha-tag-prefix + github.sha for an immutable
+          commit-addressed tag. The pinned Dockerfile always pins by @sha256 digest regardless.
         type: boolean
         required: false
         default: false
@@ -23,32 +27,42 @@ name: '[Reusable]: Binder Build'
         required: false
         default: sha-
       repo2docker-source-path:
-        description: Directory under the checked-out (or artifact-downloaded) workspace that repo2docker builds. Validated to stay inside the workspace (no absolute path, no '..'). Appended by DevFlows as repo2docker's positional source, never taken from repo2docker-arguments.
+        description: Directory under the checked-out (or artifact-downloaded) workspace that repo2docker
+          builds. Validated to stay inside the workspace (no absolute path, no '..'). Appended by DevFlows
+          as repo2docker's positional source, never taken from repo2docker-arguments.
         type: string
         required: false
         default: .
       repo2docker-version:
-        description: Pinned jupyter-repo2docker version installed via uvx in the build job. Renovate-managed and asserted by a unit test to equal the registered pin. Validated to match the date-based version format so a caller cannot smuggle a specifier or extras.
+        description: Pinned jupyter-repo2docker version installed via uvx in the build job. Renovate-managed
+          and asserted by a unit test to equal the registered pin. Validated to match the date-based version
+          format so a caller cannot smuggle a specifier or extras.
         type: string
         required: false
         default: 2026.4.0
       repo2docker-arguments:
-        description: Extra arguments passed to jupyter-repo2docker, mediated through env + shlex.split (never shell-interpolated) and guarded by a strict allowlist. Flags owned by typed inputs (--image-name, --push/--no-push, --no-run, --no-build, --ref) and bare positionals are rejected in every form.
+        description: Extra arguments passed to jupyter-repo2docker, mediated through env + shlex.split
+          (never shell-interpolated) and guarded by a strict allowlist. Flags owned by typed inputs (--image-name,
+          --push/--no-push, --no-run, --no-build, --ref) and bare positionals are rejected in every form.
         type: string
         required: false
         default: ''
       repo2docker-timeout-minutes:
-        description: Maximum minutes the build-binder job may run before cancellation. Image builds are slow; the default is generous.
+        description: Maximum minutes the build-binder job may run before cancellation. Image builds are
+          slow; the default is generous.
         type: number
         required: false
         default: 30
       docker-login-enabled:
-        description: Whether the push-image job logs in to the registry before pushing. Mirrors build-devcontainer's docker-login-enabled.
+        description: Whether the push-image job logs in to the registry before pushing. Mirrors devcontainer-build's
+          docker-login-enabled.
         type: boolean
         required: false
         default: true
       docker-registry:
-        description: Registry hostname for login and push. The github.token password fallback is restricted to ghcr.io; any other registry must supply docker-password or the push job fails loudly in its tokenless preflight.
+        description: Registry hostname for login and push. The github.token password fallback is restricted
+          to ghcr.io; any other registry must supply docker-password or the push job fails loudly in its
+          tokenless preflight.
         type: string
         required: false
         default: ghcr.io
@@ -58,12 +72,18 @@ name: '[Reusable]: Binder Build'
         required: false
         default: ${{ github.repository_owner }}
       publish-dry-run-enabled:
-        description: DRY-RUN SWITCH (shared name with the publishing tier). When true, only validate and build-binder run, so the image is built and proven credential-free (PR-CI-safe) while the environment-bound push-image job and the mybinder warm job are skipped at the job level (no deployment record, no reviewer ping, no credential, no id-token). When false, push-environment-name is required.
+        description: DRY-RUN SWITCH (shared name with the publishing tier). When true, only validate and
+          build-binder run, so the image is built and proven credential-free (PR-CI-safe) while the environment-bound
+          push-image job and the mybinder warm job are skipped at the job level (no deployment record,
+          no reviewer ping, no credential, no id-token). When false, push-environment-name is required.
         type: boolean
         required: false
         default: false
       push-environment-name:
-        description: GitHub Environment the push-image job binds to (protection rules, required reviewers, environment secrets). Validated non-empty whenever publish-dry-run-enabled is false; the concurrency group is binder-build-<push-environment-name> with cancel-in-progress false so a release push is never cancelled mid-flight.
+        description: GitHub Environment the push-image job binds to (protection rules, required reviewers,
+          environment secrets). Validated non-empty whenever publish-dry-run-enabled is false; the concurrency
+          group is binder-build-<push-environment-name> with cancel-in-progress false so a release push
+          is never cancelled mid-flight.
         type: string
         required: false
         default: ''
@@ -73,42 +93,53 @@ name: '[Reusable]: Binder Build'
         required: false
         default: 30
       attestation-enabled:
-        description: Whether the push-image job attaches an actions/attest-build-provenance SLSA attestation for the pushed manifest digest (push-to-registry true). Requires the id-token write and attestations write grants the push job already holds.
+        description: Whether the push-image job attaches an actions/attest-build-provenance SLSA attestation
+          for the pushed manifest digest (push-to-registry true). Requires the id-token write and attestations
+          write grants the push job already holds.
         type: boolean
         required: false
         default: true
       dockerfile-artifact-enabled:
-        description: Whether the push-image job emits and uploads a one-line reproducibility Dockerfile pinning the exact pushed image by digest (FROM image-name@sha256:...). Only meaningful once a real registry digest exists, so it is a push-job artifact, absent in dry-run.
+        description: Whether the push-image job emits and uploads a one-line reproducibility Dockerfile
+          pinning the exact pushed image by digest (FROM image-name@sha256:...). Only meaningful once
+          a real registry digest exists, so it is a push-job artifact, absent in dry-run.
         type: boolean
         required: false
         default: true
       dockerfile-artifact-name:
-        description: Artifact name for the pinned Dockerfile. Validated as an artifact-safe token when dockerfile-artifact-enabled.
+        description: Artifact name for the pinned Dockerfile. Validated as an artifact-safe token when
+          dockerfile-artifact-enabled.
         type: string
         required: false
         default: binder-dockerfile
       binder-cache-warm-enabled:
-        description: Whether to best-effort trigger a mybinder.org build of the repository after a successful build-binder job. Non-asserted; the warm-binder-cache job is continue-on-error so mybinder downtime never fails the caller. Skipped in dry-run.
+        description: Whether to best-effort trigger a mybinder.org build of the repository after a successful
+          build-binder job. Non-asserted; the warm-binder-cache job is continue-on-error so mybinder downtime
+          never fails the caller. Skipped in dry-run.
         type: boolean
         required: false
         default: false
       binder-cache-provider:
-        description: mybinder provider slug in the build URL (gh, gl, ...). Validated against a small allowlist when binder-cache-warm-enabled.
+        description: mybinder provider slug in the build URL (gh, gl, ...). Validated against a small
+          allowlist when binder-cache-warm-enabled.
         type: string
         required: false
         default: gh
       binder-cache-repository:
-        description: owner/repo (or provider-appropriate slug) mybinder builds. Defaults to the calling repository.
+        description: owner/repo (or provider-appropriate slug) mybinder builds. Defaults to the calling
+          repository.
         type: string
         required: false
         default: ${{ github.repository }}
       binder-cache-ref:
-        description: Git ref/commit mybinder builds. Defaults to the triggering commit so the warmed image matches the one just built.
+        description: Git ref/commit mybinder builds. Defaults to the triggering commit so the warmed image
+          matches the one just built.
         type: string
         required: false
         default: ${{ github.sha }}
       binder-cache-endpoint:
-        description: BinderHub base URL. Validated as an https URL when binder-cache-warm-enabled so a self-hosted BinderHub can be targeted.
+        description: BinderHub base URL. Validated as an https URL when binder-cache-warm-enabled so a
+          self-hosted BinderHub can be targeted.
         type: string
         required: false
         default: https://mybinder.org
@@ -264,7 +295,10 @@ name: '[Reusable]: Binder Build'
         default: error
     secrets:
       docker-password:
-        description: Registry password or token, exposed only on the single docker/login-action step of the push-image job and never to a third-party action. Optional because ghcr.io falls back to github.token; a non-ghcr registry without this secret fails loudly in the push job's tokenless preflight. Absent entirely in dry-run (push job skipped).
+        description: Registry password or token, exposed only on the single docker/login-action step of
+          the push-image job and never to a third-party action. Optional because ghcr.io falls back to
+          github.token; a non-ghcr registry without this secret fails loudly in the push job's tokenless
+          preflight. Absent entirely in dry-run (push job skipped).
         required: false
       checkout-token:
         description: Token used by actions/checkout. Defaults to github.token.
@@ -277,10 +311,14 @@ name: '[Reusable]: Binder Build'
         required: false
     outputs:
       image-ref:
-        description: The primary pushed image reference (image-name:<first image-tags entry>). Empty string when the push-image job was skipped (dry-run) or did not succeed; consumers guard on non-empty per the empty-output-guard convention.
+        description: The primary pushed image reference (image-name:<first image-tags entry>). Empty string
+          when the push-image job was skipped (dry-run) or did not succeed; consumers guard on non-empty
+          per the empty-output-guard convention.
         value: ${{ jobs.push-image.outputs.image-ref }}
       image-digest:
-        description: The immutable registry manifest digest of the pushed image, sha256:<hex> (also the digest the provenance attestation and the pinned Dockerfile reference). Empty string in dry-run or when the push job did not run.
+        description: The immutable registry manifest digest of the pushed image, sha256:<hex> (also the
+          digest the provenance attestation and the pinned Dockerfile reference). Empty string in dry-run
+          or when the push job did not run.
         value: ${{ jobs.push-image.outputs.image-digest }}
 permissions: {}
 jobs:
@@ -1212,7 +1250,8 @@ jobs:
         with:
           registry: ${{ inputs.docker-registry }}
           username: ${{ inputs.docker-username }}
-          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token) || '' }}
+          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token)
+            || '' }}
       - name: Push image and capture digest
         id: push
         shell: bash

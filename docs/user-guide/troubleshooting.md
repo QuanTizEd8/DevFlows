@@ -57,7 +57,7 @@ declares — even scopes only an optional, disabled job would use. In practice:
 
 - Calling `pandoc` requires `contents: write` and `actions: read` (its embedded
   writeback commit job requires them) even for a read-only conversion.
-- Calling `build-devcontainer` requires `packages: write`, `contents: read`, and
+- Calling `devcontainer-build` requires `packages: write`, `contents: read`, and
   `actions: read`.
 - Calling `pypi-publish` requires `id-token: write` (OIDC trusted publishing),
   `contents: read`, and `actions: read` — all three even for a dry-run call.

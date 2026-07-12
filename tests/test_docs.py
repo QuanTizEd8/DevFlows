@@ -9,7 +9,7 @@ _CATALOG = {item.id: item for item in load_catalog()}
 def test_catalog_docs_include_workflow_page() -> None:
     rendered = render_catalog(load_catalog())
 
-    assert "workflows/build-devcontainer" in rendered
+    assert "workflows/devcontainer-build" in rendered
     assert "workflows/pandoc" in rendered
     assert "workflows/writeback" in rendered
 
@@ -114,13 +114,13 @@ def test_docs_build_permissions_include_job_level_actions_read() -> None:
     assert "- `contents`: `read`" in permissions
 
 
-def test_build_devcontainer_docs_include_filtered_interface() -> None:
-    build_devcontainer = {item.id: item for item in load_catalog()}["build-devcontainer"]
-    rendered = render_workflow(build_devcontainer)
+def test_devcontainer_build_docs_include_filtered_interface() -> None:
+    devcontainer_build = {item.id: item for item in load_catalog()}["devcontainer-build"]
+    rendered = render_workflow(devcontainer_build)
 
-    assert "# Build Devcontainer" in rendered
+    assert "# Devcontainer Build" in rendered
     assert (
-        "QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/vX.Y.Z"
+        "QuanTizEd8/DevFlows/.github/workflows/devcontainer-build.yaml@devcontainer-build/vX.Y.Z"
         in rendered
     )
     assert "| image-name | string | True |  |" in rendered

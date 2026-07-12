@@ -1,5 +1,5 @@
-id: build-devcontainer
-name: Build Devcontainer
+id: devcontainer-build
+name: Devcontainer Build
 summary:
   Build platform-specific devcontainer images and optionally merge them into a
   multi-arch image tag.
@@ -62,7 +62,7 @@ notes:
     runner after checkout and artifact download.
 examples:
   - name: Build and publish GHCR image
-    path: tests/fixtures/build-devcontainer/ghcr-publish.yaml
+    path: tests/fixtures/devcontainer-build/ghcr-publish.yaml
 tests:
   scenarios:
     - id: build-only-minimal
@@ -70,7 +70,7 @@ tests:
       # Build-only, no registry credentials: docker login is disabled, push is
       # never, the multi-arch merge is off, and the registry build cache is
       # opted out. It needs no secrets, but its call still declares packages:
-      # write (build-devcontainer's workflow-level grant), so the generated
+      # write (devcontainer-build's workflow-level grant), so the generated
       # hosted workflow gates this scenario off fork pull requests and runs it on
       # same-repo PRs, pushes, and dispatches. build-digest-artifact-name makes
       # the build job record the locally-built image digest and upload it; the
@@ -88,7 +88,7 @@ tests:
       inputs:
         image-name: devflows-e2e-devcontainer
         image-tags: e2e
-        devcontainer-config-file: tests/scenarios/build-devcontainer/minimal/devcontainer.json
+        devcontainer-config-file: tests/scenarios/devcontainer-build/minimal/devcontainer.json
         docker-login-enabled: false
         devcontainer-push: never
         devcontainer-cache-registry-enabled: false
@@ -97,7 +97,7 @@ tests:
         build-digest-artifact-name: build-only-digest
       artifact:
         name: build-only-digest-linux-amd64
-        path: .devflows-test-artifacts/build-devcontainer/build-only
+        path: .devflows-test-artifacts/devcontainer-build/build-only
       assertions:
         - type: workflow-output-equals
           name: image-ref

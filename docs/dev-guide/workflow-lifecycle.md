@@ -140,7 +140,7 @@ pixi run -- devflows test-generate
 ```
 
 `sync` writes `.github/workflows/<id>.yaml`; `test-generate` writes the
-per-workflow scenario files `.github/workflows/devflows-scenarios-<id>.yaml` and
-(when the workflow has local scenarios) `devflows-scenarios-<id>.local.yaml` —
-one pair per workflow, not a single monolithic scenario file. `task lint`
-verifies all of these generated files are current.
+per-workflow scenario files `.github/workflows/_scenarios-<id>.yaml` and (when
+the workflow has local scenarios) `_scenarios-<id>.local.yaml` — one pair per
+workflow, not a single monolithic scenario file. `task lint` verifies all of
+these generated files are current.

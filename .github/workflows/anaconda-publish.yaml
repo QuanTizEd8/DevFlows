@@ -4,21 +4,26 @@ name: '[Reusable]: Anaconda Publish'
   workflow_call:
     inputs:
       publish-owner:
-        description: anaconda.org user or organization every operation targets; the only source of the owner segment, so no spec can reach another namespace. Validated non-empty and charset-safe.
+        description: anaconda.org user or organization every operation targets; the only source of the
+          owner segment, so no spec can reach another namespace. Validated non-empty and charset-safe.
         type: string
         required: true
       publish-dry-run-enabled:
-        description: Credential-free rehearsal mode -- verify runs fully (digest verification plus plan computation) while upload, promote, and maintain are skipped at the job level and no token is required; the plan is reported through the outputs and job summary.
+        description: Credential-free rehearsal mode -- verify runs fully (digest verification plus plan
+          computation) while upload, promote, and maintain are skipped at the job level and no token is
+          required; the plan is reported through the outputs and job summary.
         type: boolean
         required: false
         default: false
       publish-client-version:
-        description: Exact anaconda-client version to install ephemerally; empty installs the pinned default. Pin for reproducible release pipelines.
+        description: Exact anaconda-client version to install ephemerally; empty installs the pinned default.
+          Pin for reproducible release pipelines.
         type: string
         required: false
         default: ''
       publish-server-url:
-        description: Alternate anaconda API server URL (anaconda-client -s/--site) for on-prem repositories or an e2e mock index; empty uses anaconda.org. Environment-mediated, never shell-interpolated.
+        description: Alternate anaconda API server URL (anaconda-client -s/--site) for on-prem repositories
+          or an e2e mock index; empty uses anaconda.org. Environment-mediated, never shell-interpolated.
         type: string
         required: false
         default: ''
@@ -28,77 +33,96 @@ name: '[Reusable]: Anaconda Publish'
         required: false
         default: 15
       publish-expected-version:
-        description: Optional exact-match version guard -- verification fails unless every verified .conda parses to this version. The internal single-consistent-version check always runs regardless.
+        description: Optional exact-match version guard -- verification fails unless every verified .conda
+          parses to this version. The internal single-consistent-version check always runs regardless.
         type: string
         required: false
         default: ''
       publish-dist-manifest:
-        description: python-build's schema-1 dist-manifest JSON; required when upload-enabled. Every kind=conda entry is verified byte-for-byte (sha256 and size) against the downloaded files, and artifacts.conda-channel must equal artifact-download-name.
+        description: python-build's schema-1 dist-manifest JSON; required when upload-enabled. Every kind=conda
+          entry is verified byte-for-byte (sha256 and size) against the downloaded files, and artifacts.conda-channel
+          must equal artifact-download-name.
         type: string
         required: false
         default: ''
       publish-dist-path:
-        description: Workspace-relative directory the conda channel is downloaded into and verified from (typically equal to artifact-download-path); required when upload-enabled. Validated workspace-contained.
+        description: Workspace-relative directory the conda channel is downloaded into and verified from
+          (typically equal to artifact-download-path); required when upload-enabled. Validated workspace-contained.
         type: string
         required: false
         default: ''
       upload-enabled:
-        description: Whether to run the verify and upload jobs (stage packages under upload-label). Set false for a promote-only or maintain call.
+        description: Whether to run the verify and upload jobs (stage packages under upload-label). Set
+          false for a promote-only or maintain call.
         type: boolean
         required: false
         default: true
       upload-label:
-        description: anaconda.org label packages are uploaded under (anaconda upload --label) -- the staging safety net before promote relabels them. Validated label-safe and distinct from promote-label.
+        description: anaconda.org label packages are uploaded under (anaconda upload --label) -- the staging
+          safety net before promote relabels them. Validated label-safe and distinct from promote-label.
         type: string
         required: false
         default: staging
       upload-existing-mode:
-        description: Collision handling when a file already exists -- 'fail' (default, anaconda-client errors), 'skip' (--skip-existing), or 'overwrite' (--force, the only route to --force). Validated.
+        description: Collision handling when a file already exists -- 'fail' (default, anaconda-client
+          errors), 'skip' (--skip-existing), or 'overwrite' (--force, the only route to --force). Validated.
         type: string
         required: false
         default: fail
       upload-arguments:
-        description: Extra anaconda upload arguments, shlex-split and guarded by a strict allowlist -- only the cosmetic/metadata flags --no-progress, --no-register, --register, --keep-basename, --summary=VALUE, and --description=VALUE are accepted. Everything DevFlows owns is rejected.
+        description: Extra anaconda upload arguments, shlex-split and guarded by a strict allowlist --
+          only the cosmetic/metadata flags --no-progress, --no-register, --register, --keep-basename,
+          --summary=VALUE, and --description=VALUE are accepted. Everything DevFlows owns is rejected.
         type: string
         required: false
         default: ''
       upload-environment-name:
-        description: GitHub environment the upload job binds to; put staging protection rules and the token secret here.
+        description: GitHub environment the upload job binds to; put staging protection rules and the
+          token secret here.
         type: string
         required: false
         default: anaconda-staging
       promote-enabled:
-        description: Whether to run the promote job relabeling packages from upload-label to promote-label. Chained mode derives specs from the verified upload set; standalone mode requires promote-specs.
+        description: Whether to run the promote job relabeling packages from upload-label to promote-label.
+          Chained mode derives specs from the verified upload set; standalone mode requires promote-specs.
         type: boolean
         required: false
         default: false
       promote-label:
-        description: Final label packages are promoted to (anaconda move --to-label); must differ from upload-label.
+        description: Final label packages are promoted to (anaconda move --to-label); must differ from
+          upload-label.
         type: string
         required: false
         default: main
       promote-specs:
-        description: Newline-separated 'package/version' or 'package/version/filename' specs to promote, without an owner segment (publish-owner is prepended). Empty in chained mode; required for a promote-only call.
+        description: Newline-separated 'package/version' or 'package/version/filename' specs to promote,
+          without an owner segment (publish-owner is prepended). Empty in chained mode; required for a
+          promote-only call.
         type: string
         required: false
         default: ''
       promote-environment-name:
-        description: GitHub environment the promote job binds to; the irreversible public-release gate, so configure required reviewers here.
+        description: GitHub environment the promote job binds to; the irreversible public-release gate,
+          so configure required reviewers here.
         type: string
         required: false
         default: anaconda-release
       maintain-enabled:
-        description: Whether to run the destructive maintain job (anaconda remove --force). Mutually exclusive with upload-enabled and promote-enabled; requires maintain-remove-specs and (unless dry-run) maintain-confirm.
+        description: Whether to run the destructive maintain job (anaconda remove --force). Mutually exclusive
+          with upload-enabled and promote-enabled; requires maintain-remove-specs and (unless dry-run)
+          maintain-confirm.
         type: boolean
         required: false
         default: false
       maintain-remove-specs:
-        description: Newline-separated 'package/version' or 'package/version/filename' specs to remove, without an owner segment. Removal is irreversible; rehearse with publish-dry-run-enabled first.
+        description: Newline-separated 'package/version' or 'package/version/filename' specs to remove,
+          without an owner segment. Removal is irreversible; rehearse with publish-dry-run-enabled first.
         type: string
         required: false
         default: ''
       maintain-confirm:
-        description: Arm switch for destructive removal -- must equal publish-owner exactly (type-the-name-to-delete) or validation fails. Not required in dry-run.
+        description: Arm switch for destructive removal -- must equal publish-owner exactly (type-the-name-to-delete)
+          or validation fails. Not required in dry-run.
         type: string
         required: false
         default: ''
@@ -159,26 +183,34 @@ name: '[Reusable]: Anaconda Publish'
         default: error
     secrets:
       anaconda-token:
-        description: anaconda.org API token (api:write on the target owner) for upload/move/remove. required false because dry-run needs none; exposed as ANACONDA_API_TOKEN only on each credentialed job's single CLI step.
+        description: anaconda.org API token (api:write on the target owner) for upload/move/remove. required
+          false because dry-run needs none; exposed as ANACONDA_API_TOKEN only on each credentialed job's
+          single CLI step.
         required: false
       artifact-download-token:
         description: Token used to download artifacts from another repository or run.
         required: false
     outputs:
       package-version:
-        description: Version parsed from the verified .conda filenames (empty for promote-only/maintain calls); mirrors python-build's package-version and is honest in dry-run.
+        description: Version parsed from the verified .conda filenames (empty for promote-only/maintain
+          calls); mirrors python-build's package-version and is honest in dry-run.
         value: ${{ jobs.verify.outputs.package-version }}
       staged-specs:
-        description: Newline-separated owner/package/version specs uploaded (or, in dry-run, planned) to upload-label; feed a later promote-only call's promote-specs. Empty when upload-enabled is false.
+        description: Newline-separated owner/package/version specs uploaded (or, in dry-run, planned)
+          to upload-label; feed a later promote-only call's promote-specs. Empty when upload-enabled is
+          false.
         value: ${{ jobs.verify.outputs.staged-specs }}
       uploaded-files:
-        description: Newline-separated .conda file names that passed digest verification and were uploaded (or would be, in dry-run). Empty when upload-enabled is false.
+        description: Newline-separated .conda file names that passed digest verification and were uploaded
+          (or would be, in dry-run). Empty when upload-enabled is false.
         value: ${{ jobs.verify.outputs.uploaded-files }}
       promoted-specs:
-        description: Newline-separated owner-qualified specs relabeled from upload-label to promote-label (or, in dry-run, planned). Empty when promote-enabled is false.
+        description: Newline-separated owner-qualified specs relabeled from upload-label to promote-label
+          (or, in dry-run, planned). Empty when promote-enabled is false.
         value: ${{ jobs.verify.outputs.promoted-specs }}
       removed-specs:
-        description: Newline-separated owner-qualified specs removed by maintain (or, in dry-run, planned). Empty when maintain-enabled is false.
+        description: Newline-separated owner-qualified specs removed by maintain (or, in dry-run, planned).
+          Empty when maintain-enabled is false.
         value: ${{ jobs.verify.outputs.removed-specs }}
 permissions: {}
 jobs:
@@ -1771,7 +1803,9 @@ jobs:
       - validate
       - verify
       - upload
-    if: ${{ !cancelled() && !inputs.publish-dry-run-enabled && inputs.promote-enabled && needs.validate.result == 'success' && needs.verify.result == 'success' && (needs.upload.result == 'success' || needs.upload.result == 'skipped') }}
+    if: ${{ !cancelled() && !inputs.publish-dry-run-enabled && inputs.promote-enabled && needs.validate.result
+      == 'success' && needs.verify.result == 'success' && (needs.upload.result == 'success' || needs.upload.result
+      == 'skipped') }}
     runs-on: ubuntu-latest
     permissions: {}
     timeout-minutes: ${{ inputs.publish-timeout-minutes }}
