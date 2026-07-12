@@ -12,5 +12,5 @@
   "workflows/python-lint": "0.0.0",
   "workflows/python-test": "0.0.0",
   "workflows/writeback": "0.0.0",
-  "workflows/zenodo-release": "0.0.0"
+  "workflows/zenodo-release": "0.1.0"
 }
