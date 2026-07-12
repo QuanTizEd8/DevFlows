@@ -1,5 +1,5 @@
 {
-  "workflows/anaconda-publish": "0.0.0",
+  "workflows/anaconda-publish": "0.1.0",
   "workflows/binder-build": "0.0.0",
   "workflows/deploy-pages": "0.0.0",
   "workflows/devcontainer-build": "0.0.0",
