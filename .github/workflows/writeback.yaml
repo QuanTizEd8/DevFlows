@@ -55,7 +55,8 @@ name: '[Reusable]: Writeback'
         default: 1
     secrets:
       commit-token:
-        description: Token used by the writeback job. Must be able to write contents when commit-push is true.
+        description: Token used by the writeback job. Must be able to write contents when commit-push
+          is true.
         required: false
 permissions:
   contents: read

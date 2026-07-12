@@ -4,22 +4,27 @@ name: '[Reusable]: Python Build'
   workflow_call:
     inputs:
       build-package-path:
-        description: Directory containing pyproject.toml, relative to the checked-out workspace. Used as the package directory for the sdist/wheel build and as the cibuildwheel package-dir. Must stay inside GITHUB_WORKSPACE (script-enforced).
+        description: Directory containing pyproject.toml, relative to the checked-out workspace. Used
+          as the package directory for the sdist/wheel build and as the cibuildwheel package-dir. Must
+          stay inside GITHUB_WORKSPACE (script-enforced).
         type: string
         required: false
         default: .
       build-tool:
-        description: Tool used to build the sdist and pure wheel; either uv (uv build) or python-build (python -m build). Any other value fails validation loudly.
+        description: Tool used to build the sdist and pure wheel; either uv (uv build) or python-build
+          (python -m build). Any other value fails validation loudly.
         type: string
         required: false
         default: uv
       build-tool-version:
-        description: Exact version of the selected build tool (uv release, or the PyPI build version for python-build). Empty installs the workflow's pinned default. Pin for reproducible releases.
+        description: Exact version of the selected build tool (uv release, or the PyPI build version for
+          python-build). Empty installs the workflow's pinned default. Pin for reproducible releases.
         type: string
         required: false
         default: ''
       build-python-version:
-        description: Python version for the sdist/pure-wheel build environment. Empty defers to the tool's own discovery (.python-version, pyproject requires-python, or tool default).
+        description: Python version for the sdist/pure-wheel build environment. Empty defers to the tool's
+          own discovery (.python-version, pyproject requires-python, or tool default).
         type: string
         required: false
         default: ''
@@ -29,12 +34,16 @@ name: '[Reusable]: Python Build'
         required: false
         default: true
       build-wheel-enabled:
-        description: Whether the dist job builds a wheel with the host build tool. Set false for native projects that produce all wheels through cibw-enabled; a host-built wheel of a native project would be a single-platform wheel.
+        description: Whether the dist job builds a wheel with the host build tool. Set false for native
+          projects that produce all wheels through cibw-enabled; a host-built wheel of a native project
+          would be a single-platform wheel.
         type: boolean
         required: false
         default: true
       build-tool-arguments:
-        description: Extra arguments appended to the build command (for example --no-build-isolation or -C config settings). Passed through an environment variable and shlex-split by a DevFlows script; never interpolated into shell text.
+        description: Extra arguments appended to the build command (for example --no-build-isolation or
+          -C config settings). Passed through an environment variable and shlex-split by a DevFlows script;
+          never interpolated into shell text.
         type: string
         required: false
         default: ''
@@ -49,22 +58,31 @@ name: '[Reusable]: Python Build'
         required: false
         default: 30
       uv-cache-mode:
-        description: setup-uv enable-cache passthrough; one of auto, true, or false. auto (default) enables the uv cache only on GitHub-hosted runners. Applies to the uv build tool (dist job) and the collect job's uv (conda re-index); validated in the validate job.
+        description: setup-uv enable-cache passthrough; one of auto, true, or false. auto (default) enables
+          the uv cache only on GitHub-hosted runners. Applies to the uv build tool (dist job) and the
+          collect job's uv (conda re-index); validated in the validate job.
         type: string
         required: false
         default: auto
       cibw-enabled:
-        description: Whether to build native wheels with cibuildwheel across cibw-matrix. When true, cibw-matrix must be a non-empty valid matrix or validation fails.
+        description: Whether to build native wheels with cibuildwheel across cibw-matrix. When true, cibw-matrix
+          must be a non-empty valid matrix or validation fails.
         type: boolean
         required: false
         default: false
       cibw-matrix:
-        description: JSON array of cibuildwheel legs; this input carries ONLY the matrix (all other cibuildwheel configuration belongs in pyproject.toml [tool.cibuildwheel]). Leg schema (validated before use); each leg is an object with a required string "runner" (e.g. ubuntu-latest, macos-14, windows-latest), an optional string "only" (exact cibuildwheel build identifier such as cp313-manylinux_x86_64), an optional string "build" (CIBW_BUILD pattern), and an optional string "archs" (CIBW_ARCHS). "only" and "build" are mutually exclusive per leg.
+        description: JSON array of cibuildwheel legs; this input carries ONLY the matrix (all other cibuildwheel
+          configuration belongs in pyproject.toml [tool.cibuildwheel]). Leg schema (validated before use);
+          each leg is an object with a required string "runner" (e.g. ubuntu-latest, macos-14, windows-latest),
+          an optional string "only" (exact cibuildwheel build identifier such as cp313-manylinux_x86_64),
+          an optional string "build" (CIBW_BUILD pattern), and an optional string "archs" (CIBW_ARCHS).
+          "only" and "build" are mutually exclusive per leg.
         type: string
         required: false
         default: '[]'
       cibw-config-file:
-        description: Path to a cibuildwheel config file, passed to the pinned pypa/cibuildwheel action's config-file input. Empty uses {package}/pyproject.toml.
+        description: Path to a cibuildwheel config file, passed to the pinned pypa/cibuildwheel action's
+          config-file input. Empty uses {package}/pyproject.toml.
         type: string
         required: false
         default: ''
@@ -79,27 +97,34 @@ name: '[Reusable]: Python Build'
         required: false
         default: 120
       conda-enabled:
-        description: Whether to build conda packages with rattler-build across conda-matrix. When true, conda-recipe-path and conda-matrix must be set or validation fails.
+        description: Whether to build conda packages with rattler-build across conda-matrix. When true,
+          conda-recipe-path and conda-matrix must be set or validation fails.
         type: boolean
         required: false
         default: false
       conda-recipe-path:
-        description: Path to the rattler-build recipe (recipe.yaml, v1 recipe format) relative to the workspace. Legacy conda-build meta.yaml recipes are not supported. Required when conda-enabled is true.
+        description: Path to the rattler-build recipe (recipe.yaml, v1 recipe format) relative to the
+          workspace. Legacy conda-build meta.yaml recipes are not supported. Required when conda-enabled
+          is true.
         type: string
         required: false
         default: ''
       conda-matrix:
-        description: JSON array of conda build legs; carries ONLY the matrix. Leg schema (validated before use); each leg is an object with a required string "runner" and an optional string "target-platform" (e.g. noarch, linux-64, osx-arm64; passed as rattler-build --target-platform).
+        description: JSON array of conda build legs; carries ONLY the matrix. Leg schema (validated before
+          use); each leg is an object with a required string "runner" and an optional string "target-platform"
+          (e.g. noarch, linux-64, osx-arm64; passed as rattler-build --target-platform).
         type: string
         required: false
         default: '[{"runner": "ubuntu-latest"}]'
       conda-channels:
-        description: Newline-separated conda channels used to resolve build/host dependencies (each becomes a -c argument, environment-mediated).
+        description: Newline-separated conda channels used to resolve build/host dependencies (each becomes
+          a -c argument, environment-mediated).
         type: string
         required: false
         default: conda-forge
       conda-build-arguments:
-        description: Extra arguments appended to rattler-build build. Environment-mediated and shlex-split; never shell-interpolated.
+        description: Extra arguments appended to rattler-build build. Environment-mediated and shlex-split;
+          never shell-interpolated.
         type: string
         required: false
         default: ''
@@ -114,12 +139,16 @@ name: '[Reusable]: Python Build'
         required: false
         default: 60
       dist-artifact-prefix:
-        description: Prefix for every artifact this workflow publishes (prefix-sdist, prefix-wheels, prefix-conda-channel) and its run-internal intermediates (prefix-internal-*). Callers invoking this workflow more than once in the same run MUST pass distinct values or artifact names collide. Must be non-empty and artifact-name safe (validated).
+        description: Prefix for every artifact this workflow publishes (prefix-sdist, prefix-wheels, prefix-conda-channel)
+          and its run-internal intermediates (prefix-internal-*). Callers invoking this workflow more
+          than once in the same run MUST pass distinct values or artifact names collide. Must be non-empty
+          and artifact-name safe (validated).
         type: string
         required: false
         default: python-build
       dist-artifact-retention-days:
-        description: Retention in days for the final published artifacts. 0 uses the repository default. Internal per-leg intermediates always use 1 day.
+        description: Retention in days for the final published artifacts. 0 uses the repository default.
+          Internal per-leg intermediates always use 1 day.
         type: number
         required: false
         default: 0
@@ -275,22 +304,32 @@ name: '[Reusable]: Python Build'
         default: error
     outputs:
       sdist-artifact-name:
-        description: Canonical artifact name containing the sdist (prefix-sdist). Empty string when no sdist was built. Chain into pypi-publish via artifact-download by name.
+        description: Canonical artifact name containing the sdist (prefix-sdist). Empty string when no
+          sdist was built. Chain into pypi-publish via artifact-download by name.
         value: ${{ jobs.collect.outputs.sdist-artifact-name }}
       wheels-artifact-name:
-        description: Canonical wheelhouse artifact name (prefix-wheels); a flat directory of every wheel from the dist and cibw jobs. Empty string when no wheels were built.
+        description: Canonical wheelhouse artifact name (prefix-wheels); a flat directory of every wheel
+          from the dist and cibw jobs. Empty string when no wheels were built.
         value: ${{ jobs.collect.outputs.wheels-artifact-name }}
       conda-artifact-name:
-        description: Canonical conda channel artifact name (prefix-conda-channel); platform subdirectories plus authoritative repodata.json (re-indexed at collect time). Empty string when conda-enabled is false.
+        description: Canonical conda channel artifact name (prefix-conda-channel); platform subdirectories
+          plus authoritative repodata.json (re-indexed at collect time). Empty string when conda-enabled
+          is false.
         value: ${{ jobs.collect.outputs.conda-artifact-name }}
       dist-sha256sums:
-        description: Base64-encoded sha256sum-format lines (one "<hex>  <filename>" line per published distribution file). This is the subjects format expected by slsa-github-generator's generic provenance workflow.
+        description: Base64-encoded sha256sum-format lines (one "<hex>  <filename>" line per published
+          distribution file). This is the subjects format expected by slsa-github-generator's generic
+          provenance workflow.
         value: ${{ jobs.collect.outputs.dist-sha256sums }}
       dist-manifest:
-        description: Versioned JSON manifest with a schema field (1), a files array of objects (name, sha256, size, kind where kind is sdist, wheel, or conda), and an artifacts object mapping sdist, wheels, and conda-channel to their published artifact names. Machine-readable contract for pypi-publish/anaconda-publish chaining and provenance subject lists.
+        description: Versioned JSON manifest with a schema field (1), a files array of objects (name,
+          sha256, size, kind where kind is sdist, wheel, or conda), and an artifacts object mapping sdist,
+          wheels, and conda-channel to their published artifact names. Machine-readable contract for pypi-publish/anaconda-publish
+          chaining and provenance subject lists.
         value: ${{ jobs.collect.outputs.dist-manifest }}
       package-version:
-        description: Package version parsed from the built distribution filenames. Collect fails loudly if the produced distributions disagree on version.
+        description: Package version parsed from the built distribution filenames. Collect fails loudly
+          if the produced distributions disagree on version.
         value: ${{ jobs.collect.outputs.package-version }}
     secrets:
       checkout-token:
@@ -955,7 +994,10 @@ jobs:
       - dist
       - cibw
       - conda
-    if: '!cancelled() && (needs.dist.result == ''success'' || needs.dist.result == ''skipped'') && (needs.cibw.result == ''success'' || needs.cibw.result == ''skipped'') && (needs.conda.result == ''success'' || needs.conda.result == ''skipped'') && (needs.dist.result == ''success'' || needs.cibw.result == ''success'' || needs.conda.result == ''success'')'
+    if: '!cancelled() && (needs.dist.result == ''success'' || needs.dist.result == ''skipped'') && (needs.cibw.result
+      == ''success'' || needs.cibw.result == ''skipped'') && (needs.conda.result == ''success'' || needs.conda.result
+      == ''skipped'') && (needs.dist.result == ''success'' || needs.cibw.result == ''success'' || needs.conda.result
+      == ''success'')'
     runs-on: ubuntu-latest
     permissions:
       contents: read

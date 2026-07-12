@@ -34,7 +34,8 @@ jobs:
     name: 'Binder Build: Dry-run builds a Binder image and skips the push job assertions'
     runs-on: ubuntu-latest
     needs: binder_build_dry_run_build_hosted_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0

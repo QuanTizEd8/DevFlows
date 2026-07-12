@@ -148,6 +148,7 @@ jobs:
           CONDA_RECIPE_PATH: ''
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: has space
-          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: dist-artifact-prefix must be a non-empty artifact-name-safe string
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: dist-artifact-prefix must be a non-empty artifact-name-safe
+            string
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act

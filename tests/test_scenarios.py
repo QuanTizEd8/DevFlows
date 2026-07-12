@@ -425,15 +425,18 @@ def test_requires_write_true_for_all_promoted_workflows() -> None:
 
 def test_hosted_call_jobs_are_fork_gated() -> None:
     rendered = render_test_workflow(load_scenarios(load_catalog()), runner="hosted", name="H")
+    # Collapse whitespace: the YAML dumper folds long `if:` expressions across lines
+    # (width=100), so match the logical expression regardless of where it wraps.
+    normalized = " ".join(rendered.split())
 
     # Elevated call jobs are skipped on fork PRs, kept for same-repo PRs.
-    assert "github.event.pull_request.head.repo.full_name == github.repository" in rendered
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in normalized
     # Assert jobs still use always() so they observe a same-repo call's result,
     # but AND-combine the fork guard so they skip when the call was skipped.
     assert (
         "always() && (github.event_name != 'pull_request' "
         "|| github.event.pull_request.head.repo.full_name == github.repository)"
-    ) in rendered
+    ) in normalized
 
 
 def test_hosted_workflow_documents_fork_limitation() -> None:

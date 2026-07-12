@@ -19,11 +19,13 @@ jobs:
     name: 'Python Test: Multi-leg matrix with merged report artifact'
     uses: ./.github/workflows/python-test.yaml
     with:
-      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.11", "name": "leg-a"}, {"runner": "ubuntu-latest", "python-version": "3.13", "name": "leg-b"}]'
+      test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.11", "name": "leg-a"}, {"runner":
+        "ubuntu-latest", "python-version": "3.13", "name": "leg-b"}]'
       test-install-source: source
       test-source-directory: tests/scenarios/python-test/pkg
       test-dependencies: pytest
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/reports/report.xml tests/scenarios/python-test/pkg/tests
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/reports/report.xml
+        tests/scenarios/python-test/pkg/tests
       report-artifact-enabled: true
       report-merge-enabled: true
       report-artifact-name: python-test-scn-reports
@@ -106,7 +108,8 @@ jobs:
       test-dist-path: dist
       test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.13", "name": "artifact"}]'
       test-dependencies: pytest
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/artifact/report.xml tests/scenarios/python-test/pkg/tests
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/artifact/report.xml
+        tests/scenarios/python-test/pkg/tests
       report-artifact-enabled: true
       report-merge-enabled: false
       report-artifact-name: python-test-artifact-report
@@ -155,7 +158,8 @@ jobs:
       test-matrix: '[{"runner": "ubuntu-latest", "python-version": "3.12", "name": "mamba"}]'
       test-install-source: source
       test-source-directory: tests/scenarios/python-test/pkg
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/micromamba/report.xml tests/scenarios/python-test/pkg/tests
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/micromamba/report.xml
+        tests/scenarios/python-test/pkg/tests
       report-artifact-enabled: true
       report-merge-enabled: false
       report-artifact-name: python-test-micromamba-report

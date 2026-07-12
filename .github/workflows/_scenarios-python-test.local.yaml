@@ -35,7 +35,8 @@ jobs:
       test-install-source: source
       test-source-directory: tests/scenarios/python-test/pkg
       test-dependencies: pytest
-      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/source-uv/report.xml tests/scenarios/python-test/pkg/tests
+      test-command: pytest -c tests/scenarios/python-test/pkg/pyproject.toml --junitxml=.devflows-test/python-test/source-uv/report.xml
+        tests/scenarios/python-test/pkg/tests
     permissions:
       actions: read
       contents: read

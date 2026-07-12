@@ -33,7 +33,8 @@ jobs:
     name: 'Deploy Pages: Package a site directory into a Pages artifact without deploying assertions'
     runs-on: ubuntu-latest
     needs: deploy_pages_package_only_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -112,7 +113,8 @@ jobs:
     name: 'Deploy Pages: Package a downloaded site artifact into a Pages artifact assertions'
     runs-on: ubuntu-latest
     needs: deploy_pages_package_from_artifact_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0

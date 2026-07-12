@@ -8,7 +8,10 @@ name: '[Reusable]: Devcontainer Build'
         type: string
         required: true
       image-tags:
-        description: Newline-separated list of tags applied to the built multi-arch image. Each line is one tag and the merge job tags the resulting manifest with every entry. The first (primary) tag also names the per-platform staging images (first-tag-platform_tag) and the image-ref output (image-name at the primary tag). Validated non-empty; each token must be a valid Docker tag.
+        description: Newline-separated list of tags applied to the built multi-arch image. Each line is
+          one tag and the merge job tags the resulting manifest with every entry. The first (primary)
+          tag also names the per-platform staging images (first-tag-platform_tag) and the image-ref output
+          (image-name at the primary tag). Validated non-empty; each token must be a valid Docker tag.
         type: string
         required: false
         default: latest
@@ -23,7 +26,11 @@ name: '[Reusable]: Devcontainer Build'
         required: false
         default: sha-
       build-digest-artifact-name:
-        description: When set and devcontainer-push is never, each build job records the locally-built image digest (docker image inspect) and uploads it as build-digest-artifact-name-platform_tag. This gives a build-only validation run proof that an image was actually produced (the inspect fails, and so does the job, when the build silently did nothing). Empty (default) disables it and needs no push.
+        description: When set and devcontainer-push is never, each build job records the locally-built
+          image digest (docker image inspect) and uploads it as build-digest-artifact-name-platform_tag.
+          This gives a build-only validation run proof that an image was actually produced (the inspect
+          fails, and so does the job, when the build silently did nothing). Empty (default) disables it
+          and needs no push.
         type: string
         required: false
         default: ''
@@ -220,17 +227,25 @@ name: '[Reusable]: Devcontainer Build'
         required: false
         default: /tmp/devcontainer-userdata
       devcontainer-cache-registry-enabled:
-        description: Whether to use the default registry build cache. When true (default) and no explicit cache-from/cache-to is given, the build reads and writes a registry cache tagged image-name:cache-key-prefix-platform_tag (for example image:devcontainer-linux-amd64), which needs packages write permission on the registry. Set to false, or set the cache-from/cache-to inputs to none, to opt out.
+        description: Whether to use the default registry build cache. When true (default) and no explicit
+          cache-from/cache-to is given, the build reads and writes a registry cache tagged image-name:cache-key-prefix-platform_tag
+          (for example image:devcontainer-linux-amd64), which needs packages write permission on the registry.
+          Set to false, or set the cache-from/cache-to inputs to none, to opt out.
         type: boolean
         required: false
         default: true
       devcontainer-cache-from:
-        description: Additional images to use for build caching. Empty derives the default registry cache tag when devcontainer-cache-registry-enabled is true and devcontainer-push is not never; set to none to disable cache-from. An explicit value is always honored. The default is dropped automatically when devcontainer-push is never so build-only validation runs need no registry pull rights.
+        description: Additional images to use for build caching. Empty derives the default registry cache
+          tag when devcontainer-cache-registry-enabled is true and devcontainer-push is not never; set
+          to none to disable cache-from. An explicit value is always honored. The default is dropped automatically
+          when devcontainer-push is never so build-only validation runs need no registry pull rights.
         type: string
         required: false
         default: ''
       devcontainer-cache-to:
-        description: Build cache destination. Empty derives the default registry cache tag; set to none to disable it. Cache-to is disabled automatically when devcontainer-push is never so build-only validation runs need no push rights.
+        description: Build cache destination. Empty derives the default registry cache tag; set to none
+          to disable it. Cache-to is disabled automatically when devcontainer-push is never so build-only
+          validation runs need no push rights.
         type: string
         required: false
         default: ''
@@ -897,7 +912,8 @@ jobs:
         with:
           registry: ${{ inputs.docker-registry }}
           username: ${{ inputs.docker-username }}
-          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token) || '' }}
+          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token)
+            || '' }}
           ecr: ${{ inputs.docker-ecr }}
           scope: ${{ inputs.docker-scope }}
           logout: ${{ inputs.docker-logout }}
@@ -959,7 +975,8 @@ jobs:
         if: inputs.merge-enabled && inputs.devcontainer-push != 'never'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: devflows-devcontainer-digest-${{ needs.validate.outputs.primary-tag }}-${{ matrix.platform_tag }}
+          name: devflows-devcontainer-digest-${{ needs.validate.outputs.primary-tag }}-${{ matrix.platform_tag
+            }}
           path: ${{ runner.temp }}/devflows-digests/${{ matrix.platform_tag }}
           if-no-files-found: error
           retention-days: 1
@@ -1123,7 +1140,8 @@ jobs:
         with:
           registry: ${{ inputs.docker-registry }}
           username: ${{ inputs.docker-username }}
-          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token) || '' }}
+          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token)
+            || '' }}
           ecr: ${{ inputs.docker-ecr }}
           scope: ${{ inputs.docker-scope }}
           logout: ${{ inputs.docker-logout }}

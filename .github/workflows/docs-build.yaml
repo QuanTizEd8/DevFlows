@@ -4,36 +4,48 @@ name: '[Reusable]: Build Documentation'
   workflow_call:
     inputs:
       docs-tool:
-        description: Documentation generator to drive; 'sphinx' or 'mkdocs'. Validated; any other value fails the run. Ignored for the build invocation when docs-build-command is set.
+        description: Documentation generator to drive; 'sphinx' or 'mkdocs'. Validated; any other value
+          fails the run. Ignored for the build invocation when docs-build-command is set.
         type: string
         required: false
         default: sphinx
       docs-env-manager:
-        description: "Environment strategy for the build; one of 'pixi', 'uv', 'pip', 'container', or 'micromamba'. Required \u2014 the environment is the core decision and there is no safe silent default. Inputs of the non-selected environment groups are ignored."
+        description: "Environment strategy for the build; one of 'pixi', 'uv', 'pip', 'container', or\
+          \ 'micromamba'. Required \u2014 the environment is the core decision and there is no safe silent\
+          \ default. Inputs of the non-selected environment groups are ignored."
         type: string
         required: true
       docs-build-command:
-        description: Optional TRUSTED command that replaces the generated sphinx/mkdocs invocation. Runs via 'bash -euo pipefail -c' inside the selected environment. Must write the site into docs-output-directory (the post-build non-empty check still applies). Mutually exclusive with sphinx-arguments and mkdocs-arguments.
+        description: Optional TRUSTED command that replaces the generated sphinx/mkdocs invocation. Runs
+          via 'bash -euo pipefail -c' inside the selected environment. Must write the site into docs-output-directory
+          (the post-build non-empty check still applies). Mutually exclusive with sphinx-arguments and
+          mkdocs-arguments.
         type: string
         required: false
         default: ''
       docs-working-directory:
-        description: Directory under the checked-out workspace where the build (and uv sync / pixi manifest resolution) runs. Must stay inside GITHUB_WORKSPACE and exist. Other path inputs remain workspace-relative.
+        description: Directory under the checked-out workspace where the build (and uv sync / pixi manifest
+          resolution) runs. Must stay inside GITHUB_WORKSPACE and exist. Other path inputs remain workspace-relative.
         type: string
         required: false
         default: .
       docs-output-directory:
-        description: Workspace-relative directory the built site is written to (sphinx OUTPUTDIR / mkdocs --site-dir; contract for docs-build-command). Must resolve inside GITHUB_WORKSPACE. The build fails if it is missing or empty afterwards.
+        description: Workspace-relative directory the built site is written to (sphinx OUTPUTDIR / mkdocs
+          --site-dir; contract for docs-build-command). Must resolve inside GITHUB_WORKSPACE. The build
+          fails if it is missing or empty afterwards.
         type: string
         required: false
         default: _site
       docs-warnings-as-errors:
-        description: Treat generator warnings as failures; adds '-W --keep-going' to sphinx-build and '--strict' to mkdocs build. No effect on docs-build-command runs (the command owns its own strictness).
+        description: Treat generator warnings as failures; adds '-W --keep-going' to sphinx-build and
+          '--strict' to mkdocs build. No effect on docs-build-command runs (the command owns its own strictness).
         type: boolean
         required: false
         default: false
       docs-linkcheck-enabled:
-        description: Run 'sphinx-build -b linkcheck' after a successful build, in the same environment; broken links fail the job and the report is written to '<docs-output-directory>-linkcheck'. Sphinx-only; enabling it with docs-tool mkdocs fails validation.
+        description: Run 'sphinx-build -b linkcheck' after a successful build, in the same environment;
+          broken links fail the job and the report is written to '<docs-output-directory>-linkcheck'.
+          Sphinx-only; enabling it with docs-tool mkdocs fails validation.
         type: boolean
         required: false
         default: false
@@ -43,17 +55,20 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: 30
       sphinx-source-directory:
-        description: Sphinx SOURCEDIR (directory containing conf.py), relative to the workspace. Extensions needing full history (e.g. sphinx-last-updated-by-git) require checkout-fetch-depth 0.
+        description: Sphinx SOURCEDIR (directory containing conf.py), relative to the workspace. Extensions
+          needing full history (e.g. sphinx-last-updated-by-git) require checkout-fetch-depth 0.
         type: string
         required: false
         default: docs
       sphinx-builder:
-        description: Sphinx builder passed to -b (html, dirhtml, ...). Must be non-empty when docs-tool is sphinx and docs-build-command is unset.
+        description: Sphinx builder passed to -b (html, dirhtml, ...). Must be non-empty when docs-tool
+          is sphinx and docs-build-command is unset.
         type: string
         required: false
         default: html
       sphinx-arguments:
-        description: Extra sphinx-build arguments as one string, shlex-split by the runner script (no shell expansion). Must be empty when docs-build-command is set or docs-tool is mkdocs.
+        description: Extra sphinx-build arguments as one string, shlex-split by the runner script (no
+          shell expansion). Must be empty when docs-build-command is set or docs-tool is mkdocs.
         type: string
         required: false
         default: ''
@@ -63,27 +78,32 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: mkdocs.yml
       mkdocs-arguments:
-        description: Extra 'mkdocs build' arguments as one string, shlex-split by the runner script. Must be empty when docs-build-command is set or docs-tool is sphinx.
+        description: Extra 'mkdocs build' arguments as one string, shlex-split by the runner script. Must
+          be empty when docs-build-command is set or docs-tool is sphinx.
         type: string
         required: false
         default: ''
       pixi-version:
-        description: pixi version for prefix-dev/setup-pixi. Empty uses the action's default resolution; pin an exact version for reproducible builds.
+        description: pixi version for prefix-dev/setup-pixi. Empty uses the action's default resolution;
+          pin an exact version for reproducible builds.
         type: string
         required: false
         default: ''
       pixi-environment:
-        description: Pixi environment installed (setup-pixi 'environments') and used to execute the build ('pixi run --environment <env>').
+        description: Pixi environment installed (setup-pixi 'environments') and used to execute the build
+          ('pixi run --environment <env>').
         type: string
         required: false
         default: default
       pixi-manifest-path:
-        description: Path to pixi.toml/pyproject.toml for setup-pixi. Empty uses the action default resolved against docs-working-directory.
+        description: Path to pixi.toml/pyproject.toml for setup-pixi. Empty uses the action default resolved
+          against docs-working-directory.
         type: string
         required: false
         default: ''
       pixi-locked:
-        description: Install with 'pixi install --locked' so an out-of-date lockfile fails loudly. Mutually exclusive with pixi-frozen.
+        description: Install with 'pixi install --locked' so an out-of-date lockfile fails loudly. Mutually
+          exclusive with pixi-frozen.
         type: boolean
         required: false
         default: true
@@ -103,17 +123,20 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: pixi-
       uv-version:
-        description: uv version for astral-sh/setup-uv. Empty uses the action's default resolution; pin for reproducibility.
+        description: uv version for astral-sh/setup-uv. Empty uses the action's default resolution; pin
+          for reproducibility.
         type: string
         required: false
         default: ''
       uv-python-version:
-        description: Python version for setup-uv (sets UV_PYTHON). Empty defers to the project's .python-version / requires-python.
+        description: Python version for setup-uv (sets UV_PYTHON). Empty defers to the project's .python-version
+          / requires-python.
         type: string
         required: false
         default: ''
       uv-sync-groups:
-        description: "Newline-separated dependency groups passed to 'uv sync' as repeated --group flags (e.g. docs). Built as argv by the script \u2014 never shell-interpolated."
+        description: "Newline-separated dependency groups passed to 'uv sync' as repeated --group flags\
+          \ (e.g. docs). Built as argv by the script \u2014 never shell-interpolated."
         type: string
         required: false
         default: ''
@@ -128,12 +151,14 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: true
       uv-sync-arguments:
-        description: Extra 'uv sync' arguments as one string, shlex-split by the script (e.g. '--no-dev --all-extras').
+        description: Extra 'uv sync' arguments as one string, shlex-split by the script (e.g. '--no-dev
+          --all-extras').
         type: string
         required: false
         default: ''
       uv-cache-mode:
-        description: setup-uv 'enable-cache' value; one of auto, true, or false (string enum per upstream). Validated in uv mode.
+        description: setup-uv 'enable-cache' value; one of auto, true, or false (string enum per upstream).
+          Validated in uv mode.
         type: string
         required: false
         default: auto
@@ -143,32 +168,42 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: 3.x
       pip-requirements-file:
-        description: Workspace-relative requirements file installed with 'pip install -r' in pip mode; also used as setup-python cache-dependency-path when pip caching is enabled.
+        description: Workspace-relative requirements file installed with 'pip install -r' in pip mode;
+          also used as setup-python cache-dependency-path when pip caching is enabled.
         type: string
         required: false
         default: ''
       pip-install-targets:
-        description: Newline-separated requirement specifiers installed with pip in pip mode (e.g. '.[docs]' or 'sphinx==8.*'); split into argv by the script, no shell. pip mode requires pip-requirements-file and/or pip-install-targets.
+        description: Newline-separated requirement specifiers installed with pip in pip mode (e.g. '.[docs]'
+          or 'sphinx==8.*'); split into argv by the script, no shell. pip mode requires pip-requirements-file
+          and/or pip-install-targets.
         type: string
         required: false
         default: ''
       pip-cache-enabled:
-        description: Whether setup-python caches pip downloads (maps to the setup-python pip cache). Only takes effect when pip-requirements-file is set, which supplies the cache-dependency-path.
+        description: Whether setup-python caches pip downloads (maps to the setup-python pip cache). Only
+          takes effect when pip-requirements-file is set, which supplies the cache-dependency-path.
         type: boolean
         required: false
         default: true
       container-image:
-        description: Image reference ([registry/]name[:tag][@digest]) that provides the docs toolchain in container mode; syntactically validated and required when docs-env-manager is 'container'. Runs via 'docker run --rm' with the workspace mounted and --user uid:gid. Pin tags or digests for reproducibility.
+        description: Image reference ([registry/]name[:tag][@digest]) that provides the docs toolchain
+          in container mode; syntactically validated and required when docs-env-manager is 'container'.
+          Runs via 'docker run --rm' with the workspace mounted and --user uid:gid. Pin tags or digests
+          for reproducibility.
         type: string
         required: false
         default: ''
       docker-login-enabled:
-        description: "Whether to docker-login to docker-registry before pulling. When true the docker-password secret is required (validated \u2014 no silent github.token fallback, since this workflow holds no packages permission)."
+        description: "Whether to docker-login to docker-registry before pulling. When true the docker-password\
+          \ secret is required (validated \u2014 no silent github.token fallback, since this workflow\
+          \ holds no packages permission)."
         type: boolean
         required: false
         default: false
       docker-registry:
-        description: Registry hostname for the optional docker login. Leave default for GHCR; empty means Docker Hub.
+        description: Registry hostname for the optional docker login. Leave default for GHCR; empty means
+          Docker Hub.
         type: string
         required: false
         default: ghcr.io
@@ -178,12 +213,15 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: ${{ github.repository_owner }}
       micromamba-environment-file:
-        description: Conda/mamba environment file (e.g. environment.yml) installed by setup-micromamba in micromamba mode; required when docs-env-manager is 'micromamba'. The build runs via 'micromamba run' in the created environment, which must provide the docs toolchain.
+        description: Conda/mamba environment file (e.g. environment.yml) installed by setup-micromamba
+          in micromamba mode; required when docs-env-manager is 'micromamba'. The build runs via 'micromamba
+          run' in the created environment, which must provide the docs toolchain.
         type: string
         required: false
         default: ''
       micromamba-version:
-        description: micromamba version for setup-micromamba; empty uses the action default. Prefer an exact version for reproducible runs.
+        description: micromamba version for setup-micromamba; empty uses the action default. Prefer an
+          exact version for reproducible runs.
         type: string
         required: false
         default: ''
@@ -193,12 +231,15 @@ name: '[Reusable]: Build Documentation'
         required: false
         default: true
       pages-artifact-enabled:
-        description: Whether to additionally upload docs-output-directory as a GitHub Pages artifact (actions/upload-pages-artifact) for chaining into the deploy-pages workflow. Requires no extra permissions; deployment (pages write and id-token write) belongs to deploy-pages.
+        description: Whether to additionally upload docs-output-directory as a GitHub Pages artifact (actions/upload-pages-artifact)
+          for chaining into the deploy-pages workflow. Requires no extra permissions; deployment (pages
+          write and id-token write) belongs to deploy-pages.
         type: boolean
         required: false
         default: false
       pages-artifact-name:
-        description: Pages artifact name; the default matches actions/deploy-pages' expected default so the chain works with zero extra wiring.
+        description: Pages artifact name; the default matches actions/deploy-pages' expected default so
+          the chain works with zero extra wiring.
         type: string
         required: false
         default: github-pages
@@ -404,7 +445,8 @@ name: '[Reusable]: Build Documentation'
         default: true
     secrets:
       docker-password:
-        description: Registry password/token for the optional docker login in container mode. Required when docker-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
+        description: Registry password/token for the optional docker login in container mode. Required
+          when docker-login-enabled is true. Only ever handed to the SHA-pinned docker/login-action.
         required: false
       checkout-token:
         description: Token used by actions/checkout. Defaults to github.token.
@@ -417,16 +459,20 @@ name: '[Reusable]: Build Documentation'
         required: false
     outputs:
       pages-artifact-name:
-        description: Name of the uploaded GitHub Pages artifact, for wiring into the deploy-pages workflow's artifact-name input. Empty string when pages-artifact-enabled is false.
+        description: Name of the uploaded GitHub Pages artifact, for wiring into the deploy-pages workflow's
+          artifact-name input. Empty string when pages-artifact-enabled is false.
         value: ${{ jobs.docs-build.outputs.pages-artifact-name }}
       pages-artifact-id:
-        description: ID of the uploaded Pages artifact (upload-pages-artifact 'artifact_id'). Empty when Pages upload is disabled.
+        description: ID of the uploaded Pages artifact (upload-pages-artifact 'artifact_id'). Empty when
+          Pages upload is disabled.
         value: ${{ jobs.docs-build.outputs.pages-artifact-id }}
       docs-output-directory:
-        description: Resolved workspace-relative directory containing the built site, for downstream jobs and callers composing artifact-upload-path.
+        description: Resolved workspace-relative directory containing the built site, for downstream jobs
+          and callers composing artifact-upload-path.
         value: ${{ jobs.docs-build.outputs.docs-output-directory }}
       docs-linkcheck-report-directory:
-        description: Workspace-relative directory containing the Sphinx linkcheck report, '<docs-output-directory>-linkcheck'. Empty when linkcheck is disabled.
+        description: Workspace-relative directory containing the Sphinx linkcheck report, '<docs-output-directory>-linkcheck'.
+          Empty when linkcheck is disabled.
         value: ${{ jobs.docs-build.outputs.docs-linkcheck-report-directory }}
 permissions:
   contents: read

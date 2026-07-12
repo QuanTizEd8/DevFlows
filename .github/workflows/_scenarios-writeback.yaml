@@ -83,9 +83,11 @@ jobs:
       commit-message: 'test: writeback e2e'
       commit-push: true
       commit-branch: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.branch }}
-      commit-expected-base-sha: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.base-sha }}
+      commit-expected-base-sha: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.base-sha
+        }}
       commit-repository: ${{ github.repository }}
-      writeback-artifact-name: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.artifact-name }}
+      writeback-artifact-name: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.artifact-name
+        }}
     permissions:
       actions: read
       contents: write
@@ -97,7 +99,8 @@ jobs:
     needs:
       - writeback_ephemeral_branch_writeback_setup
       - writeback_ephemeral_branch_writeback_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     steps:
       - name: Checkout ephemeral branch
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -145,7 +148,8 @@ jobs:
       - writeback_ephemeral_branch_writeback_setup
       - writeback_ephemeral_branch_writeback_call
       - writeback_ephemeral_branch_writeback_assert
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
+      == github.repository)
     permissions:
       contents: write
     steps:

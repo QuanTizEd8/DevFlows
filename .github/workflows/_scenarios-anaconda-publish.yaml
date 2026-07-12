@@ -115,7 +115,8 @@ jobs:
       actions: read
       contents: read
   anaconda_publish_promote_only_dry_run_assert:
-    name: 'Anaconda Publish: Promote-only dry-run plans a relabel and skips verify''s upload derivation assertions'
+    name: 'Anaconda Publish: Promote-only dry-run plans a relabel and skips verify''s upload derivation
+      assertions'
     runs-on: ubuntu-latest
     needs: anaconda_publish_promote_only_dry_run_call
     if: always()
@@ -156,7 +157,8 @@ jobs:
       actions: read
       contents: read
   anaconda_publish_maintain_dry_run_assert:
-    name: 'Anaconda Publish: Maintain dry-run plans the exact owner-qualified removal without a token assertions'
+    name: 'Anaconda Publish: Maintain dry-run plans the exact owner-qualified removal without a token
+      assertions'
     runs-on: ubuntu-latest
     needs: anaconda_publish_maintain_dry_run_call
     if: always()

@@ -4,37 +4,55 @@ name: '[Reusable]: Open Journals Paper Build'
   workflow_call:
     inputs:
       paper-journal:
-        description: Target journal; exactly one of joss, jose, or rescience-c (validated enum). Selects inara's JOURNAL resource directory (rescience-c maps to the upstream resciencec name) and is passed to the container via --env JOURNAL, never interpolated. Required so a paper is never silently built against the wrong journal's templates.
+        description: Target journal; exactly one of joss, jose, or rescience-c (validated enum). Selects
+          inara's JOURNAL resource directory (rescience-c maps to the upstream resciencec name) and is
+          passed to the container via --env JOURNAL, never interpolated. Required so a paper is never
+          silently built against the wrong journal's templates.
         type: string
         required: true
       paper-source-path:
-        description: Workspace-relative path to the paper's Markdown source (e.g. docs/paper.md). Validated relative, no '..', inside GITHUB_WORKSPACE, and a regular file. Passed to inara as the positional argument; inara changes into its directory and writes the outputs there.
+        description: Workspace-relative path to the paper's Markdown source (e.g. docs/paper.md). Validated
+          relative, no '..', inside GITHUB_WORKSPACE, and a regular file. Passed to inara as the positional
+          argument; inara changes into its directory and writes the outputs there.
         type: string
         required: true
       paper-flavors:
-        description: Newline-separated output flavors from the v1 vocabulary (draft-pdf, final-pdf, jats, crossref, cff, html, preprint, tex, docx, context-pdf). Each name maps, in a DevFlows-owned table the caller cannot alter, to an inara invocation and a fixed output set, so callers pick names but never supply -o/-p. Empty is rejected; unknown names are rejected.
+        description: Newline-separated output flavors from the v1 vocabulary (draft-pdf, final-pdf, jats,
+          crossref, cff, html, preprint, tex, docx, context-pdf). Each name maps, in a DevFlows-owned
+          table the caller cannot alter, to an inara invocation and a fixed output set, so callers pick
+          names but never supply -o/-p. Empty is rejected; unknown names are rejected.
         type: string
         required: false
         default: |
           draft-pdf
           jats
       paper-image:
-        description: The openjournals/inara container image reference, [registry/]name[:tag][@digest]. Pinned by tag by default (never latest) and validated syntactically; the caller is trusted to supply an image they trust, run with the workspace mounted. The default tag is kept current by Renovate.
+        description: The openjournals/inara container image reference, [registry/]name[:tag][@digest].
+          Pinned by tag by default (never latest) and validated syntactically; the caller is trusted to
+          supply an image they trust, run with the workspace mounted. The default tag is kept current
+          by Renovate.
         type: string
         required: false
         default: ghcr.io/openjournals/inara:1.3.1
       paper-output-directory:
-        description: Workspace-relative directory the built flavors are collected into, one subdirectory per flavor (<dir>/<flavor>/...). Validated relative, no '..', inside GITHUB_WORKSPACE, and must not already exist as a non-empty directory (fail-loud so a prior run's outputs are never merged). Set artifact-upload-path to the same value to upload the whole tree as one artifact.
+        description: Workspace-relative directory the built flavors are collected into, one subdirectory
+          per flavor (<dir>/<flavor>/...). Validated relative, no '..', inside GITHUB_WORKSPACE, and must
+          not already exist as a non-empty directory (fail-loud so a prior run's outputs are never merged).
+          Set artifact-upload-path to the same value to upload the whole tree as one artifact.
         type: string
         required: false
         default: paper-build
       paper-arguments:
-        description: Extra arguments appended to the inara invocation, environment-mediated and shlex-split by the DevFlows script, never interpolated into shell text. Strict allowlist for this fixed-flag tool; only -v (verbosity), -l (per-format logs), and -m <article-info-file> are accepted. -o, -p, -r (owned by paper-flavors) and any bare positional (owned by paper-source-path) are rejected.
+        description: Extra arguments appended to the inara invocation, environment-mediated and shlex-split
+          by the DevFlows script, never interpolated into shell text. Strict allowlist for this fixed-flag
+          tool; only -v (verbosity), -l (per-format logs), and -m <article-info-file> are accepted. -o,
+          -p, -r (owned by paper-flavors) and any bare positional (owned by paper-source-path) are rejected.
         type: string
         required: false
         default: ''
       paper-timeout-minutes:
-        description: timeout-minutes for the build job. Default 30; production PDF and ConTeXt flavors compile LaTeX and are slow, and a multi-flavor build runs the container once per flavor.
+        description: timeout-minutes for the build job. Default 30; production PDF and ConTeXt flavors
+          compile LaTeX and are slow, and a multi-flavor build runs the container once per flavor.
         type: number
         required: false
         default: 30
@@ -235,10 +253,13 @@ name: '[Reusable]: Open Journals Paper Build'
         default: true
     outputs:
       paper-output-directory:
-        description: The resolved, validated workspace-relative directory the flavors were collected into, so a downstream job can point an artifact/pages/writeback step at it without re-deriving the path.
+        description: The resolved, validated workspace-relative directory the flavors were collected into,
+          so a downstream job can point an artifact/pages/writeback step at it without re-deriving the
+          path.
         value: ${{ jobs.build.outputs.paper-output-directory }}
       flavors-built:
-        description: Newline-separated list of the flavors actually produced this run (the validated, de-duplicated paper-flavors set), for downstream assertions or announcements.
+        description: Newline-separated list of the flavors actually produced this run (the validated,
+          de-duplicated paper-flavors set), for downstream assertions or announcements.
         value: ${{ jobs.build.outputs.flavors-built }}
     secrets:
       checkout-token:

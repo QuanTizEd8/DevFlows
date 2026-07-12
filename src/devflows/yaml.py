@@ -71,7 +71,14 @@ def load_yaml_text(text: str) -> dict[str, Any]:
 def dump_yaml(data: Any) -> str:
     if yaml is None:
         raise RuntimeError("PyYAML is required to write generated YAML files.")
-    return yaml.dump(data, Dumper=GitHubActionsDumper, sort_keys=False, width=1000)
+    # width=100 wraps long plain/folded scalars (chiefly the input `description:`
+    # fields, previously emitted as single 300+ char lines) at word boundaries,
+    # matching ruff's line-length and clearing yamllint's line-length warnings.
+    # This is value-preserving: PyYAML folds the wrapped newlines back to single
+    # spaces on parse, and `width` has NO effect on `|` literal block scalars, so
+    # the inlined heredoc script bodies stay byte-identical (publish.py's
+    # _assert_inlined_scripts_intact would fail generation otherwise).
+    return yaml.dump(data, Dumper=GitHubActionsDumper, sort_keys=False, width=100)
 
 
 if yaml is not None:

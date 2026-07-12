@@ -4,21 +4,34 @@ name: '[Reusable]: Python Test'
   workflow_call:
     inputs:
       test-matrix:
-        description: JSON array of test legs, schema-validated in the validate job before any leg schedules. Each entry accepts runner (required; runs-on string or array), python-version (string; required on uv legs, optional on micromamba legs that resolve an environment file), name (optional display/artifact name matching [A-Za-z0-9._-]+ and unique after derivation; defaults to <runner>-py<python-version>), environment-file (optional, micromamba legs only; overrides test-environment-file) and test-arguments (optional string appended to test-command after shlex parsing). Unknown keys are rejected. Required and defaultless, so a test call must state its matrix explicitly.
+        description: JSON array of test legs, schema-validated in the validate job before any leg schedules.
+          Each entry accepts runner (required; runs-on string or array), python-version (string; required
+          on uv legs, optional on micromamba legs that resolve an environment file), name (optional display/artifact
+          name matching [A-Za-z0-9._-]+ and unique after derivation; defaults to <runner>-py<python-version>),
+          environment-file (optional, micromamba legs only; overrides test-environment-file) and test-arguments
+          (optional string appended to test-command after shlex parsing). Unknown keys are rejected. Required
+          and defaultless, so a test call must state its matrix explicitly.
         type: string
         required: true
       test-env-manager:
-        description: Environment manager for all legs. uv (default) provisions the requested CPython and an activated venv on every runner OS; micromamba creates a conda-forge environment for packages with non-PyPI native dependencies. Any other value fails validation. The manager is workflow-level, not per-leg.
+        description: Environment manager for all legs. uv (default) provisions the requested CPython and
+          an activated venv on every runner OS; micromamba creates a conda-forge environment for packages
+          with non-PyPI native dependencies. Any other value fails validation. The manager is workflow-level,
+          not per-leg.
         type: string
         required: false
         default: uv
       test-environment-file:
-        description: Path (relative to the checked-out workspace) of the conda environment or lock file used by micromamba legs that do not set a per-leg environment-file. Required (here or on every leg) when test-env-manager is micromamba; forbidden with uv.
+        description: Path (relative to the checked-out workspace) of the conda environment or lock file
+          used by micromamba legs that do not set a per-leg environment-file. Required (here or on every
+          leg) when test-env-manager is micromamba; forbidden with uv.
         type: string
         required: false
         default: ''
       test-install-source:
-        description: Where the package under test comes from. source installs test-source-directory; artifact resolves a built distribution from test-dist-path (chain from python-build by enabling the artifact-download channel into that path). Any other value fails validation.
+        description: Where the package under test comes from. source installs test-source-directory; artifact
+          resolves a built distribution from test-dist-path (chain from python-build by enabling the artifact-download
+          channel into that path). Any other value fails validation.
         type: string
         required: false
         default: source
@@ -28,32 +41,44 @@ name: '[Reusable]: Python Test'
         required: false
         default: .
       test-dist-path:
-        description: Directory scanned for built distributions when test-install-source is artifact. Typically populated by the artifact-download channel (set artifact-download-path to the same value); a checked-in directory also works. A directory with no distributions is a hard error, so a broken chain from python-build fails loudly instead of silently testing nothing.
+        description: Directory scanned for built distributions when test-install-source is artifact. Typically
+          populated by the artifact-download channel (set artifact-download-path to the same value); a
+          checked-in directory also works. A directory with no distributions is a hard error, so a broken
+          chain from python-build fails loudly instead of silently testing nothing.
         type: string
         required: false
         default: dist
       test-install-prefer:
-        description: Distribution preference for artifact installs. wheel (default) lets the resolver pick the compatible wheel from the wheelhouse and only builds an sdist when no wheel matches; sdist forces building from source (uv/pip --no-binary). Any other value fails validation.
+        description: Distribution preference for artifact installs. wheel (default) lets the resolver
+          pick the compatible wheel from the wheelhouse and only builds an sdist when no wheel matches;
+          sdist forces building from source (uv/pip --no-binary). Any other value fails validation.
         type: string
         required: false
         default: wheel
       test-install-extras:
-        description: Newline-separated package extras applied to the package install in both source and artifact modes (for example test, then plot on its own line). Extras work for artifact installs where PEP 735 dependency groups do not.
+        description: Newline-separated package extras applied to the package install in both source and
+          artifact modes (for example test, then plot on its own line). Extras work for artifact installs
+          where PEP 735 dependency groups do not.
         type: string
         required: false
         default: ''
       test-dependency-groups:
-        description: Newline-separated PEP 735 dependency groups installed from the checked-out source tree's pyproject.toml. uv legs only; validation rejects it with micromamba.
+        description: Newline-separated PEP 735 dependency groups installed from the checked-out source
+          tree's pyproject.toml. uv legs only; validation rejects it with micromamba.
         type: string
         required: false
         default: ''
       test-dependencies:
-        description: Newline-separated extra requirement specifiers installed into the test environment (one specifier per line, for example pytest then pytest-cov). Passed through an environment variable into the install script, never interpolated into shell text.
+        description: Newline-separated extra requirement specifiers installed into the test environment
+          (one specifier per line, for example pytest then pytest-cov). Passed through an environment
+          variable into the install script, never interpolated into shell text.
         type: string
         required: false
         default: ''
       test-command:
-        description: Test command executed inside the prepared environment via the install-mediated runner script. Per-leg test-arguments from the matrix are appended after shlex parsing. A nonzero exit fails the leg (pytest exit 5, no tests collected, therefore fails - no silent no-op).
+        description: Test command executed inside the prepared environment via the install-mediated runner
+          script. Per-leg test-arguments from the matrix are appended after shlex parsing. A nonzero exit
+          fails the leg (pytest exit 5, no tests collected, therefore fails - no silent no-op).
         type: string
         required: false
         default: pytest
@@ -73,7 +98,8 @@ name: '[Reusable]: Python Test'
         required: false
         default: 60
       uv-version:
-        description: uv version for setup-uv. Empty uses the action's pinned default resolution (version-file or latest per upstream).
+        description: uv version for setup-uv. Empty uses the action's pinned default resolution (version-file
+          or latest per upstream).
         type: string
         required: false
         default: ''
@@ -83,32 +109,43 @@ name: '[Reusable]: Python Test'
         required: false
         default: auto
       micromamba-version:
-        description: micromamba version for setup-micromamba; empty uses the action default. Prefer an exact version for reproducible runs.
+        description: micromamba version for setup-micromamba; empty uses the action default. Prefer an
+          exact version for reproducible runs.
         type: string
         required: false
         default: ''
       micromamba-cache-enabled:
-        description: Whether setup-micromamba caches the created environment. The cache key includes the leg name and environment-file hash, so matrix legs do not collide.
+        description: Whether setup-micromamba caches the created environment. The cache key includes the
+          leg name and environment-file hash, so matrix legs do not collide.
         type: boolean
         required: false
         default: true
       report-artifact-enabled:
-        description: Whether each leg uploads report-path as artifact <report-artifact-name>--leg-<leg-name> (even when tests fail, unless cancelled). Enabling this with an empty report-path fails validation. Include coverage files under report-path to publish them to a caller-side Codecov job (see notes).
+        description: Whether each leg uploads report-path as artifact <report-artifact-name>--leg-<leg-name>
+          (even when tests fail, unless cancelled). Enabling this with an empty report-path fails validation.
+          Include coverage files under report-path to publish them to a caller-side Codecov job (see notes).
         type: boolean
         required: false
         default: false
       report-path:
-        description: Newline-separated files, directories, or glob patterns uploaded as the per-leg test report (for example a junit XML path plus a coverage XML). Legs where nothing matches fail the upload (if-no-files-found error) so a wrong path cannot no-op.
+        description: Newline-separated files, directories, or glob patterns uploaded as the per-leg test
+          report (for example a junit XML path plus a coverage XML). Legs where nothing matches fail the
+          upload (if-no-files-found error) so a wrong path cannot no-op.
         type: string
         required: false
         default: ''
       report-artifact-name:
-        description: Base report artifact name. Per-leg artifacts are named <report-artifact-name>--leg-<leg> (the '--leg-' delimiter keeps the merge glob collision-proof); the merge job combines them under exactly this name with one subdirectory per leg. Callers invoking this workflow more than once in the same run must pass distinct names.
+        description: Base report artifact name. Per-leg artifacts are named <report-artifact-name>--leg-<leg>
+          (the '--leg-' delimiter keeps the merge glob collision-proof); the merge job combines them under
+          exactly this name with one subdirectory per leg. Callers invoking this workflow more than once
+          in the same run must pass distinct names.
         type: string
         required: false
         default: python-test-report
       report-merge-enabled:
-        description: Whether the merge-reports job combines per-leg report artifacts into one artifact named report-artifact-name (delete-merged true). Only relevant when report-artifact-enabled is true.
+        description: Whether the merge-reports job combines per-leg report artifacts into one artifact
+          named report-artifact-name (delete-merged true). Only relevant when report-artifact-enabled
+          is true.
         type: boolean
         required: false
         default: true
@@ -118,7 +155,8 @@ name: '[Reusable]: Python Test'
         required: false
         default: 0
       report-artifact-include-hidden-files:
-        description: Whether hidden files under report-path are uploaded. Set true when collecting dotfile coverage data such as .coverage - upload-artifact drops hidden files by default.
+        description: Whether hidden files under report-path are uploaded. Set true when collecting dotfile
+          coverage data such as .coverage - upload-artifact drops hidden files by default.
         type: boolean
         required: false
         default: false
@@ -274,7 +312,9 @@ name: '[Reusable]: Python Test'
         default: error
     outputs:
       report-artifact-name:
-        description: Name of the merged test-report artifact produced by the merge-reports job (equals the report-artifact-name input). Empty when report-artifact-enabled or report-merge-enabled is false or the merge job did not run; downstream consumers must guard on a non-empty value.
+        description: Name of the merged test-report artifact produced by the merge-reports job (equals
+          the report-artifact-name input). Empty when report-artifact-enabled or report-merge-enabled
+          is false or the merge job did not run; downstream consumers must guard on a non-empty value.
         value: ${{ jobs.merge-reports.outputs.report-artifact-name }}
     secrets:
       checkout-token:
@@ -850,7 +890,8 @@ jobs:
   merge-reports:
     name: Merge test reports
     needs: test
-    if: ${{ !cancelled() && needs.test.result != 'skipped' && inputs.report-artifact-enabled && inputs.report-merge-enabled }}
+    if: ${{ !cancelled() && needs.test.result != 'skipped' && inputs.report-artifact-enabled && inputs.report-merge-enabled
+      }}
     runs-on: ubuntu-latest
     outputs:
       report-artifact-name: ${{ inputs.report-artifact-name }}

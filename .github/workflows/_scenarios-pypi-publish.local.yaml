@@ -136,7 +136,8 @@ jobs:
           INSTALL_CHECK_ARGUMENTS: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'false'
           ARTIFACT_DOWNLOAD_NAME: ''
-          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: distributions can only arrive through the artifact-download channel
+          DEVFLOWS_FAILURE_MESSAGE_CONTAINS: distributions can only arrive through the artifact-download
+            channel
         run: python harness/scenarios/assert-validation-failure.py
     needs: require_act
   pypi_publish_unsafe_dist_path_validate:
