@@ -2,8 +2,9 @@ id: python-lint
 name: Python Lint
 summary:
   Run tool-based Python linting -- ruff check, ruff format --check, and a
-  selectable type checker (mypy, pyright, or ty) -- as one read-only gate, with a
-  consolidated job summary, inline annotations, and machine-readable outcomes.
+  selectable type checker (mypy, pyright, or ty) -- as a read-only gate by
+  default, with an optional lint-fix mode, a consolidated job summary, inline
+  annotations, and machine-readable outcomes.
 status: active
 owners:
   - DevFlows maintainers
@@ -25,14 +26,24 @@ io:
   checkout: true
   artifact-download: true
   artifact-upload: true
+  patch-emit: true
 notes:
   - >-
-    Least privilege: the workflow runs read-only at contents: read. The
-    generator's artifact-download/upload channels add actions: read to the lint
-    job, so a caller must grant permissions: contents: read, actions: read on the
-    calling job (GitHub validates called-workflow permissions before the run
-    starts). No writeback, no secrets, and no autofix -- this is a gate, not a
-    writer.
+    Least privilege: the workflow runs at contents: read. The generator's
+    artifact-download/upload and patch-emit channels add only actions: read to the
+    lint job (for the artifact/patch uploads), so a caller grants permissions:
+    contents: read, actions: read on the calling job (GitHub validates
+    called-workflow permissions before the run starts). patch-emit adds NO
+    contents: write; even in lint-fix mode this workflow never commits or pushes.
+  - >-
+    lint-fix (default false) turns the read-only gate into a fixer: when true the
+    job runs `ruff check --fix` and `ruff format` (mutating files in place) in
+    addition to reporting, so the still-reported findings reflect what remains
+    after autofix. It never commits: pair lint-fix with patch-emit-enabled to
+    capture the fixes as a patch artifact, then compose the writeback workflow (in
+    a separate contents: write job) to apply and push them. With lint-fix false the
+    behavior is unchanged -- ruff runs read-only and --fix stays rejected in
+    ruff-check-arguments -- so existing callers are unaffected.
   - >-
     lint-enforce controls only whether findings fail the job. Outputs, the job
     summary, annotations, and report files always report per-tool outcomes; with
@@ -89,9 +100,9 @@ notes:
     mirror at run time, so they need network egress and can flake if that egress
     is unavailable.
   - >-
-    Post-v1 candidates recorded here: a ruff --fix autofix + writeback mode (would
-    make the workflow a writer; deliberately out of scope for the v1 read-only
-    gate) and a caller-supplied non-uv environment setup command.
+    Post-v1 candidates recorded here: a caller-supplied non-uv environment setup
+    command. (The ruff --fix autofix mode landed as lint-fix, captured for commit
+    via the patch-emit channel rather than a built-in writer.)
 examples:
   - name: Lint on pull requests
     path: tests/fixtures/python-lint/pull-request.yaml

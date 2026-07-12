@@ -221,66 +221,23 @@ name: '[Reusable]: Pandoc'
         type: boolean
         required: false
         default: true
-      commit-enabled:
-        description: "Whether to commit selected generated files back to a repository. The writeback commit\
-          \ runs in a nested job that statically requires contents: write (and actions: read), so any\
-          \ job calling this workflow must grant permissions: contents: write, actions: read even when\
-          \ this is false \u2014 GitHub validates the nested permissions before the run starts."
+      patch-emit-enabled:
+        description: 'Whether to capture all workspace changes (modified, added, and deleted files) into
+          a single patch artifact after the workflow runs. This forces NO contents: write on the caller
+          -- it only adds actions: read (for the upload). Compose the writeback workflow as a separate
+          job to apply the patch to a branch and push it.'
         type: boolean
         required: false
         default: false
-      commit-paths:
-        description: Newline-separated files or directories to include in the writeback commit.
+      patch-artifact-name:
+        description: Name of the artifact that carries the emitted workspace patch (changes.patch). Defaults
+          to a run-scoped name so patch-emit-enabled invocations in different runs never collide. Callers
+          that enable patch-emit on multiple invocations within one run must pass distinct values, because
+          the run-scoped default is identical within a run. Feed this name to the writeback workflow's
+          patch-artifact-name input.
         type: string
         required: false
-        default: ''
-      commit-delete-paths:
-        description: Newline-separated files or directories to delete in the writeback commit.
-        type: string
-        required: false
-        default: ''
-      commit-message:
-        description: Commit message for generated file writeback.
-        type: string
-        required: false
-        default: 'chore: update generated files'
-      commit-repository:
-        description: Repository name with owner to commit to.
-        type: string
-        required: false
-        default: ${{ github.repository }}
-      commit-branch:
-        description: Branch to check out and push generated changes to.
-        type: string
-        required: false
-        default: ${{ github.ref_name }}
-      commit-author-name:
-        description: Git author name for generated file commits.
-        type: string
-        required: false
-        default: github-actions[bot]
-      commit-author-email:
-        description: Git author email for generated file commits.
-        type: string
-        required: false
-        default: 41898282+github-actions[bot]@users.noreply.github.com
-      commit-push:
-        description: Whether to push the generated commit.
-        type: boolean
-        required: false
-        default: true
-      commit-expected-base-sha:
-        description: Optional SHA that the writeback target branch must point to before committing.
-        type: string
-        required: false
-        default: ''
-      commit-internal-artifact-name:
-        description: Internal artifact name used to transfer the writeback payload. Defaults to a run-scoped
-          name. Callers that invoke a commit-enabled workflow multiple times within one run must pass
-          distinct values, because input defaults cannot disambiguate per invocation.
-        type: string
-        required: false
-        default: devflows-pandoc-writeback-${{ github.run_id }}-${{ github.run_attempt }}
+        default: devflows-pandoc-patch-${{ github.run_id }}-${{ github.run_attempt }}
       job-output-map:
         description: 'Newline-delimited key=SOURCE entries assembled into the single job-outputs workflow
           output (a JSON object). SOURCE is either env:VARNAME (value is the value of that environment
@@ -300,10 +257,6 @@ name: '[Reusable]: Pandoc'
         required: false
       artifact-download-token:
         description: Token used to download artifacts from another repository or run.
-        required: false
-      commit-token:
-        description: Token used by the writeback job. Must be able to write contents when commit-enabled
-          is true.
         required: false
     outputs:
       job-outputs:
@@ -439,161 +392,6 @@ jobs:
           if __name__ == "__main__":
               sys.exit(main())
           DEVFLOWS_SCRIPT_EOF
-          mkdir -p "$RUNNER_TEMP/devflows/writeback"
-          cat > "$RUNNER_TEMP/devflows/writeback/create-payload.py" <<'DEVFLOWS_SCRIPT_EOF'
-          from __future__ import annotations
-
-          import hashlib
-          import json
-          import os
-          import shutil
-          import stat
-          import sys
-          from pathlib import Path
-          from typing import Any
-
-          INTERNAL_PATH_NAMES = {".devflows-writeback", ".git"}
-
-          # Payload layout produced under WRITEBACK_PAYLOAD_DIR:
-          #   manifest.json            -- version, source, replace_paths, deletions, files
-          #   files/<repo-relative>    -- one regular file per manifest "files" entry
-          # Selected paths keep their repo-relative layout under files/, so the subtree can
-          # contain dotfiles and dot-directories (e.g. .github/**). apply-payload.py reads
-          # each file back from files/<path> and verifies its sha256 against the manifest.
-          # CONTRACT: whatever uploads this directory as an artifact MUST preserve hidden
-          # files (actions/upload-artifact include-hidden-files: true). upload-artifact v4+
-          # excludes hidden paths by default, which would drop those files while leaving the
-          # manifest that references them -- apply-payload.py then aborts with
-          # "Payload file is missing or invalid".
-
-
-          def main() -> int:
-              workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
-              payload_dir = Path(os.environ["WRITEBACK_PAYLOAD_DIR"]).resolve()
-              files_dir = payload_dir / "files"
-              selected_paths = _split_lines(os.environ.get("WRITEBACK_PATHS", ""))
-              delete_paths = _split_lines(os.environ.get("WRITEBACK_DELETE_PATHS", ""))
-
-              if workspace != payload_dir and workspace not in payload_dir.parents:
-                  raise SystemExit("WRITEBACK_PAYLOAD_DIR must stay inside GITHUB_WORKSPACE.")
-              if not selected_paths and not delete_paths:
-                  raise SystemExit("At least one writeback path or deletion path is required.")
-
-              if payload_dir.exists():
-                  shutil.rmtree(payload_dir)
-              files_dir.mkdir(parents=True)
-
-              manifest: dict[str, Any] = {
-                  "version": 1,
-                  "source": {
-                      "repository": os.environ.get("WRITEBACK_SOURCE_REPOSITORY", ""),
-                      "ref": os.environ.get("WRITEBACK_SOURCE_REF", ""),
-                      "sha": os.environ.get("WRITEBACK_SOURCE_SHA", ""),
-                  },
-                  "replace_paths": [],
-                  "deletions": [],
-                  "files": [],
-              }
-              seen_files: set[str] = set()
-
-              for raw_path in selected_paths:
-                  path = _resolve_workspace_path(workspace, raw_path)
-                  if not path.exists():
-                      raise SystemExit(f"writeback path does not exist: {raw_path}")
-                  if path.is_symlink():
-                      raise SystemExit(f"writeback path must not be a symlink: {raw_path}")
-                  if path.is_dir():
-                      relative = path.relative_to(workspace).as_posix()
-                      manifest["replace_paths"].append({"path": relative})
-                      for file_path in sorted(path.rglob("*")):
-                          if _contains_internal_part(file_path.relative_to(workspace)):
-                              continue
-                          if file_path.is_symlink() or not file_path.is_file():
-                              raise SystemExit(f"writeback files must be regular files: {file_path}")
-                          _add_file(workspace, files_dir, manifest, seen_files, file_path)
-                  elif path.is_file():
-                      _add_file(workspace, files_dir, manifest, seen_files, path)
-                  else:
-                      raise SystemExit(f"writeback path must be a regular file or directory: {raw_path}")
-
-              for raw_path in delete_paths:
-                  relative = _validated_relative_path(raw_path)
-                  manifest["deletions"].append({"path": relative.as_posix()})
-
-              manifest_path = payload_dir / "manifest.json"
-              manifest_path.write_text(
-                  json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-              )
-              return 0
-
-
-          def _split_lines(value: str) -> list[str]:
-              return [line.strip() for line in value.splitlines() if line.strip()]
-
-
-          def _resolve_workspace_path(workspace: Path, raw_path: str) -> Path:
-              relative = _validated_relative_path(raw_path)
-              path = (workspace / relative).resolve()
-              if workspace != path and workspace not in path.parents:
-                  raise SystemExit(f"path must stay inside GITHUB_WORKSPACE: {raw_path}")
-              return path
-
-
-          def _validated_relative_path(raw_path: str) -> Path:
-              path = Path(raw_path)
-              if path.is_absolute():
-                  raise SystemExit(f"path must be relative: {raw_path}")
-              if str(path) in {"", "."}:
-                  raise SystemExit("path must not be empty or '.'.")
-              if ".." in path.parts:
-                  raise SystemExit(f"path must not contain '..': {raw_path}")
-              if _contains_internal_part(path):
-                  raise SystemExit(f"path must not include internal workflow paths: {raw_path}")
-              return path
-
-
-          def _contains_internal_part(path: Path) -> bool:
-              return any(part in INTERNAL_PATH_NAMES for part in path.parts)
-
-
-          def _add_file(
-              workspace: Path,
-              files_dir: Path,
-              manifest: dict[str, Any],
-              seen_files: set[str],
-              file_path: Path,
-          ) -> None:
-              relative = file_path.relative_to(workspace)
-              relative_posix = relative.as_posix()
-              if relative_posix in seen_files:
-                  return
-              seen_files.add(relative_posix)
-
-              target = files_dir / relative
-              target.parent.mkdir(parents=True, exist_ok=True)
-              shutil.copy2(file_path, target)
-              mode = stat.S_IMODE(file_path.stat().st_mode)
-              manifest["files"].append(
-                  {
-                      "path": relative_posix,
-                      "sha256": _sha256(file_path),
-                      "size": file_path.stat().st_size,
-                      "executable": bool(mode & stat.S_IXUSR),
-                  }
-              )
-
-
-          def _sha256(path: Path) -> str:
-              digest = hashlib.sha256()
-              with path.open("rb") as handle:
-                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                      digest.update(chunk)
-              return digest.hexdigest()
-
-
-          if __name__ == "__main__":
-              sys.exit(main())
-          DEVFLOWS_SCRIPT_EOF
           mkdir -p "$RUNNER_TEMP/devflows/_channels"
           cat > "$RUNNER_TEMP/devflows/_channels/collect-job-outputs.py" <<'DEVFLOWS_SCRIPT_EOF'
           # Assemble the caller-mapped job-outputs JSON object for the job-output channel.
@@ -671,29 +469,25 @@ jobs:
           overwrite: ${{ inputs.artifact-upload-overwrite }}
           include-hidden-files: ${{ inputs.artifact-upload-include-hidden-files }}
           archive: ${{ inputs.artifact-upload-archive }}
-      - name: Create writeback payload
-        if: inputs.commit-enabled
-        env:
-          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
-          WRITEBACK_DELETE_PATHS: ${{ inputs.commit-delete-paths }}
-          WRITEBACK_PATHS: ${{ inputs.commit-paths }}
-          WRITEBACK_PAYLOAD_DIR: .devflows-writeback/payload
-          WRITEBACK_SOURCE_REF: ${{ github.ref }}
-          WRITEBACK_SOURCE_REPOSITORY: ${{ github.repository }}
-          WRITEBACK_SOURCE_SHA: ${{ github.sha }}
+      - name: Create workspace patch
+        if: inputs.patch-emit-enabled
         shell: bash
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/writeback/create-payload.py"
-      - name: Upload writeback payload
-        if: inputs.commit-enabled
+        run: |-
+          set -euo pipefail
+          patch_dir="$RUNNER_TEMP/devflows-patch"
+          mkdir -p "$patch_dir"
+          git add -A
+          git diff --cached --binary > "$patch_dir/changes.patch"
+          git reset -q
+      - name: Upload workspace patch
+        if: inputs.patch-emit-enabled
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: ${{ inputs.commit-internal-artifact-name }}
-          path: .devflows-writeback/payload
-          if-no-files-found: error
+          name: ${{ inputs.patch-artifact-name }}
+          path: ${{ runner.temp }}/devflows-patch/changes.patch
+          if-no-files-found: warn
           retention-days: 1
-          compression-level: 0
           overwrite: true
-          include-hidden-files: true
       - name: Collect job outputs
         id: devflows-job-output
         if: inputs.job-output-map != ''
@@ -704,22 +498,3 @@ jobs:
         run: python "${DEVFLOWS_SCRIPT_ROOT}/_channels/collect-job-outputs.py"
     outputs:
       job-outputs: ${{ steps.devflows-job-output.outputs.job-outputs }}
-  commit:
-    name: Commit generated files
-    needs: pandoc
-    if: inputs.commit-enabled
-    uses: ./.github/workflows/writeback.yaml
-    permissions:
-      actions: read
-      contents: write
-    with:
-      writeback-artifact-name: ${{ inputs.commit-internal-artifact-name }}
-      commit-repository: ${{ inputs.commit-repository }}
-      commit-branch: ${{ inputs.commit-branch }}
-      commit-message: ${{ inputs.commit-message }}
-      commit-author-name: ${{ inputs.commit-author-name }}
-      commit-author-email: ${{ inputs.commit-author-email }}
-      commit-push: ${{ inputs.commit-push }}
-      commit-expected-base-sha: ${{ inputs.commit-expected-base-sha }}
-    secrets:
-      commit-token: ${{ secrets.commit-token }}

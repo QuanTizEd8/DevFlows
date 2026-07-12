@@ -31,35 +31,32 @@ io:
   checkout: true
   artifact-download: true
   artifact-upload: true
-  writeback: true
+  patch-emit: true
 notes:
   - >-
     Caller permissions: the run job needs contents: read (to check out the
     workspace the command sees as its bind mount), actions: read (added by the
-    artifact-download, artifact-upload, and writeback channels), and packages:
+    artifact-download, artifact-upload, and patch-emit channels), and packages:
     read (to pull a private ghcr.io image through the github.token docker-login
-    fallback). The optional writeback commit runs in a separate nested job that
-    statically requires contents: write (and actions: read), so a calling job
-    must grant at least permissions: contents: write, actions: read, packages:
-    read - GitHub validates a nested workflow's permissions before the run
-    starts, so contents: write is required even when commit-enabled is false (and
-    packages: read is simply unused for a public image). The validate job and the
-    run job themselves stay read-only (contents: read); only the isolated commit
-    job holds contents: write. There is no id-token anywhere.
+    fallback). There is NO nested commit job and no forced contents: write, so a
+    calling job grants only permissions: contents: read, actions: read, packages:
+    read (packages: read is simply unused for a public image). Every job (validate
+    and run) stays read-only at contents: read, and there is no id-token anywhere.
   - >-
-    Commit writeback is opt-in (commit-enabled, default false) and requires
-    explicit commit-paths. It commits files the container command wrote into the
-    workspace bind mount (for example a formatter's or code-generator's edits)
-    back to a branch, running in a separate contents: write job so the command
-    itself stays read-only. Pair it with remove-container to keep or drop the
-    container after the files are captured.
+    Committing files the container command wrote into the workspace bind mount
+    (for example a formatter's or code-generator's edits) back to a branch is done
+    by COMPOSITION: enable patch-emit-enabled to capture those workspace changes as
+    a patch artifact after the command runs, then add a SEPARATE job that calls the
+    writeback workflow with that patch-artifact-name and contents: write on that
+    job only. The command itself never needs a write scope. Pair patch-emit with
+    remove-container to keep or drop the container after the files are captured.
   - >-
-    The internal writeback payload artifact name defaults to a run-scoped value
-    (devflows-devcontainer-run-writeback-<run_id>-<run_attempt>), so
-    commit-enabled invocations in different runs never collide. Invoking this
-    workflow more than once with commit-enabled in the SAME run still needs a
-    distinct commit-internal-artifact-name per invocation, because the run-scoped
-    default is identical within one run.
+    The patch artifact name defaults to a run-scoped value
+    (devflows-devcontainer-run-patch-<run_id>-<run_attempt>), so
+    patch-emit-enabled invocations in different runs never collide. Invoking this
+    workflow more than once with patch-emit-enabled in the SAME run still needs a
+    distinct patch-artifact-name per invocation, because the run-scoped default is
+    identical within one run.
   - >-
     Runs a prebuilt image, never a build: `devcontainer up` against an
     image-based config pulls the OCI reference (no docker build) and applies the
@@ -170,7 +167,7 @@ notes:
     the run. The inputs reach the SHA-pinned action only through with:, never a
     run: body, so they are injection-safe.
 examples:
-  - name: Run a command in a prebuilt ghcr image
+  - name: Run pre-commit and commit fixes via writeback
     path: tests/fixtures/devcontainer-run/ghcr-image.yaml
   - name: Chain devcontainer-build into devcontainer-run
     path: tests/fixtures/devcontainer-run/build-then-run.yaml

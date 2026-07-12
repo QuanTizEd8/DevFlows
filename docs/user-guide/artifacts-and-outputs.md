@@ -117,10 +117,9 @@ A downstream job can download the artifact:
 
 ```yaml
 permissions:
-  # pandoc's published form embeds a writeback commit job requiring these
-  # scopes; GitHub validates nested permissions before the run starts, so grant
-  # the union even for this read-only upload/download example.
-  contents: write
+  # pandoc is read-only; its channels add only actions: read (for the artifact
+  # and patch uploads), so grant contents: read, actions: read.
+  contents: read
   actions: read
 
 jobs:
@@ -265,35 +264,90 @@ workflow consumes files produced by an earlier job. When chaining from
 `test-dist-path` or `publish-dist-path`). A directory with no distributions is a
 hard error, so a broken chain fails loudly.
 
-## Commit Writeback
+## Committing Generated Files Back
 
-Some workflows can also commit selected generated files back to a branch. This
+Some workflows also let you commit their generated files back to a branch. This
 is opt-in and should only be used when repository state is the intended output.
-DevFlows routes these commits through a shared writeback channel; see the
-generated {doc}`Writeback reference </reference/workflows/writeback>`:
+DevFlows models it as **two decoupled halves** so no ordinary workflow forces
+`contents: write` onto its callers:
+
+1. Any workflow with the patch-emit channel captures its workspace changes into
+   a patch artifact when you set `patch-emit-enabled: true` (this adds only
+   `actions: read`, never `contents: write`).
+2. A separate job calls the
+   {doc}`writeback workflow </reference/workflows/writeback>` — the **only**
+   workflow that holds `contents: write` — with the same `patch-artifact-name`.
+   It downloads the patch, `git apply`s it to a checked-out branch, commits, and
+   pushes.
 
 ```yaml
-permissions:
-  # The nested writeback commit job requires both scopes; validated before the run.
-  contents: write
-  actions: read
+permissions: {}
 
 jobs:
+  # Read-only: convert, and emit the change as a patch artifact.
   convert:
     # Pin an exact pandoc/vX.Y.Z release tag or a commit SHA.
     uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/vX.Y.Z
+    permissions:
+      contents: read
+      actions: read
     with:
       pandoc-image: pandoc/core:3.8
       pandoc-arguments: >-
         --standalone --output=docs/readme.html README.md
-      commit-enabled: true
-      commit-paths: docs/readme.html
+      patch-emit-enabled: true
+      patch-artifact-name: readme-patch
+
+  # The only contents: write job: apply the patch and push.
+  commit:
+    needs: convert
+    # Pin an exact writeback/vX.Y.Z release tag or a commit SHA.
+    uses: QuanTizEd8/DevFlows/.github/workflows/writeback.yaml@writeback/vX.Y.Z
+    permissions:
+      contents: write
+      actions: read
+    with:
+      patch-artifact-name: readme-patch
       commit-message: "docs: update generated readme"
 ```
 
-The caller must grant `contents: write` or pass a write-capable commit token.
-Use artifact upload for reviewable CI outputs; use commit writeback when the
-generated file should become part of the repository.
+Only the `commit` job grants `contents: write`; the workflow that produced the
+change stays read-only. Use artifact upload for reviewable CI outputs; use this
+patch-emit → writeback compose when the generated file should become part of the
+repository.
+
+### Autofix compose (python-lint)
+
+The same pattern turns `python-lint` into a fixer. Run it with `lint-fix: true`
+(so `ruff check --fix` and `ruff format` mutate files in place) plus
+`patch-emit-enabled: true`, then compose `writeback` to push the fixes:
+
+```yaml
+permissions: {}
+
+jobs:
+  fix:
+    # Pin an exact python-lint/vX.Y.Z release tag or a commit SHA.
+    uses: QuanTizEd8/DevFlows/.github/workflows/python-lint.yaml@python-lint/vX.Y.Z
+    permissions:
+      contents: read
+      actions: read
+    with:
+      lint-fix: true
+      lint-enforce: false
+      patch-emit-enabled: true
+      patch-artifact-name: lint-fixes
+
+  commit:
+    needs: fix
+    uses: QuanTizEd8/DevFlows/.github/workflows/writeback.yaml@writeback/vX.Y.Z
+    permissions:
+      contents: write
+      actions: read
+    with:
+      patch-artifact-name: lint-fixes
+      commit-message: "style: apply ruff autofixes"
+```
 
 ## Common Artifact Problems
 

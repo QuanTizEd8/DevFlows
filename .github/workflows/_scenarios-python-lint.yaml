@@ -155,6 +155,7 @@ jobs:
           LINT_PATHS: .
           LINT_WORKING_DIRECTORY: .
           LINT_REPORT_DIRECTORY: ''
+          LINT_FIX: 'false'
           LINT_UV_CACHE_MODE: auto
           LINT_UV_SYNC_ENABLED: 'false'
           LINT_UV_SYNC_ARGUMENTS: ''
@@ -186,6 +187,7 @@ jobs:
           LINT_PATHS: .
           LINT_WORKING_DIRECTORY: .
           LINT_REPORT_DIRECTORY: ''
+          LINT_FIX: 'false'
           LINT_UV_CACHE_MODE: auto
           LINT_UV_SYNC_ENABLED: 'false'
           LINT_UV_SYNC_ARGUMENTS: ''
@@ -217,6 +219,7 @@ jobs:
           LINT_PATHS: .
           LINT_WORKING_DIRECTORY: .
           LINT_REPORT_DIRECTORY: ''
+          LINT_FIX: 'false'
           LINT_UV_CACHE_MODE: sometimes
           LINT_UV_SYNC_ENABLED: 'false'
           LINT_UV_SYNC_ARGUMENTS: ''

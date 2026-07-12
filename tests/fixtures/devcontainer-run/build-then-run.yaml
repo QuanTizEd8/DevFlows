@@ -26,11 +26,11 @@ jobs:
     needs: build
     if: ${{ !cancelled() && needs.build.outputs.image-ref != '' }}
     uses: QuanTizEd8/DevFlows/.github/workflows/devcontainer-run.yaml@devcontainer-run/v0.1.0
-    # contents: write is required by devcontainer-run's optional writeback commit
-    # job (validated at startup even though this example does not commit).
+    # devcontainer-run is read-only: contents: read for the checkout, actions: read
+    # for the channels, packages: read to pull the image. No contents: write.
     permissions:
       actions: read
-      contents: write
+      contents: read
       packages: read
     with:
       devcontainer-image: ${{ needs.build.outputs.image-ref }}

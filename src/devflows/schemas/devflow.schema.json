@@ -67,7 +67,10 @@
             "checkout": { "type": "boolean" },
             "artifact-download": { "type": "boolean" },
             "artifact-upload": { "type": "boolean" },
-            "writeback": { "type": "boolean" },
+            "patch-emit": {
+              "type": "boolean",
+              "description": "Emit all workspace changes as a single patch artifact (changes.patch) after the io.job runs. Requires checkout: true (a git workspace). Adds no caller permission beyond actions: read (for the upload) and NO contents: write -- compose the writeback workflow to apply the patch and push."
+            },
             "job-output": {
               "type": "boolean",
               "description": "Expose a single universal job-outputs workflow output (a JSON object) assembled from the caller's job-output-map. Requires runtime: true and a non-matrix io.job. Adds no caller permissions and no nested job; consumers read fromJSON(needs.<call>.outputs.job-outputs).<key>."

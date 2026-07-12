@@ -16,10 +16,10 @@ on:
       - main
 
 permissions:
-  # Pandoc's published form embeds a writeback commit job requiring these
-  # scopes. GitHub validates nested permissions before the run starts, so the
-  # caller must grant the union even for a read-only conversion.
-  contents: write
+  # Pandoc is read-only: its channels add only actions: read (for the artifact
+  # and patch uploads), so a read-only conversion grants contents: read,
+  # actions: read. No contents: write is forced on the caller.
+  contents: read
   actions: read
 
 jobs:
@@ -55,8 +55,9 @@ learn on one workflow behaves the same on the next:
 - `artifact-download-*` inputs bring previously produced files into the
   workspace before the main tool runs
 - `artifact-upload-*` inputs publish generated files as workflow artifacts
-- `commit-*` inputs optionally write selected generated files back to a
-  repository branch (the shared writeback channel)
+- `patch-emit-enabled` optionally captures the job's workspace changes as a
+  patch artifact, which the separate `writeback` workflow can apply to a branch
+  and push (the decoupled commit model — see {doc}`artifacts-and-outputs`)
 
 Two channels carry extra structure worth knowing before you chain workflows
 together:
@@ -264,8 +265,8 @@ custom checkout token or SSH key, pass only the secret needed for that caller:
 
 ```yaml
 permissions:
-  # Required by pandoc's nested writeback commit job; validated before the run.
-  contents: write
+  # Pandoc is read-only; its channels add only actions: read.
+  contents: read
   actions: read
 
 jobs:

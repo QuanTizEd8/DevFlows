@@ -3,17 +3,16 @@ name: "[Reusable]: Writeback"
 on:
   workflow_call:
     inputs:
-      writeback-artifact-name:
-        description: Name of the writeback payload artifact to download.
+      patch-artifact-name:
+        description: Name of the workspace-patch artifact to download and apply.
         type: string
         required: false
-        default: devflows-writeback
-      writeback-artifact-path:
-        description:
-          Directory where the writeback payload artifact is downloaded.
+        default: devflows-patch
+      patch-artifact-path:
+        description: Directory where the patch artifact is downloaded.
         type: string
         required: false
-        default: .devflows-writeback/download
+        default: .devflows-writeback/patch
       commit-repository:
         description: Repository name with owner to commit to.
         type: string
@@ -25,7 +24,7 @@ on:
         required: false
         default: ${{ github.ref_name }}
       commit-message:
-        description: Commit message for generated file writeback.
+        description: Commit message for the applied patch.
         type: string
         required: false
         default: "chore: update generated files"
@@ -67,7 +66,7 @@ permissions:
 
 jobs:
   writeback:
-    name: Commit writeback payload
+    name: Apply writeback patch
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -82,16 +81,16 @@ jobs:
           fetch-depth: ${{ inputs.checkout-fetch-depth }}
           persist-credentials: true
 
-      - name: Download writeback payload
+      - name: Download workspace patch
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ inputs.writeback-artifact-name }}
-          path: ${{ inputs.writeback-artifact-path }}
+          name: ${{ inputs.patch-artifact-name }}
+          path: ${{ inputs.patch-artifact-path }}
 
       # The "Materialize DevFlows runtime scripts" step (id: devflows-runtime),
-      # which writes apply-payload.py to $RUNNER_TEMP/devflows and exports
+      # which writes apply-patch.py to $RUNNER_TEMP/devflows and exports
       # script-root, is injected by the generator via io.runtime in devflow.yaml.
-      - name: Apply writeback payload
+      - name: Apply writeback patch
         env:
           COMMIT_AUTHOR_EMAIL: ${{ inputs.commit-author-email }}
           COMMIT_AUTHOR_NAME: ${{ inputs.commit-author-name }}
@@ -101,6 +100,7 @@ jobs:
           DEVFLOWS_SCRIPT_ROOT:
             ${{ steps.devflows-runtime.outputs.script-root }}
           WRITEBACK_EXPECTED_BASE_SHA: ${{ inputs.commit-expected-base-sha }}
-          WRITEBACK_PAYLOAD_DIR: ${{ inputs.writeback-artifact-path }}
+          WRITEBACK_PATCH_FILE:
+            ${{ inputs.patch-artifact-path }}/changes.patch
         shell: bash
-        run: python "${DEVFLOWS_SCRIPT_ROOT}/writeback/apply-payload.py"
+        run: python "${DEVFLOWS_SCRIPT_ROOT}/writeback/apply-patch.py"

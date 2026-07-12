@@ -3,10 +3,11 @@ name: Pandoc Markdown to HTML caller
 on:
   workflow_dispatch:
 
-# Pandoc's published form embeds a writeback commit job; GitHub validates the
-# nested permissions before the run starts, so grant the union even here.
+# Pandoc is read-only: its checkout, artifact, and patch-emit channels add only
+# actions: read, so a calling job grants contents: read, actions: read. No
+# contents: write is forced on the caller anymore.
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:

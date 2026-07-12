@@ -27,6 +27,17 @@ on:
         type: boolean
         required: false
         default: true
+      lint-fix:
+        description: >-
+          When true, ruff mutates files in place: 'ruff check --fix' applies safe lint fixes and
+          'ruff format' reformats, in addition to the normal reporting (the reported findings then
+          reflect what remains after autofix). This workflow still never commits or pushes -- pair
+          lint-fix with patch-emit-enabled and compose the writeback workflow to persist the
+          changes. Default false keeps the read-only gate: ruff runs with --check only and --fix
+          stays rejected in ruff-check-arguments.
+        type: boolean
+        required: false
+        default: false
       lint-annotations-enabled:
         description: >-
           Whether to emit GitHub inline annotations for findings, capped at 10 per tool. The job
@@ -238,6 +249,7 @@ jobs:
           LINT_PATHS: ${{ inputs.lint-paths }}
           LINT_WORKING_DIRECTORY: ${{ inputs.lint-working-directory }}
           LINT_REPORT_DIRECTORY: ${{ inputs.lint-report-directory }}
+          LINT_FIX: ${{ inputs.lint-fix }}
           LINT_UV_CACHE_MODE: ${{ inputs.uv-cache-mode }}
           LINT_UV_SYNC_ENABLED: ${{ inputs.uv-sync-enabled }}
           LINT_UV_SYNC_ARGUMENTS: ${{ inputs.uv-sync-arguments }}
@@ -268,6 +280,7 @@ jobs:
           LINT_PATHS: ${{ inputs.lint-paths }}
           LINT_WORKING_DIRECTORY: ${{ inputs.lint-working-directory }}
           LINT_ENFORCE: ${{ inputs.lint-enforce }}
+          LINT_FIX: ${{ inputs.lint-fix }}
           LINT_ANNOTATIONS_ENABLED: ${{ inputs.lint-annotations-enabled }}
           LINT_REPORT_DIRECTORY: ${{ inputs.lint-report-directory }}
           LINT_UV_SYNC_ENABLED: ${{ inputs.uv-sync-enabled }}

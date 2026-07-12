@@ -32,7 +32,7 @@ def test_catalog_loads_active_workflows() -> None:
         is True
     )
     assert (
-        workflows_by_id["writeback"].workflow_call["inputs"]["writeback-artifact-name"]["type"]
+        workflows_by_id["writeback"].workflow_call["inputs"]["patch-artifact-name"]["type"]
         == "string"
     )
 

@@ -94,7 +94,7 @@ MUTATION_REQUIRED_INPUTS = (
     "commit-branch",
     "commit-expected-base-sha",
     "commit-repository",
-    "writeback-artifact-name",
+    "patch-artifact-name",
 )
 
 
@@ -826,7 +826,7 @@ def _ephemeral_branch_setup_job(scenario: Scenario) -> dict[str, Any]:
                 "with": {"persist-credentials": True},
             },
             {
-                "name": "Prepare branch and writeback payload",
+                "name": "Prepare branch and workspace patch",
                 "id": "setup",
                 "shell": "bash",
                 "env": {
@@ -849,25 +849,18 @@ def _ephemeral_branch_setup_job(scenario: Scenario) -> dict[str, Any]:
                 "run": f"python {_script('setup-ephemeral-writeback.py')}",
             },
             {
-                # include-hidden-files is REQUIRED, not cosmetic. create-payload.py
-                # copies every selected file under .devflows-writeback/payload/files/
-                # preserving its repo-relative path, so the payload legitimately holds
-                # dotfiles and dot-directories (e.g. this fixture writes under
-                # .devflows-e2e/, and real callers write back .github/**). Since
-                # upload-artifact v4+, hidden paths are EXCLUDED by default, which
-                # would silently drop those files from the artifact while keeping the
-                # manifest that references them -- apply-payload.py then fails with
-                # "Payload file is missing or invalid". Any uploader of a writeback
-                # payload must opt in (publish.py's internal channel does the same).
-                "name": "Upload writeback payload",
+                # The patch is a single plain file (changes.patch) that carries even
+                # hidden paths inline, so -- unlike the old manifest payload -- no
+                # include-hidden-files opt-in is needed to round-trip it through
+                # upload/download-artifact.
+                "name": "Upload workspace patch",
                 "uses": UPLOAD_ARTIFACT_REF,
                 "with": {
                     "name": "${{ steps.setup.outputs.artifact-name }}",
-                    "path": ".devflows-writeback/payload",
+                    "path": ".devflows-patch/changes.patch",
                     "if-no-files-found": "error",
                     "retention-days": 1,
                     "overwrite": True,
-                    "include-hidden-files": True,
                 },
             },
         ],
@@ -900,7 +893,7 @@ def _call_job(scenario: Scenario, *, runner: str) -> dict[str, Any]:
             "commit-branch": f"${{{{ needs.{setup_job_id}.outputs.branch }}}}",
             "commit-expected-base-sha": f"${{{{ needs.{setup_job_id}.outputs.base-sha }}}}",
             "commit-repository": "${{ github.repository }}",
-            "writeback-artifact-name": f"${{{{ needs.{setup_job_id}.outputs.artifact-name }}}}",
+            "patch-artifact-name": f"${{{{ needs.{setup_job_id}.outputs.artifact-name }}}}",
         }
     return job
 

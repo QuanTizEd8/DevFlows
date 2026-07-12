@@ -180,17 +180,16 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
         secrets.update(deepcopy(ARTIFACT_DOWNLOAD_SECRETS))
     if _enabled(io_config, "artifact-upload"):
         inputs.update(deepcopy(ARTIFACT_UPLOAD_INPUTS))
-    if _enabled(io_config, "writeback"):
-        inputs.update(deepcopy(COMMIT_INPUTS))
-        # Run-scope the default so two commit-enabled invocations of the same
-        # workflow across different runs cannot clobber each other's payload
-        # (the upload step uses overwrite: true). Reusable-workflow input
-        # defaults may reference the github context. Multiple invocations within
-        # a single run still need distinct caller-provided names (see description).
-        inputs["commit-internal-artifact-name"]["default"] = (
-            f"devflows-{item.id}-writeback-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}"
+    if _enabled(io_config, "patch-emit"):
+        inputs.update(deepcopy(PATCH_EMIT_INPUTS))
+        # Run-scope the default so two patch-emit-enabled invocations of the same
+        # workflow across different runs cannot clobber each other's patch artifact
+        # (the upload step uses overwrite: true). Reusable-workflow input defaults
+        # may reference the github context. Multiple invocations within a single run
+        # still need distinct caller-provided names (see description).
+        inputs["patch-artifact-name"]["default"] = (
+            f"devflows-{item.id}-patch-${{{{ github.run_id }}}}-${{{{ github.run_attempt }}}}"
         )
-        secrets.update(deepcopy(COMMIT_SECRETS))
     if _enabled(io_config, "job-output"):
         inputs.update(deepcopy(JOB_OUTPUT_INPUTS))
 
@@ -210,9 +209,8 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
         prefix_steps.append(_download_artifact_step())
     if _enabled(io_config, "artifact-upload"):
         suffix_steps.append(_upload_artifact_step())
-    if _enabled(io_config, "writeback"):
-        suffix_steps.extend(_create_writeback_steps())
-        jobs["commit"] = _commit_job(job_id)
+    if _enabled(io_config, "patch-emit"):
+        suffix_steps.extend(_patch_emit_steps())
     if _enabled(io_config, "job-output"):
         suffix_steps.append(_job_output_step())
 
@@ -290,7 +288,7 @@ def build_published_workflow(item: Workflow) -> dict[str, Any]:
         actions="read"
         if any(
             _enabled(io_config, channel)
-            for channel in ("artifact-download", "artifact-upload", "writeback")
+            for channel in ("artifact-download", "artifact-upload", "patch-emit")
         )
         else None,
     )
@@ -310,15 +308,20 @@ def validate_publish_config(item: Workflow) -> list[str]:
         "checkout-jobs",
         "job",
         "job-output",
+        "patch-emit",
         "runtime",
-        "writeback",
         "runtime-jobs",
     }
     for key in config:
         if key not in supported:
             errors.append(f"{item.metadata_path}: io.{key} is not supported.")
-    if _enabled(config, "writeback") and not _enabled(config, "runtime"):
-        errors.append(f"{item.metadata_path}: io.writeback requires io.runtime.")
+    # The patch-emit channel captures the workspace with `git diff`, so the io.job
+    # must run in a git checkout. Requiring io.checkout keeps a patch-emit workflow
+    # from emitting an empty patch (or a git error) on a bare runner.
+    if _enabled(config, "patch-emit") and not _enabled(config, "checkout"):
+        errors.append(
+            f"{item.metadata_path}: io.patch-emit requires io.checkout (a git workspace)."
+        )
     job_id = str(config.get("job") or "")
     jobs = item.workflow.get("jobs") or {}
     if _enabled(config, "job-output"):
@@ -716,35 +719,45 @@ def _upload_artifact_step() -> dict[str, Any]:
     }
 
 
-def _create_writeback_steps() -> list[dict[str, Any]]:
+def _patch_emit_steps() -> list[dict[str, Any]]:
+    # The patch-emit channel is a decoupled writeback: instead of forcing
+    # contents: write on the caller, the workflow captures ALL of its workspace
+    # changes into a single patch artifact (changes.patch). A separate writeback
+    # call consumes that artifact, git-applies it to a checked-out target, and
+    # pushes -- so the executor holding contents: write is only the writeback
+    # workflow, never this one.
+    #
+    # No caller input is interpolated into the git commands, so the capture step
+    # is injection-safe and inlines no script. `git add -A` then
+    # `git diff --cached --binary` records modified, added, and deleted files
+    # (binary-safe); the trailing `git reset` unstages so the workspace is left as
+    # the domain steps produced it. An empty diff writes an empty file and does not
+    # fail, so a workflow that changed nothing still succeeds (the upload uses
+    # if-no-files-found: warn).
     return [
         {
-            "name": "Create writeback payload",
-            "if": "inputs.commit-enabled",
-            "env": {
-                "DEVFLOWS_SCRIPT_ROOT": "${{ steps.devflows-runtime.outputs.script-root }}",
-                "WRITEBACK_DELETE_PATHS": "${{ inputs.commit-delete-paths }}",
-                "WRITEBACK_PATHS": "${{ inputs.commit-paths }}",
-                "WRITEBACK_PAYLOAD_DIR": ".devflows-writeback/payload",
-                "WRITEBACK_SOURCE_REF": "${{ github.ref }}",
-                "WRITEBACK_SOURCE_REPOSITORY": "${{ github.repository }}",
-                "WRITEBACK_SOURCE_SHA": "${{ github.sha }}",
-            },
+            "name": "Create workspace patch",
+            "if": "inputs.patch-emit-enabled",
             "shell": "bash",
-            "run": 'python "${DEVFLOWS_SCRIPT_ROOT}/writeback/create-payload.py"',
+            "run": (
+                "set -euo pipefail\n"
+                'patch_dir="$RUNNER_TEMP/devflows-patch"\n'
+                'mkdir -p "$patch_dir"\n'
+                "git add -A\n"
+                'git diff --cached --binary > "$patch_dir/changes.patch"\n'
+                "git reset -q"
+            ),
         },
         {
-            "name": "Upload writeback payload",
-            "if": "inputs.commit-enabled",
+            "name": "Upload workspace patch",
+            "if": "inputs.patch-emit-enabled",
             "uses": action_ref("upload-artifact"),
             "with": {
-                "name": "${{ inputs.commit-internal-artifact-name }}",
-                "path": ".devflows-writeback/payload",
-                "if-no-files-found": "error",
+                "name": "${{ inputs.patch-artifact-name }}",
+                "path": "${{ runner.temp }}/devflows-patch/changes.patch",
+                "if-no-files-found": "warn",
                 "retention-days": 1,
-                "compression-level": 0,
                 "overwrite": True,
-                "include-hidden-files": True,
             },
         },
     ]
@@ -764,36 +777,6 @@ def _job_output_step() -> dict[str, Any]:
         },
         "shell": "bash",
         "run": 'python "${DEVFLOWS_SCRIPT_ROOT}/_channels/collect-job-outputs.py"',
-    }
-
-
-def _commit_job(needs: str) -> dict[str, Any]:
-    # This nested reusable-workflow call uses a relative ref. Per GitHub's
-    # documentation ("Reuse workflows"): a workflow called without {owner}/{repo}
-    # and @{ref} "is from the same commit as the caller workflow" — here the caller
-    # is the file containing this uses (e.g. pandoc.yaml), not the top-level
-    # consumer. So when a consumer calls pandoc.yaml@<devflows-sha> cross-repo, this
-    # resolves to writeback.yaml at that same devflows repo+SHA, caller-independent.
-    # (This differs from composite-action `./` refs, which resolve against the
-    # caller's checked-out workspace; secondary sources sometimes conflate the two.)
-    # Verified against docs.github.com/actions/.../reuse-workflows, 2026-07.
-    return {
-        "name": "Commit generated files",
-        "needs": needs,
-        "if": "inputs.commit-enabled",
-        "uses": "./.github/workflows/writeback.yaml",
-        "permissions": {"actions": "read", "contents": "write"},
-        "with": {
-            "writeback-artifact-name": "${{ inputs.commit-internal-artifact-name }}",
-            "commit-repository": "${{ inputs.commit-repository }}",
-            "commit-branch": "${{ inputs.commit-branch }}",
-            "commit-message": "${{ inputs.commit-message }}",
-            "commit-author-name": "${{ inputs.commit-author-name }}",
-            "commit-author-email": "${{ inputs.commit-author-email }}",
-            "commit-push": "${{ inputs.commit-push }}",
-            "commit-expected-base-sha": "${{ inputs.commit-expected-base-sha }}",
-        },
-        "secrets": {"commit-token": "${{ secrets.commit-token }}"},
     }
 
 
@@ -1061,95 +1044,31 @@ ARTIFACT_UPLOAD_INPUTS: dict[str, dict[str, Any]] = {
     },
 }
 
-COMMIT_INPUTS: dict[str, dict[str, Any]] = {
-    "commit-enabled": {
+PATCH_EMIT_INPUTS: dict[str, dict[str, Any]] = {
+    "patch-emit-enabled": {
         "description": (
-            "Whether to commit selected generated files back to a repository. The "
-            "writeback commit runs in a nested job that statically requires "
-            "contents: write (and actions: read), so any job calling this workflow "
-            "must grant permissions: contents: write, actions: read even when this "
-            "is false — GitHub validates the nested permissions before the run starts."
+            "Whether to capture all workspace changes (modified, added, and deleted "
+            "files) into a single patch artifact after the workflow runs. This forces "
+            "NO contents: write on the caller -- it only adds actions: read (for the "
+            "upload). Compose the writeback workflow as a separate job to apply the "
+            "patch to a branch and push it."
         ),
         "type": "boolean",
         "required": False,
         "default": False,
     },
-    "commit-paths": {
-        "description": "Newline-separated files or directories to include in the writeback commit.",
-        "type": "string",
-        "required": False,
-        "default": "",
-    },
-    "commit-delete-paths": {
-        "description": "Newline-separated files or directories to delete in the writeback commit.",
-        "type": "string",
-        "required": False,
-        "default": "",
-    },
-    "commit-message": {
-        "description": "Commit message for generated file writeback.",
-        "type": "string",
-        "required": False,
-        "default": "chore: update generated files",
-    },
-    "commit-repository": {
-        "description": "Repository name with owner to commit to.",
-        "type": "string",
-        "required": False,
-        "default": "${{ github.repository }}",
-    },
-    "commit-branch": {
-        "description": "Branch to check out and push generated changes to.",
-        "type": "string",
-        "required": False,
-        "default": "${{ github.ref_name }}",
-    },
-    "commit-author-name": {
-        "description": "Git author name for generated file commits.",
-        "type": "string",
-        "required": False,
-        "default": "github-actions[bot]",
-    },
-    "commit-author-email": {
-        "description": "Git author email for generated file commits.",
-        "type": "string",
-        "required": False,
-        "default": "41898282+github-actions[bot]@users.noreply.github.com",
-    },
-    "commit-push": {
-        "description": "Whether to push the generated commit.",
-        "type": "boolean",
-        "required": False,
-        "default": True,
-    },
-    "commit-expected-base-sha": {
+    "patch-artifact-name": {
         "description": (
-            "Optional SHA that the writeback target branch must point to before committing."
+            "Name of the artifact that carries the emitted workspace patch "
+            "(changes.patch). Defaults to a run-scoped name so patch-emit-enabled "
+            "invocations in different runs never collide. Callers that enable "
+            "patch-emit on multiple invocations within one run must pass distinct "
+            "values, because the run-scoped default is identical within a run. Feed "
+            "this name to the writeback workflow's patch-artifact-name input."
         ),
         "type": "string",
         "required": False,
-        "default": "",
-    },
-    "commit-internal-artifact-name": {
-        "description": (
-            "Internal artifact name used to transfer the writeback payload. Defaults to a "
-            "run-scoped name. Callers that invoke a commit-enabled workflow multiple times "
-            "within one run must pass distinct values, because input defaults cannot "
-            "disambiguate per invocation."
-        ),
-        "type": "string",
-        "required": False,
-        "default": "devflows-writeback",
-    },
-}
-
-COMMIT_SECRETS: dict[str, dict[str, Any]] = {
-    "commit-token": {
-        "description": (
-            "Token used by the writeback job. Must be able to write contents when "
-            "commit-enabled is true."
-        ),
-        "required": False,
+        "default": "devflows-patch",
     },
 }
 

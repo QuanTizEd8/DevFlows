@@ -13,12 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _ephemeral import artifact_name, branch_name  # noqa: E402
 
-# Runtime scripts for the published workflows are no longer copied under
-# .github/workflows/<id>/ (they are inlined at sync time). This harness, however,
-# runs inside the DevFlows repo with a full checkout available, so it invokes the
-# writeback create-payload script directly from its catalog source.
-CREATE_PAYLOAD_SCRIPT = "workflows/writeback/scripts/create-payload.py"
-
 
 def _write_output(key: str, value: str) -> None:
     with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
@@ -27,7 +21,7 @@ def _write_output(key: str, value: str) -> None:
 
 workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
 fixture_path = Path(os.environ["DEVFLOWS_FIXTURE_PATH"])
-payload_dir = workspace / ".devflows-writeback" / "payload"
+patch_dir = workspace / ".devflows-patch"
 run_id = os.environ["GITHUB_RUN_ID"]
 run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
 # Derive the branch/artifact names from the shared helper so cleanup, which globs
@@ -66,23 +60,31 @@ base_sha = subprocess.run(
 ).stdout.strip()
 _write_output("base-sha", base_sha)
 
-shutil.rmtree(workspace / fixture_path, ignore_errors=True)
+# Transform the workspace to the desired end state, then capture it as a single
+# patch (mirroring the patch-emit channel: git add -A; git diff --cached --binary;
+# git reset). Replace paths are directory replacements, so their subtree is cleared
+# before the payload files are written; delete paths are removed best-effort (an
+# already-absent delete is a no-op, exercised by the writeback scenario).
+for replace_path in payload_paths:
+    shutil.rmtree(workspace / fixture_path / replace_path, ignore_errors=True)
+for delete_path in delete_paths:
+    target = workspace / fixture_path / delete_path
+    if target.is_dir() and not target.is_symlink():
+        shutil.rmtree(target)
+    elif target.exists() or target.is_symlink():
+        target.unlink()
 for item in payload_files:
     path = workspace / fixture_path / item["path"]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(item.get("content", "")), encoding="utf-8")
 
-create_payload_env = {
-    **os.environ,
-    "WRITEBACK_PAYLOAD_DIR": str(payload_dir),
-    "WRITEBACK_PATHS": "\n".join((fixture_path / path).as_posix() for path in payload_paths),
-    "WRITEBACK_DELETE_PATHS": "\n".join((fixture_path / path).as_posix() for path in delete_paths),
-    "WRITEBACK_SOURCE_REPOSITORY": os.environ["GITHUB_REPOSITORY"],
-    "WRITEBACK_SOURCE_REF": branch,
-    "WRITEBACK_SOURCE_SHA": base_sha,
-}
-subprocess.run(
-    ["python", CREATE_PAYLOAD_SCRIPT],
+subprocess.run(["git", "add", "-A"], check=True)
+patch = subprocess.run(
+    ["git", "diff", "--cached", "--binary"],
     check=True,
-    env=create_payload_env,
-)
+    capture_output=True,
+).stdout
+subprocess.run(["git", "reset", "-q"], check=True)
+
+patch_dir.mkdir(parents=True, exist_ok=True)
+(patch_dir / "changes.patch").write_bytes(patch)

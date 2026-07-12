@@ -20,8 +20,12 @@ UV_CACHE_MODES = ("auto", "true", "false")
 # an accidental range while accepting 0.14.2, 1.11.0, 1.2.0rc1, 2.0.0.post1.
 _VERSION = re.compile(r"^[0-9][0-9A-Za-z.+-]*$")
 _TARGET_PYTHON = re.compile(r"^3\.[0-9]+$")
-# ruff arguments that would write files or seize output capture the workflow owns.
-_FORBIDDEN_RUFF_CHECK = ("--fix", "--fix-only", "--unsafe-fixes", "--output-format")
+# ruff arguments the workflow owns. --output-format is always rejected (the
+# workflow captures JSON for reporting). The mutating flags are rejected only in
+# the read-only default; lint-fix mode legitimately fixes in place, so it accepts
+# a caller-supplied --fix/--fix-only/--unsafe-fixes.
+_FIX_RUFF_CHECK = ("--fix", "--fix-only", "--unsafe-fixes")
+_FORBIDDEN_RUFF_CHECK_ALWAYS = ("--output-format",)
 # per-version flags the workflow owns via typecheck-python-versions.
 _FORBIDDEN_TYPECHECK = ("--python-version", "--pythonversion")
 
@@ -112,12 +116,18 @@ def _validate_uv_sync(working_directory: Path) -> None:
 
 def _validate_ruff_check_arguments() -> None:
     tokens = _validate_shlex("LINT_RUFF_CHECK_ARGUMENTS", "ruff-check-arguments")
+    fix_mode = _truthy(_get("LINT_FIX"))
     for token in tokens:
         head = token.split("=", 1)[0]
-        if head in _FORBIDDEN_RUFF_CHECK:
+        if head in _FORBIDDEN_RUFF_CHECK_ALWAYS:
+            raise SystemExit(
+                f"ruff-check-arguments must not contain {head!r}; this workflow owns output "
+                "capture for reporting."
+            )
+        if head in _FIX_RUFF_CHECK and not fix_mode:
             raise SystemExit(
                 f"ruff-check-arguments must not contain {head!r}; this workflow is read-only "
-                "and owns output capture for reporting."
+                "unless lint-fix is true."
             )
 
 

@@ -140,10 +140,12 @@ def test_local_scenario_workflow_cleans_outputs_and_asserts_files() -> None:
 def test_required_call_permissions_unions_declared_permissions() -> None:
     workflows = _workflows()
 
+    # pandoc no longer embeds a commit job: patch-emit forces only actions: read.
     assert _required_call_permissions(workflows["pandoc"]) == {
         "actions": "read",
-        "contents": "write",
+        "contents": "read",
     }
+    # writeback is the sole contents: write executor.
     assert _required_call_permissions(workflows["writeback"]) == {
         "actions": "read",
         "contents": "write",
@@ -155,11 +157,18 @@ def test_required_call_permissions_unions_declared_permissions() -> None:
     }
 
 
-def test_call_job_grants_writeback_permissions_even_when_read_only() -> None:
-    # The read-only pandoc artifact scenario still calls pandoc.yaml, whose
-    # published form embeds a commit job requesting contents: write. Without the
-    # grant GitHub startup-fails the whole run.
+def test_call_job_grants_only_read_for_patch_emit_workflow() -> None:
+    # pandoc's published form no longer embeds a commit job, so a read-only pandoc
+    # scenario call job needs no contents: write -- the decoupling in action.
     job = _call_job(_scenario("pandoc", "markdown-html-artifact"), runner="hosted")
+
+    assert job["permissions"] == {"actions": "read", "contents": "read"}
+
+
+def test_call_job_grants_contents_write_for_writeback() -> None:
+    # The writeback workflow is the one workflow whose call job must grant
+    # contents: write, because it holds the executor job.
+    job = _call_job(_scenario("writeback", "ephemeral-branch-writeback"), runner="hosted")
 
     assert job["permissions"] == {"actions": "read", "contents": "write"}
 
@@ -281,15 +290,15 @@ def test_mutation_assert_job_checks_out_before_assert_result() -> None:
     assert "harness/scenarios" not in steps[0].get("run", "")
 
 
-def test_writeback_payload_upload_includes_hidden_files() -> None:
-    """The writeback payload's files/ subtree holds dotfiles (e.g. .devflows-e2e/),
-    which upload-artifact v4+ drops by default -- apply-payload then fails with
-    "Payload file is missing or invalid". Regression guard for PR #5 run
-    29072401089: the setup upload must opt into hidden files."""
+def test_writeback_patch_upload_uploads_changes_patch() -> None:
+    """The mutation harness uploads a single changes.patch file (no manifest tree),
+    so it needs no upload-artifact hidden-files opt-in -- the patch carries hidden
+    paths inline."""
     job = _ephemeral_branch_setup_job(_scenario("writeback", "ephemeral-branch-writeback"))
-    upload = next(step for step in job["steps"] if step["name"] == "Upload writeback payload")
+    upload = next(step for step in job["steps"] if step["name"] == "Upload workspace patch")
 
-    assert upload["with"]["include-hidden-files"] is True
+    assert upload["with"]["path"] == ".devflows-patch/changes.patch"
+    assert "include-hidden-files" not in upload["with"]
 
 
 # --- task 3/4: scripts come from harness/, not the removed generated copies ---
@@ -340,8 +349,13 @@ def test_duplicate_scenario_ids_are_rejected() -> None:
 def test_missing_mutation_inputs_generalizes_beyond_writeback() -> None:
     workflows = _workflows()
 
+    # writeback exposes all four mutation inputs (patch-artifact-name + commit-*).
     assert _missing_mutation_inputs(workflows["writeback"]) == []
-    assert "writeback-artifact-name" in _missing_mutation_inputs(workflows["pandoc"])
+    # pandoc has patch-artifact-name (patch-emit) but no commit-* target inputs, so
+    # it is not a mutation target on its own.
+    pandoc_missing = _missing_mutation_inputs(workflows["pandoc"])
+    assert "patch-artifact-name" not in pandoc_missing
+    assert "commit-branch" in pandoc_missing
     assert len(_missing_mutation_inputs(workflows["devcontainer-build"])) == 4
 
 
@@ -373,7 +387,7 @@ def test_mutation_scenario_rejected_for_workflow_without_writeback_inputs() -> N
 
     errors = validate_scenarios([workflow])
 
-    assert any("writeback-artifact-name" in error for error in errors)
+    assert any("commit-branch" in error for error in errors)
 
 
 # --- task 5c: cleanup keys on the deterministic branch prefix, not an output ---
@@ -417,10 +431,15 @@ def test_writeback_scenario_exercises_absent_deletion() -> None:
 # --- item 2: fork-safe gating of write-requiring hosted call jobs ---
 
 
-def test_requires_write_true_for_all_promoted_workflows() -> None:
-    for wf_id in ("pandoc", "writeback", "devcontainer-build"):
+def test_requires_write_true_for_write_holding_workflows() -> None:
+    # Only workflows whose call tree declares a write scope need fork gating.
+    # writeback (contents: write) and devcontainer-build (packages: write) do;
+    # pandoc, now decoupled via patch-emit, is read-only and is NOT gated.
+    for wf_id in ("writeback", "devcontainer-build"):
         scenario = next(s for s in load_scenarios(load_catalog()) if s.workflow.id == wf_id)
         assert _requires_write(scenario)
+    pandoc = next(s for s in load_scenarios(load_catalog()) if s.workflow.id == "pandoc")
+    assert not _requires_write(pandoc)
 
 
 def test_hosted_call_jobs_are_fork_gated() -> None:

@@ -35,7 +35,7 @@ jobs:
       pandoc-arguments: --standalone --output=.devflows-test/pandoc/markdown-html-local/example.html README.md
     permissions:
       actions: read
-      contents: write
+      contents: read
     needs:
       - require_act
       - pandoc_markdown_html_local_clean
@@ -80,7 +80,7 @@ jobs:
       pandoc-arguments: --standalone --output=output.html input.md
     permissions:
       actions: read
-      contents: write
+      contents: read
     needs:
       - require_act
       - pandoc_working_directory_local_clean

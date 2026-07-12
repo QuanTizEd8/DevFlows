@@ -29,15 +29,13 @@ jobs:
       artifact-upload-if-no-files-found: error
     permissions:
       actions: read
-      contents: write
+      contents: read
       packages: read
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
   devcontainer_run_hooks_and_exec_assert:
     name: 'Devcontainer Run: Pull a public image, run its postCreate hook, and exec a command assertions'
     runs-on: ubuntu-latest
     needs: devcontainer_run_hooks_and_exec_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
-      == github.repository)
+    if: always()
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -82,15 +80,13 @@ jobs:
       artifact-upload-if-no-files-found: error
     permissions:
       actions: read
-      contents: write
+      contents: read
       packages: read
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
   devcontainer_run_cache_restore_before_hooks_assert:
     name: 'Devcontainer Run: Restore a workspace cache before the creation hooks populate it assertions'
     runs-on: ubuntu-latest
     needs: devcontainer_run_cache_restore_before_hooks_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
-      == github.repository)
+    if: always()
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -135,15 +131,13 @@ jobs:
       artifact-upload-if-no-files-found: error
     permissions:
       actions: read
-      contents: write
+      contents: read
       packages: read
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
   devcontainer_run_container_env_into_hooks_and_command_assert:
     name: 'Devcontainer Run: A container-env value reaches both the creation hook and the command assertions'
     runs-on: ubuntu-latest
     needs: devcontainer_run_container_env_into_hooks_and_command_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
-      == github.repository)
+    if: always()
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -186,17 +180,15 @@ jobs:
       artifact-upload-if-no-files-found: error
     permissions:
       actions: read
-      contents: write
+      contents: read
       packages: read
     secrets:
       run-secrets: '{"DEVFLOWS_TEST_SECRET":"ok-123"}'
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
   devcontainer_run_run_secrets_into_hooks_and_command_assert:
     name: 'Devcontainer Run: A run-secrets value reaches both the creation hook and the command assertions'
     runs-on: ubuntu-latest
     needs: devcontainer_run_run_secrets_into_hooks_and_command_call
-    if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name
-      == github.repository)
+    if: always()
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0

@@ -150,10 +150,29 @@ def test_validate_rejects_all_tools_disabled(monkeypatch, tmp_path) -> None:
     )
 
 
-@pytest.mark.parametrize("flag", ["--fix", "--fix-only", "--unsafe-fixes", "--output-format=json"])
-def test_validate_rejects_forbidden_ruff_check_arguments(monkeypatch, tmp_path, flag) -> None:
+@pytest.mark.parametrize("flag", ["--fix", "--fix-only", "--unsafe-fixes"])
+def test_validate_rejects_ruff_fix_arguments_when_read_only(monkeypatch, tmp_path, flag) -> None:
     _expect_validate_error(
         monkeypatch, tmp_path, "read-only", LINT_RUFF_CHECK_ARGUMENTS=f"--select F {flag}"
+    )
+
+
+@pytest.mark.parametrize("flag", ["--fix", "--fix-only", "--unsafe-fixes"])
+def test_validate_accepts_ruff_fix_arguments_in_fix_mode(monkeypatch, tmp_path, flag) -> None:
+    # lint-fix legitimately mutates in place, so a caller-supplied fix flag is fine.
+    _run_validate(
+        monkeypatch, tmp_path, LINT_FIX="true", LINT_RUFF_CHECK_ARGUMENTS=f"--select F {flag}"
+    )
+
+
+def test_validate_rejects_output_format_argument_always(monkeypatch, tmp_path) -> None:
+    # The workflow owns output capture for reporting regardless of lint-fix.
+    _expect_validate_error(
+        monkeypatch,
+        tmp_path,
+        "output capture",
+        LINT_FIX="true",
+        LINT_RUFF_CHECK_ARGUMENTS="--output-format=json",
     )
 
 
@@ -375,6 +394,7 @@ def _run_env(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "LINT_PATHS": ".",
         "LINT_WORKING_DIRECTORY": ".",
         "LINT_ENFORCE": "true",
+        "LINT_FIX": "false",
         "LINT_ANNOTATIONS_ENABLED": "true",
         "LINT_REPORT_DIRECTORY": "report",
         "LINT_UV_SYNC_ENABLED": "false",
@@ -501,6 +521,45 @@ def test_matrix_multi_version_typecheck_records_each(monkeypatch, tmp_path) -> N
     assert results["tools"]["typecheck"]["tool"] == "mypy"
 
 
+def _capture_commands(monkeypatch, tmp_path, **overrides) -> list[list[str]]:
+    module = _load("run-lint.py")
+    for key, value in _run_env(tmp_path, **overrides).items():
+        monkeypatch.setenv(key, value)
+    commands: list[list[str]] = []
+
+    def fake(command: list[str], cwd: Path):
+        commands.append(command)
+        if "--output-format=json" in command:
+            return module.RunResult(0, "[]", "")
+        return module.RunResult(0, "", "")
+
+    monkeypatch.setattr(module, "_run", fake)
+    module.main()
+    return commands
+
+
+def test_fix_mode_adds_ruff_fix_and_formats_in_place(monkeypatch, tmp_path) -> None:
+    commands = _capture_commands(
+        monkeypatch, tmp_path, LINT_FIX="true", LINT_TYPECHECK_ENABLED="false"
+    )
+    check_cmd = next(c for c in commands if "--output-format=json" in c)
+    assert "--fix" in check_cmd
+    # ruff format runs in write mode: no --check/--diff gate.
+    format_cmd = next(c for c in commands if "format" in c)
+    assert "--check" not in format_cmd
+    assert "--diff" not in format_cmd
+
+
+def test_read_only_mode_never_passes_fix(monkeypatch, tmp_path) -> None:
+    commands = _capture_commands(
+        monkeypatch, tmp_path, LINT_FIX="false", LINT_TYPECHECK_ENABLED="false"
+    )
+    check_cmd = next(c for c in commands if "--output-format=json" in c)
+    assert "--fix" not in check_cmd
+    format_cmd = next(c for c in commands if "format" in c)
+    assert "--check" in format_cmd and "--diff" in format_cmd
+
+
 def _parse_output(path: Path) -> dict[str, str]:
     parsed: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -526,6 +585,7 @@ def test_published_inputs_cover_design_and_conventions() -> None:
         "lint-paths",
         "lint-working-directory",
         "lint-enforce",
+        "lint-fix",
         "lint-annotations-enabled",
         "lint-report-directory",
         "lint-timeout-minutes",
@@ -549,9 +609,11 @@ def test_published_inputs_cover_design_and_conventions() -> None:
     assert expected <= set(inputs)
     # Convention: uv cache passthrough is uv-cache-mode (string), never -enabled.
     assert inputs["uv-cache-mode"]["type"] == "string"
-    # io channels are present; writeback is not (read-only workflow).
+    # io channels are present, including patch-emit (so lint-fix changes can be
+    # composed with writeback); no built-in commit inputs.
     assert "checkout-enabled" in inputs
     assert "artifact-upload-enabled" in inputs
+    assert "patch-emit-enabled" in inputs
     assert not any(name.startswith("commit-") for name in inputs)
 
 

@@ -1,23 +1,38 @@
-name: Pandoc Extra image caller
+name: Pandoc convert then commit the PDF
 
 on:
   workflow_dispatch:
 
-# Pandoc's published form embeds a writeback commit job; GitHub validates the
-# nested permissions before the run starts, so grant the union even here.
-permissions:
-  contents: write
-  actions: read
+# No top-level grant: each job asks only for what it needs. Pandoc stays
+# read-only; only the writeback job holds contents: write. This is the decoupled
+# commit model -- convert (patch-emit) then writeback (apply + push).
+permissions: {}
 
 jobs:
+  # Convert README.md to a PDF and emit the workspace changes (the generated PDF)
+  # as a patch artifact instead of committing them here. Read-only.
   convert:
     # Replace pandoc/v0.1.0 with the latest released tag (0.x has no moving tags).
     uses: QuanTizEd8/DevFlows/.github/workflows/pandoc.yaml@pandoc/v0.1.0
+    permissions:
+      contents: read
+      actions: read
     with:
       pandoc-image: pandoc/extra:3.8
       pandoc-arguments: >-
         README.md --output=output/README.pdf --standalone
         --template=/.pandoc/templates/eisvogel.latex --listings
-      artifact-upload-enabled: true
-      artifact-upload-name: pandoc-extra-pdf
-      artifact-upload-path: output/README.pdf
+      patch-emit-enabled: true
+      patch-artifact-name: pandoc-generated-pdf
+
+  # Apply that patch to the branch and push -- the sole contents: write job.
+  commit:
+    needs: convert
+    # Replace writeback/v0.1.0 with the latest released writeback tag.
+    uses: QuanTizEd8/DevFlows/.github/workflows/writeback.yaml@writeback/v0.1.0
+    permissions:
+      contents: write
+      actions: read
+    with:
+      patch-artifact-name: pandoc-generated-pdf
+      commit-message: "docs: regenerate README.pdf"
