@@ -57,9 +57,9 @@ notes:
 ## Shared IO Channels
 
 Domain workflows should not hand-author the common checkout, artifact, or
-writeback interface. Declare the channels the workflow supports in
+patch-emit interface. Declare the channels the workflow supports in
 `devflow.yaml`, and `devflows sync` will add the corresponding public inputs,
-secrets, steps, permissions, and commit job to `.github/workflows/<id>.yaml`.
+secrets, steps, and permissions to `.github/workflows/<id>.yaml`.
 
 ```yaml
 io:
@@ -68,7 +68,7 @@ io:
   checkout: true
   artifact-download: true
   artifact-upload: true
-  writeback: true
+  patch-emit: true
 ```
 
 `job` names the runner job that should receive the generated steps. `runtime`
@@ -76,9 +76,13 @@ injects the "Materialize DevFlows runtime scripts" step (id `devflows-runtime`),
 which at run time inlines every `${DEVFLOWS_SCRIPT_ROOT}/...` script the job
 references into `$RUNNER_TEMP/devflows` — there is no runtime checkout of the
 DevFlows repository. List any additional job that also runs those scripts under
-`runtime-jobs` so it gets its own materialize step. `writeback` requires
-`runtime` because generated workflows create the writeback payload with the
-shared writeback script.
+`runtime-jobs` so it gets its own materialize step. `patch-emit` requires
+`checkout` (a git workspace): it appends two suffix steps that capture the job's
+workspace changes as a single patch artifact (`changes.patch`) with plain
+`git diff`, forcing **no** `contents: write` on callers. Committing that patch
+is a separate composition — a job that calls the `writeback` workflow (the sole
+holder of `contents: write`) with the same `patch-artifact-name` to apply and
+push it.
 
 A workflow whose jobs each need a channel beyond the single `job` lists those
 jobs under `checkout-jobs` or `artifact-download-jobs` (mirroring

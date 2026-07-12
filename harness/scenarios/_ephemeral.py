@@ -16,7 +16,7 @@ def branch_name(prefix: str, run_id: str, run_attempt: str) -> str:
 
 
 def artifact_name(base: str, run_id: str, run_attempt: str) -> str:
-    """Run-scoped writeback payload artifact name for one attempt."""
+    """Run-scoped writeback patch artifact name for one attempt."""
     return f"{base}-{run_id}-{run_attempt}"
 
 

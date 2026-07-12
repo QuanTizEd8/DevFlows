@@ -915,8 +915,9 @@ def test_interface_inputs_match_design() -> None:
     assert cache_mode["default"] == "auto"
     # Generator injects the checkout + artifact-download channel inputs.
     assert {"checkout-enabled", "artifact-download-enabled"} <= inputs
-    # artifact-upload and writeback channels are intentionally NOT declared.
+    # artifact-upload and patch-emit channels are intentionally NOT declared.
     assert "artifact-upload-enabled" not in inputs
+    assert "patch-emit-enabled" not in inputs
     assert "commit-enabled" not in inputs
 
 

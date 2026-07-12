@@ -513,10 +513,11 @@ def test_domain_inputs_match_the_design() -> None:
     assert inputs["paper-source-path"]["required"] is True
     assert inputs["paper-image"]["default"] == "ghcr.io/openjournals/inara:1.3.1"
     assert inputs["paper-timeout-minutes"]["default"] == 30
-    # Channel inputs are generator-injected (checkout + both artifact channels),
-    # writeback is NOT (io.writeback is false).
+    # Channel inputs are generator-injected (checkout + both artifact channels);
+    # patch-emit is NOT enabled (this is a paper builder, nothing to commit back).
     channels = {"checkout-enabled", "artifact-download-enabled", "artifact-upload-enabled"}
     assert channels <= set(inputs)
+    assert "patch-emit-enabled" not in inputs
     assert "commit-enabled" not in inputs
 
 

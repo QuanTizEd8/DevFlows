@@ -32,7 +32,7 @@ _TYPECHECKERS = {
 }
 _SUMMARY_DIFF_CAP = 30_000  # keep GITHUB_STEP_SUMMARY well under the 1 MiB limit
 _ANNOTATION_CAP = 10  # GitHub renders at most ~10 annotations per step
-_REFORMAT_COUNT = re.compile(r"(\d+)\s+files?\s+would\s+be\s+reformatted")
+_REFORMAT_COUNT = re.compile(r"(\d+)\s+files?\s+(?:would\s+be\s+)?reformatted")
 # mypy: file:line: error: msg  (column optional). pyright: file:line:col - error: msg.
 _MYPY_ERROR = re.compile(
     r"^(?P<file>[^:\n]+):(?P<line>\d+):(?:(?P<col>\d+):)?\s*error:", re.MULTILINE
@@ -60,6 +60,7 @@ def main() -> int:
     workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
     working_directory = (workspace / (_get("LINT_WORKING_DIRECTORY") or ".")).resolve()
     enforce = _truthy(_get("LINT_ENFORCE"))
+    fix = _truthy(_get("LINT_FIX"))
     annotations_enabled = _truthy(_get("LINT_ANNOTATIONS_ENABLED"))
     sync_enabled = _truthy(_get("LINT_UV_SYNC_ENABLED"))
     ruff_version = _get("LINT_RUFF_VERSION")
@@ -75,7 +76,7 @@ def main() -> int:
     ruff_check = ToolOutcome()
     if _truthy(_get("LINT_RUFF_CHECK_ENABLED")):
         ruff_check, violations, report = _run_ruff_check(
-            working_directory, workspace, paths, ruff_version, sync_enabled
+            working_directory, workspace, paths, ruff_version, sync_enabled, fix
         )
         results["ruff-check"] = {"outcome": ruff_check.outcome, "violations": violations}
         summary_sections.append(_ruff_check_summary(ruff_check.outcome, violations))
@@ -87,7 +88,7 @@ def main() -> int:
     ruff_format = ToolOutcome()
     if _truthy(_get("LINT_RUFF_FORMAT_ENABLED")):
         ruff_format, unformatted, diff, report = _run_ruff_format(
-            working_directory, workspace, paths, ruff_version, sync_enabled
+            working_directory, workspace, paths, ruff_version, sync_enabled, fix
         )
         results["ruff-format"] = {"outcome": ruff_format.outcome, "unformatted-files": unformatted}
         summary_sections.append(_ruff_format_summary(ruff_format.outcome, unformatted, diff))
@@ -138,10 +139,16 @@ def main() -> int:
 # tool runners                                                                 #
 # --------------------------------------------------------------------------- #
 def _run_ruff_check(
-    working_directory: Path, workspace: Path, paths: list[str], version: str, sync: bool
+    working_directory: Path, workspace: Path, paths: list[str], version: str, sync: bool, fix: bool
 ) -> tuple[ToolOutcome, int, tuple[str, str]]:
     extra = _shlex("LINT_RUFF_CHECK_ARGUMENTS")
-    command = _ruff_command(["check", "--output-format=json", *extra, *paths], version, sync)
+    # In fix mode `--fix` applies the safe autofixes in place; ruff still reports
+    # the violations that remain (exit 1) in the JSON, so classify/parse are
+    # unchanged and lint-enforce still fails the job on anything unfixable.
+    fix_flags = ["--fix"] if fix else []
+    command = _ruff_command(
+        ["check", "--output-format=json", *fix_flags, *extra, *paths], version, sync
+    )
     result = _run(command, working_directory)
     outcome, crashed = _classify(result.returncode)
     violations, annotations = _parse_ruff_check(result.stdout, workspace)
@@ -153,18 +160,24 @@ def _run_ruff_check(
 
 
 def _run_ruff_format(
-    working_directory: Path, workspace: Path, paths: list[str], version: str, sync: bool
+    working_directory: Path, workspace: Path, paths: list[str], version: str, sync: bool, fix: bool
 ) -> tuple[ToolOutcome, int, str, tuple[str, str]]:
     extra = _shlex("LINT_RUFF_FORMAT_ARGUMENTS")
-    command = _ruff_command(["format", "--check", "--diff", *extra, *paths], version, sync)
+    # Read-only mode gates with --check --diff (exit 1 when unformatted); fix mode
+    # runs `ruff format` to reformat in place (exit 0, printing the reformatted
+    # count). There is no diff to annotate once the files are rewritten.
+    if fix:
+        command = _ruff_command(["format", *extra, *paths], version, sync)
+    else:
+        command = _ruff_command(["format", "--check", "--diff", *extra, *paths], version, sync)
     result = _run(command, working_directory)
     outcome, crashed = _classify(result.returncode)
     unformatted = _parse_reformat_count(result.stdout + "\n" + result.stderr)
-    annotations = _format_annotations(result.stdout, workspace, working_directory)
+    annotations = [] if fix else _format_annotations(result.stdout, workspace, working_directory)
     return (
         ToolOutcome(outcome, crashed, annotations),
         unformatted,
-        result.stdout,
+        "" if fix else result.stdout,
         (
             "ruff-format.diff",
             result.stdout,

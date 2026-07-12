@@ -9,14 +9,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import runpy
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
 HARNESS = Path("harness/scenarios").resolve()
-REPO_ROOT = HARNESS.parents[1]
 
 
 def _load_ephemeral():
@@ -139,16 +137,10 @@ def test_cleanup_noop_when_no_matching_branches(
 # --------------------------------------------------------------------- setup
 
 
-def test_setup_pushes_branch_and_builds_payload(
+def test_setup_pushes_branch_and_builds_patch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _remote, work = _init_repo_with_remote(tmp_path)
-    scripts = work / "workflows/writeback/scripts"
-    scripts.mkdir(parents=True)
-    shutil.copy(REPO_ROOT / "workflows/writeback/scripts/create-payload.py", scripts)
-    _git(work, "add", "-A")
-    _git(work, "commit", "-m", "add create-payload")
-    _git(work, "push", "origin", "main")
 
     github_output = tmp_path / "output.txt"
     github_output.write_text("", encoding="utf-8")
@@ -162,7 +154,7 @@ def test_setup_pushes_branch_and_builds_payload(
             "GITHUB_RUN_ID": "7",
             "GITHUB_RUN_ATTEMPT": "1",
             "GITHUB_REPOSITORY": "owner/repo",
-            "DEVFLOWS_ARTIFACT_NAME": "wb-payload",
+            "DEVFLOWS_ARTIFACT_NAME": "wb-patch",
             "DEVFLOWS_BRANCH_PREFIX": "e2e/wb",
             "DEVFLOWS_FIXTURE_PATH": ".devflows-e2e/writeback",
             "DEVFLOWS_INITIAL_FILES": json.dumps([{"path": "remove.html", "content": "old\n"}]),
@@ -177,8 +169,13 @@ def test_setup_pushes_branch_and_builds_payload(
 
     outputs = github_output.read_text(encoding="utf-8")
     assert "branch=e2e/wb-7-1" in outputs
-    assert "artifact-name=wb-payload-7-1" in outputs
-    assert (work / ".devflows-writeback/payload/manifest.json").is_file()
+    assert "artifact-name=wb-patch-7-1" in outputs
+    patch_file = work / ".devflows-patch/changes.patch"
+    assert patch_file.is_file()
+    # The captured patch adds the new generated file and deletes the removed one.
+    patch_text = patch_file.read_text(encoding="utf-8")
+    assert "generated/index.html" in patch_text
+    assert "remove.html" in patch_text
     assert "e2e/wb-7-1" in _remote_heads(work)
 
 

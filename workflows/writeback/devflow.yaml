@@ -1,6 +1,6 @@
 id: writeback
 name: Writeback
-summary: Commit a validated writeback payload artifact to a repository branch.
+summary: Apply a patch artifact to a branch and push (the sole commit executor).
 status: active
 owners:
   - DevFlows maintainers
@@ -12,33 +12,40 @@ docs:
   keywords:
     - writeback
     - commit
-    - artifacts
+    - patch
     - generated-files
 io:
   job: writeback
   runtime: true
   job-output: true
 notes:
-  - Writeback consumes a manifest-based payload artifact rather than a raw tar
-    archive.
   - >-
-    The per-file SHA-256 digests in the manifest provide integrity (they detect
-    corruption of the payload in transit), not authenticity. Because the
-    manifest ships alongside the files it validates, an attacker who can
-    substitute the whole artifact can also rewrite the digests. Treat the
-    artifact upload/download channel and the job's contents: write permission as
-    the trust boundary, not the digests.
-  - Directory writebacks are treated as replacements, so removed generated files
-    are staged as deletions.
+    Writeback is the decoupled second half of the commit/push capability: any
+    workflow emits its workspace changes as a patch artifact (the patch-emit
+    channel), and this workflow consumes that artifact, git-applies it to a
+    checked-out target branch, and pushes. It is the ONLY catalog workflow that
+    holds contents: write, so no ordinary workflow forces that scope on its
+    callers.
   - >-
-    Deletions are idempotent: a delete path that is already absent from the
-    target branch is a no-op, not an error. Listing a path to delete never
-    aborts the writeback just because it is already gone.
+    The patch (changes.patch) is applied with `git apply --index --3way`, so it
+    still applies when the target branch advanced past the SHA the patch was
+    generated against -- git falls back to a three-way merge using the base blobs
+    named in the patch. A patch that truly conflicts fails loudly rather than
+    committing a bad merge.
   - >-
-    Payload files are written only after resolving the target's real parent
-    chain and confirming it stays inside GITHUB_WORKSPACE. Writing through a
-    symlinked parent directory, or over a symlink leaf, is refused so a payload
-    cannot escape the checkout.
+    git apply is the integrity and containment boundary: it rejects paths that
+    escape the repository and refuses to follow a symlink out of the tree. Treat
+    the artifact upload/download channel and this job's contents: write permission
+    as the trust boundary -- an attacker who can substitute the whole artifact can
+    author any patch, exactly as they could author any payload.
+  - >-
+    An empty patch (emitted when the source workspace had no changes) is a clean
+    no-op, and a patch that applies to no net change commits nothing rather than
+    creating an empty commit.
+  - >-
+    commit-expected-base-sha optionally guards the target: when set, the checkout
+    must already point at that SHA or the writeback aborts before applying,
+    protecting against a branch that moved between patch emission and apply.
   - >-
     The workflow is intended to run with contents: write and actions: read.
 examples: []

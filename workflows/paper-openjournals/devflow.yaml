@@ -30,7 +30,6 @@ io:
   checkout: true
   artifact-download: true
   artifact-upload: true
-  writeback: false
 notes:
   - >-
     Pure document build with NO external side effects, so the publishing-tier

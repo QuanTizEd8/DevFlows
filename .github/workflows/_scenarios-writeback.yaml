@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: true
-      - name: Prepare branch and writeback payload
+      - name: Prepare branch and workspace patch
         id: setup
         shell: bash
         env:
@@ -64,15 +64,14 @@ jobs:
               "generated"
             ]
         run: python harness/scenarios/setup-ephemeral-writeback.py
-      - name: Upload writeback payload
+      - name: Upload workspace patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ steps.setup.outputs.artifact-name }}
-          path: .devflows-writeback/payload
+          path: .devflows-patch/changes.patch
           if-no-files-found: error
           retention-days: 1
           overwrite: true
-          include-hidden-files: true
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
   writeback_ephemeral_branch_writeback_call:
     name: 'Writeback: Writeback to ephemeral branch'
@@ -86,7 +85,7 @@ jobs:
       commit-expected-base-sha: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.base-sha
         }}
       commit-repository: ${{ github.repository }}
-      writeback-artifact-name: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.artifact-name
+      patch-artifact-name: ${{ needs.writeback_ephemeral_branch_writeback_setup.outputs.artifact-name
         }}
     permissions:
       actions: read

@@ -82,7 +82,7 @@ def test_pandoc_docs_include_image_notes() -> None:
     assert "pandoc-image: pandoc/core:3.8" in rendered
     assert "artifact-upload-enabled: true" in rendered
     assert "artifact-download-enabled" in rendered
-    assert "commit-enabled" in rendered
+    assert "patch-emit-enabled" in rendered
     assert "`/.pandoc/templates/eisvogel.latex`" in rendered
     assert "pandoc/extra image may need explicit template paths" in rendered
     assert "`markdown-html-artifact`" in rendered
