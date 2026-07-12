@@ -1,6 +1,6 @@
 # DevFlows
 
-DevFlows is a catalog of **13 reusable, versioned, security-hardened GitHub
+DevFlows is a catalog of **14 reusable, versioned, security-hardened GitHub
 Actions workflows** — maintained as independently versioned building blocks that
 other repositories consume. The catalog spans six categories: **Containers**,
 **Documents**, **Pages**, **Python**, **Publishing**, and **Utilities**. Adopt a
@@ -60,7 +60,8 @@ the caller permission union, examples, and test scenarios. See the full
 
 **Containers** —
 {doc}`build-devcontainer </reference/workflows/build-devcontainer>` ·
-{doc}`binder-build </reference/workflows/binder-build>`
+{doc}`binder-build </reference/workflows/binder-build>` ·
+{doc}`devcontainer-run </reference/workflows/devcontainer-run>`
 
 **Utilities** — {doc}`writeback </reference/workflows/writeback>`
 

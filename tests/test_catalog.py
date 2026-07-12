@@ -12,6 +12,7 @@ def test_catalog_loads_active_workflows() -> None:
         "binder-build",
         "build-devcontainer",
         "deploy-pages",
+        "devcontainer-run",
         "docs-build",
         "pandoc",
         "paper-openjournals",

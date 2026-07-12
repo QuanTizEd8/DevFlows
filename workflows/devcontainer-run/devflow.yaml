@@ -1,0 +1,407 @@
+id: devcontainer-run
+name: Devcontainer Run
+summary:
+  Run a command inside a PREBUILT devcontainer image (an OCI reference) without
+  rebuilding, using @devcontainers/cli up + exec so the image's metadata label
+  supplies features, lifecycle hooks, remoteUser, and env automatically. Injects
+  non-secret env (container-env) and masked caller secrets (run-secrets) into the
+  hooks and the command.
+status: active
+owners:
+  - DevFlows maintainers
+release:
+  type: simple
+  major: 0
+docs:
+  category: Containers
+  keywords:
+    - devcontainer
+    - docker
+    - run
+    - exec
+    - containers
+    - cache
+    - pixi
+io:
+  job: run
+  runtime: true
+  runtime-jobs:
+    - validate
+  checkout: true
+  artifact-download: true
+  artifact-upload: true
+  writeback: true
+notes:
+  - >-
+    Caller permissions: the run job needs contents: read (to check out the
+    workspace the command sees as its bind mount), actions: read (added by the
+    artifact-download, artifact-upload, and writeback channels), and packages:
+    read (to pull a private ghcr.io image through the github.token docker-login
+    fallback). The optional writeback commit runs in a separate nested job that
+    statically requires contents: write (and actions: read), so a calling job
+    must grant at least permissions: contents: write, actions: read, packages:
+    read - GitHub validates a nested workflow's permissions before the run
+    starts, so contents: write is required even when commit-enabled is false (and
+    packages: read is simply unused for a public image). The validate job and the
+    run job themselves stay read-only (contents: read); only the isolated commit
+    job holds contents: write. There is no id-token anywhere.
+  - >-
+    Commit writeback is opt-in (commit-enabled, default false) and requires
+    explicit commit-paths. It commits files the container command wrote into the
+    workspace bind mount (for example a formatter's or code-generator's edits)
+    back to a branch, running in a separate contents: write job so the command
+    itself stays read-only. Pair it with remove-container to keep or drop the
+    container after the files are captured.
+  - >-
+    The internal writeback payload artifact name defaults to a run-scoped value
+    (devflows-devcontainer-run-writeback-<run_id>-<run_attempt>), so
+    commit-enabled invocations in different runs never collide. Invoking this
+    workflow more than once with commit-enabled in the SAME run still needs a
+    distinct commit-internal-artifact-name per invocation, because the run-scoped
+    default is identical within one run.
+  - >-
+    Runs a prebuilt image, never a build: `devcontainer up` against an
+    image-based config pulls the OCI reference (no docker build) and applies the
+    image's devcontainer.metadata label - features, onCreate/postCreate/postStart
+    hooks, remoteUser, and containerEnv - automatically, so a bare
+    {"image": "<ref>"} config gets the whole treatment. The resolved config must
+    yield an "image": devcontainer-image (or the config-file's own "image") wins,
+    and any build recipe the config-file also carries (build / dockerFile /
+    dockerComposeFile) is stripped so `up` pulls rather than builds. A config-file
+    that yields no image at all is rejected loudly rather than silently rebuilt.
+  - >-
+    Pairs with build-devcontainer: its images already carry the
+    devcontainer.metadata label (devcontainers/ci runs `devcontainer build`,
+    which stamps it), so build once (publish an image-ref) then run many commands
+    against that ref with devcontainer-run without rebuilding. This is the
+    capability build-devcontainer intentionally omits (it does not expose a run
+    command).
+  - >-
+    Injection safety: every input reaches a DevFlows script only through env, the
+    `devcontainer up`/`exec` argv are built programmatically (subprocess without a
+    shell), and there is zero ${{ inputs.* }} interpolation in any run: block. The
+    caller's run-command is delivered to the container shell as a single literal
+    argv token via `<run-shell> -c`, so a `$(...)`, `;`, or space in it is inert
+    at the workflow layer; the container shell interprets it, which is the
+    intended, contained behavior. run-command's exit code becomes the step's exit
+    code, so a failing command can never silently pass.
+  - >-
+    The caller owns the container's capabilities: the image, the
+    devcontainer-config-file (its features, mounts, runArgs, privileged,
+    remoteUser), and the run-command are all caller-supplied, so devcontainer-run
+    grants the caller nothing beyond what they already provide. Those capabilities
+    are bounded by the run job's least-privilege token - contents: read and
+    packages: read, with no write scope and no id-token - on an ephemeral runner,
+    so even a fully privileged container cannot write the repository or mint an
+    OIDC token. Supply only images and configs you trust, exactly as you would a
+    build step.
+  - >-
+    The image must contain a POSIX shell (/bin/sh): `devcontainer up` overrides
+    the entrypoint with a /bin/sh keep-alive loop and `exec` runs the command
+    through it, so a distroless image with no shell cannot be kept alive or run.
+    Alpine and other busybox images work but have no bash - use run-shell: sh for
+    them.
+  - >-
+    Multi-arch: `devcontainer up` pulls the runner-architecture image from a
+    multi-arch manifest, so the runner arch must match a manifest entry. An image
+    built only for linux/amd64 must run on an amd64 runner; the explicit docker
+    pull fails fast with a clear "no matching manifest" error otherwise.
+  - >-
+    A private image needs registry auth: set docker-login-enabled and provide
+    docker-password (or rely on the ghcr.io-only github.token fallback, which
+    needs packages: read). docker-login-enabled defaults false (build-devcontainer
+    defaults true) because a run usually pulls a public or ghcr.io image that needs
+    no explicit login; enable it only for a private image. The pull rides docker's
+    ambient credentials, so login happens before pull and `up`. The github.token
+    fallback is restricted to ghcr.io; any other registry without an explicit
+    docker-password fails in the validate job.
+  - >-
+    Cleanup is a separate if: always() step (there is no `devcontainer down`), so
+    a container left behind by a failed `up` is still removed. Files the command
+    wrote into the workspace persist on the host bind mount, so the
+    artifact-upload channel (which runs after, on success) still sees them; set
+    remove-container: false to leave the container for debugging.
+  - >-
+    container-env carries NON-secret values: each newline KEY=VALUE reaches both
+    `up` (lifecycle hooks) and `exec` (the command) as a repeated --remote-env, so
+    KEY=VALUE lands in the up/exec argv and is visible in the runner's process
+    list. Keep secrets out of it. The value is literal after the first '=' ('=' and
+    spaces are fine); a key must be a POSIX env name and an embedded control
+    character is rejected.
+  - >-
+    run-secrets injects SECRETS (use it, never container-env, for anything
+    sensitive). It is a DECLARED on.workflow_call secret, so its value is
+    GitHub-masked. The caller assembles it in one of two forms. Least-privilege
+    (primary): a JSON object built with per-value toJSON so each value stays
+    individually masked and correctly escaped -
+    `run-secrets: |` then `  {"API_TOKEN": ${{ toJSON(secrets.API_TOKEN) }}}`.
+    Forward-all (advanced): `secrets: inherit` plus
+    `run-secrets: ${{ toJSON(secrets) }}` - the workflow strips github_token /
+    GITHUB_TOKEN defensively so the Actions token is never injected. A newline
+    KEY=VALUE form (# comments / blank lines skipped) is also accepted. Each key
+    must be a POSIX env name; values are literal.
+  - >-
+    How run-secrets is wired (label-leak-safe): the run step parses the masked
+    RUN_SECRETS env with no echo/set -x and materializes two 0600 files under
+    RUNNER_TEMP - a secrets.json passed to `devcontainer up --secrets-file` (so
+    the creation lifecycle HOOKS get the secrets) and a separate exec
+    override-config whose remoteEnv carries the secrets to the COMMAND. Secrets go
+    in the EXEC override-config only, never the `up` override-config: an `up`
+    remoteEnv would be baked into the persisted `docker run -l
+    devcontainer.metadata` label (a `docker inspect` leak), whereas exec injects
+    them through a transient `docker exec -e KEY=VALUE`. Neither the npx/exec argv
+    nor `--remote-env` ever carries a secret value. The always() cleanup step
+    shreds both 0600 files (even on failure or remove-container: false). One
+    honest residual: the devcontainer CLI's final injection is a `docker exec -e
+    KEY=VALUE` on the runner (unavoidable, single-tenant ephemeral runner, masked
+    in logs).
+  - >-
+    Caching (cache-enabled) restores workspace paths with actions/cache BEFORE
+    `devcontainer up`, so the creation lifecycle hooks reuse them instead of
+    rebuilding. The canonical case is a pixi/conda devcontainer: build the image
+    once, then run with cache-enabled and cache-paths: .pixi so postCreate's
+    `pixi install` restores the solved environment rather than re-solving every
+    run (the .pixi dir is workspace-relative, so it caches directly through the
+    bind mount). cache-paths are HOST paths: a cache dir that lives only INSIDE the
+    container must be bind-mounted to a workspace/host path (via the config's
+    mounts) to be cacheable. cache-paths and cache-key are required when
+    cache-enabled is true; actions/cache saves the paths in its post-job hook after
+    the run. The inputs reach the SHA-pinned action only through with:, never a
+    run: body, so they are injection-safe.
+examples:
+  - name: Run a command in a prebuilt ghcr image
+    path: tests/fixtures/devcontainer-run/ghcr-image.yaml
+  - name: Chain build-devcontainer into devcontainer-run
+    path: tests/fixtures/devcontainer-run/build-then-run.yaml
+tests:
+  scenarios:
+    # The success scenario is hosted-only: it pulls a public image and runs the
+    # real @devcontainers/cli up + exec, so it cannot run under act. It uses a
+    # tiny config-file with an inline postCreateCommand marker to prove, in one
+    # fast job, that the image was pulled (no build), the creation hook ran, exec
+    # ran the caller command in the same kept-alive container, and a file the
+    # command wrote into the workspace survived on the host bind mount to be
+    # uploaded. alpine has only /bin/sh, so run-shell is sh.
+    - id: hooks-and-exec
+      name: Pull a public image, run its postCreate hook, and exec a command
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/hooks/devcontainer.json
+        run-shell: sh
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/hooks &&
+          test -f /tmp/devflows-postcreate.marker &&
+          printf 'hook-ran-and-command-ran\n' >
+          .devflows-test/devcontainer-run/hooks/result.txt
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-hooks
+        artifact-upload-path: .devflows-test/devcontainer-run/hooks
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: devcontainer-run-hooks
+        path: .devflows-test-artifacts/devcontainer-run/hooks
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: hook-ran-and-command-ran
+    # Caching is hosted-only: it runs the real `up`/`exec` AND actions/cache, which
+    # needs the GitHub cache service (unavailable under act). A tiny image-only
+    # config's postCreateCommand writes a marker into the cache-paths dir (.devflows-cache,
+    # workspace-relative so it caches directly through the bind mount); the command,
+    # running in the same kept-alive container, reads it back and uploads it. The run
+    # is cache-enabled with a run-scoped key, so the first run is a MISS (expected) -
+    # this proves the wiring: the restore step ran before `up`, `up`'s hook populated
+    # the cache-paths dir, and actions/cache uploads it in its post-job hook. alpine
+    # has only /bin/sh, so run-shell is sh.
+    - id: cache-restore-before-hooks
+      name: Restore a workspace cache before the creation hooks populate it
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/cache/devcontainer.json
+        run-shell: sh
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/cache &&
+          test -f .devflows-cache/marker.txt &&
+          cp .devflows-cache/marker.txt .devflows-test/devcontainer-run/cache/result.txt
+        cache-enabled: true
+        cache-paths: .devflows-cache
+        cache-key: devflows-devcontainer-run-cache-${{ github.run_id }}-${{ github.run_attempt }}
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-cache
+        artifact-upload-path: .devflows-test/devcontainer-run/cache
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: devcontainer-run-cache
+        path: .devflows-test-artifacts/devcontainer-run/cache
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: cached-by-postcreate
+    # Non-secret env injection, hosted-only (real `up`/`exec`). container-env is
+    # passed as a NON-secret KEY=VALUE; the config's postCreateCommand records
+    # whether the hook saw it (up --remote-env) into a container /tmp marker, and the
+    # command (exec --remote-env) both reads its OWN env var and greps that hook
+    # marker - proving container-env reaches BOTH `up` and `exec`. It asserts a
+    # derived marker, never the value itself, in the uploaded file.
+    - id: container-env-into-hooks-and-command
+      name: A container-env value reaches both the creation hook and the command
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/env/devcontainer.json
+        run-shell: sh
+        container-env: |
+          MARKER_ENV=devflows-env-marker
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/env &&
+          test "$MARKER_ENV" = "devflows-env-marker" &&
+          grep -q 'hook-env=devflows-env-marker' /tmp/devflows-env-hook.marker &&
+          printf 'env-visible-in-command-and-hook\n' >
+          .devflows-test/devcontainer-run/env/result.txt
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-env
+        artifact-upload-path: .devflows-test/devcontainer-run/env
+        artifact-upload-if-no-files-found: error
+      artifact:
+        name: devcontainer-run-env
+        path: .devflows-test-artifacts/devcontainer-run/env
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: env-visible-in-command-and-hook
+    # Secret injection, hosted-only (real `up`/`exec`). run-secrets is passed as a
+    # DECLARED, GitHub-masked secret carrying a NON-sensitive test literal (the
+    # scenario harness's new secrets passthrough emits it under `secrets:`). The
+    # config's postCreateCommand records the secret's LENGTH (a derived marker,
+    # never the value) into a container /tmp marker to prove the hook saw it (up
+    # --secrets-file); the command reads its OWN env var (exec override-config
+    # remoteEnv) and greps that hook marker - proving the secret reaches BOTH the
+    # hook and the command. Only the derived length ('6' for 'ok-123') is written
+    # to the uploaded file, never the raw value. alpine has only /bin/sh, so
+    # run-shell is sh.
+    - id: run-secrets-into-hooks-and-command
+      name: A run-secrets value reaches both the creation hook and the command
+      runs:
+        - hosted
+      inputs:
+        devcontainer-config-file: tests/scenarios/devcontainer-run/secrets/devcontainer.json
+        run-shell: sh
+        run-command: >-
+          mkdir -p .devflows-test/devcontainer-run/secrets &&
+          test -n "$DEVFLOWS_TEST_SECRET" &&
+          test "${#DEVFLOWS_TEST_SECRET}" = "6" &&
+          grep -q 'hook-secret-len=6' /tmp/devflows-secret-hook.marker &&
+          printf 'secret-visible-in-command-and-hook\n' >
+          .devflows-test/devcontainer-run/secrets/result.txt
+        artifact-upload-enabled: true
+        artifact-upload-name: devcontainer-run-secrets
+        artifact-upload-path: .devflows-test/devcontainer-run/secrets
+        artifact-upload-if-no-files-found: error
+      secrets:
+        run-secrets: '{"DEVFLOWS_TEST_SECRET":"ok-123"}'
+      artifact:
+        name: devcontainer-run-secrets
+        path: .devflows-test-artifacts/devcontainer-run/secrets
+      assertions:
+        - type: file-glob-exists
+          path: result.txt
+        - type: file-contains
+          path: result.txt
+          text: secret-visible-in-command-and-hook
+    # Failure-path scenarios run validate-inputs.py directly through the
+    # validation-failure harness (no reusable call). Each pins a stable substring
+    # of the rejection it targets and sets a valid run-command so the targeted
+    # field is the one that fails.
+    - id: invalid-image
+      name: A malformed devcontainer-image fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "valid image reference"
+      inputs:
+        devcontainer-image: "alpine:bad:ref"
+        run-command: echo hi
+    - id: neither-image-nor-config
+      name: Neither devcontainer-image nor devcontainer-config-file fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "at least one of devcontainer-image or devcontainer-config-file"
+      inputs:
+        run-command: echo hi
+    - id: invalid-run-shell
+      name: An unsupported run-shell fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "run-shell must be one of"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-shell: zsh
+        run-command: echo hi
+    - id: unsafe-config-file
+      name: A devcontainer-config-file that escapes the workspace fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "must stay inside"
+      inputs:
+        devcontainer-config-file: ../../../etc/passwd
+        run-command: echo hi
+    - id: invalid-features-json
+      name: Non-JSON devcontainer-features fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "devcontainer-features must be valid JSON"
+      inputs:
+        devcontainer-image: alpine:3.20
+        devcontainer-features: "{not json"
+        run-command: echo hi
+    - id: empty-run-command
+      name: An empty run-command fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "run-command is required"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-command: ""
+    - id: cache-enabled-without-paths
+      name: cache-enabled with no cache-paths fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cache-paths is empty"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-command: echo hi
+        cache-enabled: true
+        cache-key: some-key
+    - id: cache-enabled-without-key
+      name: cache-enabled with no cache-key fails validation
+      runs:
+        - local
+        - hosted
+      expect: validation-failure
+      failure-message-contains: "cache-key is empty"
+      inputs:
+        devcontainer-image: alpine:3.20
+        run-command: echo hi
+        cache-enabled: true
+        cache-paths: .pixi

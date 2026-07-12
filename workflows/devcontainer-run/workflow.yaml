@@ -1,0 +1,314 @@
+name: "[Reusable]: Devcontainer Run"
+
+on:
+  workflow_call:
+    inputs:
+      devcontainer-image:
+        description:
+          OCI image reference of a PREBUILT devcontainer to run, [registry/]name[:tag][@digest].
+          Required unless devcontainer-config-file supplies an image. Validated syntactically and
+          pulled without a rebuild; when it carries a devcontainer.metadata label (every
+          build-devcontainer image does) its features, lifecycle hooks, remoteUser, and env are
+          applied automatically. When devcontainer-config-file is also set, this overrides that
+          config's image.
+        type: string
+        required: false
+        default: ""
+      devcontainer-config-file:
+        description:
+          Optional workspace-relative path to a caller .devcontainer/devcontainer.json for full
+          control (its features and lifecycle hooks are preserved). Validated relative, no '..',
+          inside GITHUB_WORKSPACE. When empty, a minimal image-only config is synthesized from
+          devcontainer-image. The resolved config must yield an image (this workflow runs a prebuilt
+          image and never builds from a Dockerfile), else the run fails loudly.
+        type: string
+        required: false
+        default: ""
+      run-command:
+        description:
+          The command line executed inside the container, as `<run-shell> -c "<run-command>"`.
+          Injection-safe - delivered to the container shell env-mediated as a single literal argv
+          token, never interpolated into this workflow's own run block, so a `$(...)`, `;`, or space
+          is inert at the workflow layer (the container shell still interprets it, which is the
+          intended, contained behavior). Its exit code becomes the step's exit code.
+        type: string
+        required: true
+      run-shell:
+        description: Shell used to run run-command inside the container; one of bash or sh.
+        type: string
+        required: false
+        default: bash
+      run-working-directory:
+        description:
+          Optional workspace-relative subdirectory to cd into (inside the container's workspace
+          mount) before run-command. Validated relative, no '..', inside GITHUB_WORKSPACE. Empty runs
+          at the container's default workspace folder.
+        type: string
+        required: false
+        default: ""
+      remote-user:
+        description:
+          Optional user to run the command as inside the container (injected as "remoteUser" into the
+          override config, e.g. root). Empty keeps the config/label remoteUser.
+        type: string
+        required: false
+        default: ""
+      skip-post-create:
+        description:
+          Whether to pass --skip-post-create to `devcontainer up` (start the container and entrypoint
+          without running the creation lifecycle hooks).
+        type: boolean
+        required: false
+        default: false
+      update-remote-user-uid:
+        description:
+          --update-remote-user-uid-default for `devcontainer up`; one of never, on, or off. Rewrites
+          the remote user's UID/GID to match the host user so bind-mounted files stay writable; set
+          never for images that misbehave with the update.
+        type: string
+        required: false
+        default: on
+      container-env:
+        description:
+          Newline-separated KEY=VALUE pairs passed to the container as repeated --remote-env for both
+          `up` (so lifecycle hooks get them) and `exec` (so the command gets them). Each key must be a
+          valid environment variable name; the value is taken literally after the first '=' (so '='
+          and spaces are fine) and an embedded control character is rejected. For NON-secret values
+          only - --remote-env places KEY=VALUE in the up/exec argv, which is visible in the runner's
+          process list, so do not put secrets here.
+        type: string
+        required: false
+        default: ""
+      devcontainer-features:
+        description:
+          Optional JSON object of additional dev container Features (feature-id -> options) passed to
+          `devcontainer up` as --additional-features. Validated as a JSON object.
+        type: string
+        required: false
+        default: ""
+      remove-container:
+        description:
+          Whether the always() cleanup step removes the container (docker rm -f) at the end of the
+          run. Files the command wrote into the workspace persist on the host bind mount regardless.
+        type: boolean
+        required: false
+        default: true
+      devcontainer-cli-version:
+        description:
+          The pinned @devcontainers/cli npm version, run ephemerally with `npx --yes` (nothing is
+          installed into a global prefix). Kept current by Renovate.
+        type: string
+        required: false
+        # renovate: datasource=npm depName=@devcontainers/cli
+        default: "0.87.0"
+      run-timeout-minutes:
+        description: timeout-minutes for the validate and run jobs.
+        type: number
+        required: false
+        default: 30
+      docker-login-enabled:
+        description:
+          Whether to log in to a Docker registry before pulling and running the image. Defaults to
+          false (build-devcontainer defaults true) because a run usually pulls a public or ghcr.io
+          image that needs no explicit login - ghcr.io uses the github.token fallback with the
+          packages read scope. Set true only to pull a private image from a registry that requires
+          authentication, and provide docker-password (or a non-ghcr.io registry).
+        type: boolean
+        required: false
+        default: false
+      docker-registry:
+        description: Docker registry hostname. Leave empty for Docker Hub.
+        type: string
+        required: false
+        default: ghcr.io
+      docker-username:
+        description: Docker registry username.
+        type: string
+        required: false
+        default: ${{ github.repository_owner }}
+      cache-enabled:
+        description:
+          Whether to restore (before `devcontainer up`) and save (in the post-job hook) a
+          workspace cache with actions/cache. Restoring before `up` lets the creation lifecycle
+          hooks (e.g. a pixi install) reuse a previously cached environment instead of rebuilding
+          it every run. When true, cache-paths and cache-key are required.
+        type: boolean
+        required: false
+        default: false
+      cache-paths:
+        description:
+          Newline-separated paths to cache, passed verbatim to actions/cache's `path`. These are
+          HOST paths - a workspace-relative path (e.g. .pixi) is bind-mounted into the container so
+          it caches directly; a cache directory that lives only INSIDE the container must be
+          bind-mounted to a workspace/host path (via the config's mounts) to be cacheable. Required
+          when cache-enabled is true.
+        type: string
+        required: false
+        default: ""
+      cache-key:
+        description:
+          The exact actions/cache key to restore and save under. Required when cache-enabled is
+          true; typically includes a lockfile hash the caller computes with hashFiles (e.g. a key
+          like pixi-<hash-of-pixi.lock>).
+        type: string
+        required: false
+        default: ""
+      cache-restore-keys:
+        description:
+          Optional newline-separated fallback key prefixes for actions/cache's `restore-keys`, tried
+          in order when cache-key misses so a run can still restore a close-enough older cache.
+        type: string
+        required: false
+        default: ""
+    secrets:
+      docker-password:
+        description:
+          Docker registry password or token. Defaults to github.token for ghcr.io only.
+        required: false
+      run-secrets:
+        description:
+          Optional bundle of caller SECRETS injected into the run so they reach the
+          creation lifecycle hooks (via `devcontainer up --secrets-file`) and the
+          command (via the exec override-config remoteEnv, a transient docker exec
+          -e, never a process-list-visible --remote-env). Declared as a secret so
+          its value is GitHub-masked; NEVER pass secrets through the non-secret
+          container-env input. Two forms are accepted. Primary least-privilege form
+          is a JSON object the caller assembles with per-value toJSON so each value
+          stays individually masked and correctly escaped (an object mapping each
+          NAME to its own toJSON(secrets.NAME) expression). Advanced forward-all
+          form sets the caller job secrets to inherit and passes run-secrets as a
+          toJSON(secrets) expression (the workflow strips github_token defensively
+          so the Actions token is never injected). A newline KEY=VALUE form
+          (# comments and blank lines skipped) is also accepted. Each key must be a
+          POSIX env-var name; values are literal. github_token and GITHUB_TOKEN are
+          always dropped.
+        required: false
+    outputs:
+      container-id:
+        description: The container ID `devcontainer up` started for this run.
+        value: ${{ jobs.run.outputs.container-id }}
+      remote-user:
+        description: The remoteUser the command ran as (from the config or the image metadata label).
+        value: ${{ jobs.run.outputs.remote-user }}
+
+permissions: {}
+
+jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: ${{ inputs.run-timeout-minutes }}
+    steps:
+      - name: Validate inputs
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
+          DEVCONTAINER_CONFIG_FILE: ${{ inputs.devcontainer-config-file }}
+          RUN_COMMAND: ${{ inputs.run-command }}
+          RUN_SHELL: ${{ inputs.run-shell }}
+          RUN_WORKING_DIRECTORY: ${{ inputs.run-working-directory }}
+          REMOTE_USER: ${{ inputs.remote-user }}
+          SKIP_POST_CREATE: ${{ inputs.skip-post-create }}
+          UPDATE_REMOTE_USER_UID: ${{ inputs.update-remote-user-uid }}
+          CONTAINER_ENV: ${{ inputs.container-env }}
+          DEVCONTAINER_FEATURES: ${{ inputs.devcontainer-features }}
+          DEVCONTAINER_CLI_VERSION: ${{ inputs.devcontainer-cli-version }}
+          CACHE_ENABLED: ${{ inputs.cache-enabled }}
+          CACHE_PATHS: ${{ inputs.cache-paths }}
+          CACHE_KEY: ${{ inputs.cache-key }}
+          CACHE_RESTORE_KEYS: ${{ inputs.cache-restore-keys }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/validate-inputs.py"
+
+      - name: Check registry auth
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          DOCKER_LOGIN_ENABLED: ${{ inputs.docker-login-enabled }}
+          DOCKER_PASSWORD_SET: ${{ secrets.docker-password != '' }}
+          DOCKER_REGISTRY: ${{ inputs.docker-registry }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/check-registry-auth.py"
+
+  run:
+    name: Run command in devcontainer
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.run-timeout-minutes }}
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      container-id: ${{ steps.run.outputs.container-id }}
+      remote-user: ${{ steps.run.outputs.remote-user }}
+    steps:
+      # Restore BEFORE `devcontainer up` so the creation lifecycle hooks (e.g. a
+      # pixi/conda install run by postCreateCommand) see the restored workspace
+      # paths on the host bind mount and skip rebuilding. actions/cache saves the
+      # same paths in its post-job hook after the run. cache-paths/key/restore-keys
+      # reach the action only through with:, never a run: body, so they are safe.
+      - name: Restore workspace cache
+        if: ${{ inputs.cache-enabled }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ inputs.cache-paths }}
+          key: ${{ inputs.cache-key }}
+          restore-keys: ${{ inputs.cache-restore-keys }}
+
+      - name: Docker login
+        if: inputs.docker-login-enabled
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ inputs.docker-registry }}
+          username: ${{ inputs.docker-username }}
+          password: ${{ secrets.docker-password || (inputs.docker-registry == 'ghcr.io' && github.token) || '' }}
+
+      - name: Set up devcontainer CLI
+        shell: bash
+        env:
+          DEVCONTAINER_CLI_VERSION: ${{ inputs.devcontainer-cli-version }}
+        # Warm the npx cache and fail fast if the pinned version cannot resolve.
+        # The run script invokes the same pinned CLI through npx (the npm peer of
+        # uvx), so nothing is installed into a global prefix.
+        run: npx --yes "@devcontainers/cli@${DEVCONTAINER_CLI_VERSION}" --version
+
+      - name: Run command in devcontainer
+        id: run
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          ID_LABEL: devflows.run=${{ github.run_id }}-${{ github.run_attempt }}
+          DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
+          DEVCONTAINER_CONFIG_FILE: ${{ inputs.devcontainer-config-file }}
+          RUN_COMMAND: ${{ inputs.run-command }}
+          RUN_SHELL: ${{ inputs.run-shell }}
+          RUN_WORKING_DIRECTORY: ${{ inputs.run-working-directory }}
+          REMOTE_USER: ${{ inputs.remote-user }}
+          SKIP_POST_CREATE: ${{ inputs.skip-post-create }}
+          UPDATE_REMOTE_USER_UID: ${{ inputs.update-remote-user-uid }}
+          CONTAINER_ENV: ${{ inputs.container-env }}
+          DEVCONTAINER_FEATURES: ${{ inputs.devcontainer-features }}
+          DEVCONTAINER_CLI_VERSION: ${{ inputs.devcontainer-cli-version }}
+          # A DECLARED, GitHub-masked secret (never an input). Parsed + validated
+          # inside the script with no echo/set -x around it; the value only ever
+          # lives in this masked env var and the 0600 secret files it writes.
+          RUN_SECRETS: ${{ secrets.run-secrets }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun.py
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun_run.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/run-devcontainer.py"
+
+      - name: Clean up container
+        if: always()
+        shell: bash
+        env:
+          DEVFLOWS_SCRIPT_ROOT: ${{ steps.devflows-runtime.outputs.script-root }}
+          ID_LABEL: devflows.run=${{ github.run_id }}-${{ github.run_attempt }}
+          REMOVE_CONTAINER: ${{ inputs.remove-container }}
+        run: |
+          # imports ${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/dcrun_run.py
+          python "${DEVFLOWS_SCRIPT_ROOT}/devcontainer-run/cleanup.py"

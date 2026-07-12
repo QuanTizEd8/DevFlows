@@ -1,0 +1,4 @@
+{
+  "image": "alpine:3.20",
+  "postCreateCommand": "sh -c 'echo hook-env=${MARKER_ENV:-MISSING} > /tmp/devflows-env-hook.marker'"
+}

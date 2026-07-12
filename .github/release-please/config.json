@@ -32,6 +32,13 @@
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0"
     },
+    "workflows/devcontainer-run": {
+      "component": "devcontainer-run",
+      "release-type": "simple",
+      "package-name": "devcontainer-run",
+      "changelog-path": "CHANGELOG.md",
+      "initial-version": "0.1.0"
+    },
     "workflows/docs-build": {
       "component": "docs-build",
       "release-type": "simple",

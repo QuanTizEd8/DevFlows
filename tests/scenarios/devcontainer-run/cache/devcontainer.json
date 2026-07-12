@@ -1,0 +1,4 @@
+{
+  "image": "alpine:3.20",
+  "postCreateCommand": "mkdir -p .devflows-cache && printf 'cached-by-postcreate\n' > .devflows-cache/marker.txt"
+}

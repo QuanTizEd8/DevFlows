@@ -1,0 +1,41 @@
+name: Build then Run Devcontainer
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Build once: publish a multi-arch devcontainer image whose devcontainer.metadata
+  # label carries the features and lifecycle hooks.
+  build:
+    uses: QuanTizEd8/DevFlows/.github/workflows/build-devcontainer.yaml@build-devcontainer/v0.1.0
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    with:
+      image-name: ghcr.io/owner/project-devcontainer
+      image-tags: latest
+    secrets:
+      docker-password: ${{ secrets.GITHUB_TOKEN }}
+
+  # Run many commands against that image without rebuilding. Guard on the
+  # non-empty image-ref so a skipped or empty build never runs a bad ref.
+  test:
+    needs: build
+    if: ${{ !cancelled() && needs.build.outputs.image-ref != '' }}
+    uses: QuanTizEd8/DevFlows/.github/workflows/devcontainer-run.yaml@devcontainer-run/v0.1.0
+    # contents: write is required by devcontainer-run's optional writeback commit
+    # job (validated at startup even though this example does not commit).
+    permissions:
+      actions: read
+      contents: write
+      packages: read
+    with:
+      devcontainer-image: ${{ needs.build.outputs.image-ref }}
+      run-command: |
+        python -m pytest
+      docker-login-enabled: true
+    secrets:
+      docker-password: ${{ secrets.GITHUB_TOKEN }}

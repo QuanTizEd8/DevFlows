@@ -107,6 +107,21 @@
       versioningTemplate: "pep440"
     },
     {
+      // Keep the pinned @devcontainers/cli npm version the devcontainer-run
+      // workflow runs ephemerally (via `npx --yes @devcontainers/cli@<version>`)
+      // current. The inline `# renovate:` comment above the devcontainer-cli-version
+      // input default supplies datasource/depName; Renovate bumps the npm version
+      // string in place. A unit test (tests/test_devcontainer_run.py) asserts this
+      // regex still matches the default so the pin never silently stops updating.
+      // Run `devflows sync` after a bump so the generated copy tracks it.
+      customType: "regex",
+      managerFilePatterns: ["/^workflows/devcontainer-run/workflow\\.yaml$/"],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+default: "(?<currentValue>[^"]+)"'
+      ],
+      versioningTemplate: "npm"
+    },
+    {
       // Keep the PyYAML version zenodo-release installs ephemerally (uv run --with
       // "pyyaml==<version>") in the prepare job current. A unit test
       // (tests/test_zenodo_release.py) asserts this regex still matches the pin.

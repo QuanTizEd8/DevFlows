@@ -139,6 +139,67 @@ Two conventions make chains robust:
   `package-version` into the publisher makes tag/artifact skew impossible before
   an irreversible upload.
 
+The container tier composes the same way:
+{doc}`build-devcontainer </reference/workflows/build-devcontainer>` publishes an
+image whose `devcontainer.metadata` label carries its features and lifecycle
+hooks, and {doc}`devcontainer-run </reference/workflows/devcontainer-run>`
+consumes that `image-ref` to run any command inside it **without rebuilding**
+(the label supplies the features, hooks, `remoteUser`, and env automatically).
+Build once, then run many commands — lint, tests, a script — against the same
+prebuilt image.
+
+Two `devcontainer-run` inputs make that loop fast and configurable (see the
+{doc}`reference </reference/workflows/devcontainer-run>` for the full input
+list):
+
+- **Non-secret env into the container.** `container-env` takes newline
+  `KEY=VALUE` pairs and injects each into both `up` (so lifecycle hooks see it)
+  and `exec` (so your command sees it) via `--remote-env`. Because that places
+  `KEY=VALUE` in the process list, use it for non-secret configuration only.
+- **Secrets into the container.** Anything sensitive goes through the
+  `run-secrets` **secret** (declared under `on.workflow_call.secrets`, so its
+  value is GitHub-masked) — never `container-env`. The workflow delivers the
+  secrets to the creation hooks (`devcontainer up --secrets-file`) and to your
+  command (through the `exec` override-config's `remoteEnv`, a transient
+  `docker exec -e`), and shreds the 0600 secret files in its cleanup step.
+  Assemble the bundle least-privilege, one value at a time with `toJSON` so each
+  stays individually masked and correctly escaped:
+
+  ```yaml
+  with:
+    devcontainer-image: ${{ needs.build.outputs.image-ref }}
+    run-command: pixi run pytest
+  secrets:
+    run-secrets: |
+      {"API_TOKEN": ${{ toJSON(secrets.API_TOKEN) }}, "DB_PASSWORD": ${{ toJSON(secrets.DB_PASSWORD) }}}
+  ```
+
+  For a quick forward-all (broader, less precise), use `secrets: inherit` with
+  `run-secrets: ${{ toJSON(secrets) }}` — the workflow strips `github_token`
+  defensively so the Actions token is never injected. Rule of thumb: secrets use
+  `run-secrets`, non-secrets use `container-env`.
+
+- **Cache the environment across runs.** Set `cache-enabled: true` with
+  `cache-paths` and `cache-key` to restore a workspace cache **before**
+  `devcontainer up` runs the creation hooks. For a pixi/conda devcontainer whose
+  `postCreateCommand` runs `pixi install`, caching `.pixi` (a workspace-relative
+  path, so it caches directly through the bind mount) lets the hook reuse the
+  solved environment instead of re-solving every run:
+
+  ```yaml
+  with:
+    devcontainer-image: ${{ needs.build.outputs.image-ref }}
+    run-command: pixi run pytest
+    cache-enabled: true
+    cache-paths: .pixi
+    cache-key: pixi-${{ hashFiles('pixi.lock') }}
+    cache-restore-keys: |
+      pixi-
+  ```
+
+  A cache directory that lives only inside the container must be bind-mounted to
+  a workspace/host path (via the config's `mounts`) to be cacheable.
+
 ## Publishing-Tier Patterns
 
 The Publishing tier (`pypi-publish`, `anaconda-publish`, `zenodo-release`) and

@@ -1,0 +1,4 @@
+{
+  "image": "alpine:3.20",
+  "postCreateCommand": "echo POSTCREATE_MARKER > /tmp/devflows-postcreate.marker"
+}
