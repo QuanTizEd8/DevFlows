@@ -41,7 +41,13 @@ def _identity_files() -> list[Path]:
     tracked = subprocess.run(
         ["git", "ls-files"], check=True, capture_output=True, text=True
     ).stdout.splitlines()
-    named = {"README.md", "SECURITY.md", "CONTRIBUTING.md", "renovate.json5", ".act/push.json"}
+    named = {
+        "README.md",
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        ".config/renovate.json5",
+        ".act/push.json",
+    }
     named.add(".devcontainer/devcontainer.json")
     keep: list[Path] = []
     for rel in tracked:

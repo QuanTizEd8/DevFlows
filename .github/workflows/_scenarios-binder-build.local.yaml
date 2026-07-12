@@ -46,7 +46,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: image-name is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_invalid_image_name_validate:
     name: 'Binder Build: image-name carrying a tag fails validation'
@@ -75,7 +75,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: WITHOUT a tag
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_empty_image_tags_validate:
     name: 'Binder Build: image-tags resolving to an empty list fails validation'
@@ -104,7 +104,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: non-empty newline-separated list
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_push_without_environment_validate:
     name: 'Binder Build: A real push with no push-environment-name fails validation'
@@ -133,7 +133,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: push-environment-name is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_arguments_owned_push_flag_validate:
     name: 'Binder Build: A --push smuggled through repo2docker-arguments fails validation'
@@ -162,7 +162,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_arguments_owned_image_name_validate:
     name: 'Binder Build: An attached --image-name=value fails validation'
@@ -191,7 +191,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_arguments_attached_short_option_validate:
     name: 'Binder Build: An attached short option fails validation'
@@ -220,7 +220,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: only the allowlisted passthrough flags
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_arguments_bare_positional_validate:
     name: 'Binder Build: A bare positional source fails validation'
@@ -249,7 +249,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: only the allowlisted passthrough flags
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_arguments_invalid_shlex_validate:
     name: 'Binder Build: An unbalanced quote in repo2docker-arguments fails validation'
@@ -278,7 +278,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: could not be parsed as shell arguments
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_unsafe_source_path_validate:
     name: 'Binder Build: A repo2docker-source-path escaping the workspace fails validation'
@@ -307,7 +307,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: workspace-relative path
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_invalid_repo2docker_version_validate:
     name: 'Binder Build: A repo2docker-version with a smuggled specifier fails validation'
@@ -336,7 +336,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: date-based jupyter-repo2docker version
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   binder_build_unsafe_dockerfile_artifact_name_validate:
     name: 'Binder Build: An artifact-unsafe dockerfile-artifact-name fails validation'
@@ -365,5 +365,5 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: artifact-safe token
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

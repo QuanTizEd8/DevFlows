@@ -154,7 +154,7 @@ tests:
     # call) through the expect: validation-failure harness, so they run under both
     # act and hosted CI. They cover the mode matrix's meaningful rejections and
     # never touch the filesystem (each fails before pages-path is resolved).
-    # Exhaustive script coverage still lives in tests/test_deploy_pages.py.
+    # Exhaustive script coverage still lives in tests/workflows/test_deploy_pages.py.
     - id: pages-path-missing
       name: Packaging enabled without a pages-path fails validation
       runs:

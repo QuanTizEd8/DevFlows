@@ -57,12 +57,12 @@ every external dependency auditable.
   `# vX.Y.Z` comment restoring the human-readable version the bare SHA hides
   (for example
   `uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0`).
-  A single registry, `src/devflows/actions.py` (`ACTION_PINS`), is the source of
-  truth for every pin. The generator (the _adapter model_) maps DevFlows inputs
-  onto each pinned action's real interface, and an adapter contract test asserts
-  the emitted `with:` keys still match when a pin is bumped, so an upstream
-  interface change cannot silently break a workflow.
-- **Renovate keeps the pins current.** `renovate.json5` enforces the
+  A single registry, `.dev/src/devflows/actions.py` (`ACTION_PINS`), is the
+  source of truth for every pin. The generator (the _adapter model_) maps
+  DevFlows inputs onto each pinned action's real interface, and an adapter
+  contract test asserts the emitted `with:` keys still match when a pin is
+  bumped, so an upstream interface change cannot silently break a workflow.
+- **Renovate keeps the pins current.** `.config/renovate.json5` enforces the
   digest-pin-with-version-comment policy, bumps the `ACTION_PINS` registry
   through a custom manager, and updates the ephemerally installed tool pins
   (`jupyter-repo2docker`, `anaconda-client`, the `openjournals/inara` image,

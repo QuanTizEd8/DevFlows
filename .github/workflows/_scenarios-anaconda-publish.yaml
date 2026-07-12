@@ -33,7 +33,7 @@ jobs:
                 "source-path": "tests/scenarios/anaconda-publish/anaconda_publish_fixture-0.1.0-h0.conda"
               }
             ]
-        run: python harness/scenarios/create-setup-files.py
+        run: python .dev/harness/scenarios/create-setup-files.py
       - name: Upload setup artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -73,35 +73,35 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.anaconda_publish_upload_dry_run_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output package-version
         shell: bash
         env:
           ASSERT_NAME: package-version
           EXPECTED: 0.1.0
           ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.package-version }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output staged-specs
         shell: bash
         env:
           ASSERT_NAME: staged-specs
           EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
           ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.staged-specs }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output uploaded-files
         shell: bash
         env:
           ASSERT_NAME: uploaded-files
           EXPECTED: anaconda_publish_fixture-0.1.0-h0.conda
           ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.uploaded-files }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output promoted-specs
         shell: bash
         env:
           ASSERT_NAME: promoted-specs
           EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
           ACTUAL: ${{ needs.anaconda_publish_upload_dry_run_call.outputs.promoted-specs }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   anaconda_publish_promote_only_dry_run_call:
     name: 'Anaconda Publish: Promote-only dry-run plans a relabel and skips verify''s upload derivation'
     uses: ./.github/workflows/anaconda-publish.yaml
@@ -129,21 +129,21 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.anaconda_publish_promote_only_dry_run_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output promoted-specs
         shell: bash
         env:
           ASSERT_NAME: promoted-specs
           EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
           ACTUAL: ${{ needs.anaconda_publish_promote_only_dry_run_call.outputs.promoted-specs }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output staged-specs
         shell: bash
         env:
           ASSERT_NAME: staged-specs
           EXPECTED: ''
           ACTUAL: ${{ needs.anaconda_publish_promote_only_dry_run_call.outputs.staged-specs }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   anaconda_publish_maintain_dry_run_call:
     name: 'Anaconda Publish: Maintain dry-run plans the exact owner-qualified removal without a token'
     uses: ./.github/workflows/anaconda-publish.yaml
@@ -171,14 +171,14 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.anaconda_publish_maintain_dry_run_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output removed-specs
         shell: bash
         env:
           ASSERT_NAME: removed-specs
           EXPECTED: devflows-fixture/anaconda_publish_fixture/0.1.0
           ACTUAL: ${{ needs.anaconda_publish_maintain_dry_run_call.outputs.removed-specs }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   anaconda_publish_nothing_to_do_validate:
     name: 'Anaconda Publish: No mode enabled fails validation'
     runs-on: ubuntu-latest
@@ -210,7 +210,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_maintain_not_exclusive_validate:
     name: 'Anaconda Publish: maintain combined with upload fails validation'
     runs-on: ubuntu-latest
@@ -242,7 +242,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: mutually exclusive
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_upload_without_manifest_validate:
     name: 'Anaconda Publish: upload without a manifest fails validation'
     runs-on: ubuntu-latest
@@ -274,7 +274,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_malformed_manifest_validate:
     name: 'Anaconda Publish: unparseable manifest JSON fails validation'
     runs-on: ubuntu-latest
@@ -306,7 +306,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: not valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_manifest_artifact_mismatch_validate:
     name: 'Anaconda Publish: manifest conda-channel not matching artifact-download-name fails validation'
     runs-on: ubuntu-latest
@@ -338,7 +338,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: some-other-artifact
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: does not match artifact-download-name
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_manifest_no_conda_files_validate:
     name: 'Anaconda Publish: manifest with zero conda entries fails validation'
     runs-on: ubuntu-latest
@@ -370,7 +370,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: contains no conda packages
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_promote_only_without_specs_validate:
     name: 'Anaconda Publish: promote-only without promote-specs fails validation'
     runs-on: ubuntu-latest
@@ -402,7 +402,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: promote-specs is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_spec_with_owner_validate:
     name: 'Anaconda Publish: an owner-qualified spec fails validation'
     runs-on: ubuntu-latest
@@ -434,7 +434,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: without an owner segment
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_label_collision_validate:
     name: 'Anaconda Publish: equal upload-label and promote-label fails validation'
     runs-on: ubuntu-latest
@@ -466,7 +466,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must differ
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_maintain_unconfirmed_validate:
     name: 'Anaconda Publish: maintain without a matching confirm fails validation'
     runs-on: ubuntu-latest
@@ -498,7 +498,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: maintain-confirm must equal publish-owner
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_forbidden_upload_argument_validate:
     name: 'Anaconda Publish: a safety flag smuggled through upload-arguments fails validation'
     runs-on: ubuntu-latest
@@ -530,7 +530,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   anaconda_publish_bad_existing_mode_validate:
     name: 'Anaconda Publish: an invalid upload-existing-mode fails validation'
     runs-on: ubuntu-latest
@@ -562,4 +562,4 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of fail, skip, overwrite
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

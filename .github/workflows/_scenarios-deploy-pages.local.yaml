@@ -33,7 +33,7 @@ jobs:
           PAGES_ARTIFACT_NAME: github-pages
           PAGES_TIMEOUT_MINUTES: '10'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: pages-path is required when pages-artifact-enabled is true
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   deploy_pages_nothing_to_do_validate:
     name: 'Deploy Pages: Neither packaging nor deploying fails validation'
@@ -49,7 +49,7 @@ jobs:
           PAGES_ARTIFACT_NAME: github-pages
           PAGES_TIMEOUT_MINUTES: '10'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   deploy_pages_deploy_only_with_path_validate:
     name: 'Deploy Pages: Deploy-only mode with a pages-path fails validation'
@@ -65,5 +65,5 @@ jobs:
           PAGES_ARTIFACT_NAME: github-pages
           PAGES_TIMEOUT_MINUTES: '10'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: pages-path must be empty when pages-artifact-enabled is false
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

@@ -25,7 +25,7 @@ hand-author checkout/artifact/writeback inputs or steps; those come from the IO
 channels in step 4. Start from `permissions: {}` and grant each job only what it
 needs. Pass every untrusted input through an environment variable into a script
 (never interpolate `${{ inputs.* }}` into shell text), and pin any third-party
-action to a SHA registered in `src/devflows/actions.py` (see
+action to a SHA registered in `.dev/src/devflows/actions.py` (see
 {doc}`adapter-and-action-pins`).
 
 A minimal shape:
@@ -192,7 +192,7 @@ examples:
 ```
 
 Create `tests/fixtures/<id>/basic.yaml` as a realistic, small caller. A test
-(`tests/test_example_fixtures.py`) checks every example path resolves.
+(`tests/package/test_example_fixtures.py`) checks every example path resolves.
 
 **Scenarios** are executable tests under `tests.scenarios`. Include at least one
 assertion, and add fixture inputs under `tests/scenarios/<id>/` when a scenario
@@ -261,11 +261,11 @@ Three registrations must land in the same change, or `task lint` /
    ```
 
 3. **catalog test** — add `<id>` in sorted position to the expected list in
-   `tests/test_catalog.py::test_catalog_loads_active_workflows`.
+   `tests/package/test_catalog.py::test_catalog_loads_active_workflows`.
 
 If the workflow **pins a tool or container version** (installed with
 `uvx --from tool==<version>`, `uv run --with`, or a container image tag), add a
-custom Renovate manager in `renovate.json5` driven by an inline
+custom Renovate manager in `.config/renovate.json5` driven by an inline
 `# renovate: datasource=… depName=…` comment, and a unit test that asserts the
 regex still matches the pin (as the existing publishing/paper/binder workflows
 do). This keeps the pin auto-updating. See {doc}`adapter-and-action-pins`.
@@ -287,7 +287,7 @@ task release-check
 ```
 
 `task lint` fails if you forgot to regenerate — fix with the matching writer and
-commit. If your change touched the shared generator (`src/devflows/`), also
+commit. If your change touched the shared generator (`.dev/src/devflows/`), also
 satisfy the propagation guard (see {doc}`release`).
 
 ### Promotion Checklist

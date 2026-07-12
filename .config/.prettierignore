@@ -10,11 +10,19 @@
 # Hand-written operational workflows also live under .github/workflows/ and are
 # linted by actionlint + zizmor + yamllint, so workflow YAML formatting as a whole
 # stays out of prettier's scope. Prettier still owns docs (*.md) and standalone
-# config (*.json, non-workflow *.yml/*.yaml such as .prettierrc.yaml and the
+# config (*.json, non-workflow *.yml/*.yaml such as prettierrc.yaml and the
 # release-please config).
+#
+# Path anchoring note: this file lives in .config/, and prettier resolves a
+# pattern that contains a mid-path slash relative to THIS file's directory. A
+# bare `docs/_build/` would therefore only match `.config/docs/_build/`. Mid-path
+# patterns are written `**/<path>/` so they float and match the repo-root path.
+# Single-segment patterns (e.g. `.pixi/`) already match at any depth. Because
+# `--ignore-path` overrides prettier's default of ALSO reading `.gitignore`, the
+# git-ignored generated/cache trees that prettier would scan are mirrored here.
 
 # Generator-owned / actionlint-owned GitHub Actions workflows (see policy above)
-.github/workflows/
+**/.github/workflows/
 workflows/
 
 # Environments, caches, and local agent scratch directories
@@ -22,10 +30,14 @@ workflows/
 .codex/
 .claude/
 .devcontainer/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
 
 # Generated documentation output
-docs/_build/
-docs/reference/
+**/docs/_build/
+**/docs/reference/
 
 # Generated lock files (owned by their tooling, not prettier)
 pixi.lock

@@ -56,7 +56,7 @@ def local_scenario_path(workflow_id: str) -> Path:
 # workflows check the repository out and invoke them from this committed
 # directory (they are no longer emitted as generated copies under
 # .github/workflows/), so there is a single source of truth for each script.
-HARNESS_SCRIPT_DIR = Path("harness/scenarios")
+HARNESS_SCRIPT_DIR = Path(".dev/harness/scenarios")
 LOCAL_EVENT_PATH = Path(".act/push.json")
 # SHA pins come from the central registry (devflows.actions) so they stay in
 # lockstep with the pins the publisher injects.
@@ -760,7 +760,7 @@ def _hosted_checkout_step(
     """A pinned, credential-free checkout so hosted jobs can run harness scripts.
 
     Hosted assert/setup jobs run on fresh runners with no repository content, so
-    they must check the repo out before invoking any ``harness/scenarios`` script.
+    they must check the repo out before invoking any ``.dev/harness/scenarios`` script.
     Read-only jobs use ``persist-credentials: false`` (they never push).
     """
     with_block: dict[str, Any] = {"persist-credentials": False}

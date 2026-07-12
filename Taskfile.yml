@@ -15,10 +15,11 @@ tasks:
   fmt:
     desc: Auto-format Python, shell, docs, and config files.
     cmds:
-      - pixi run -- ruff format .
-      - bash scripts/fmt-shell.sh
-      - pixi run -- prettier --write .
-      - pixi run -- taplo format pixi.toml pyproject.toml
+      - pixi run -- ruff format --config .config/ruff.toml .
+      - bash .dev/scripts/fmt-shell.sh
+      - pixi run -- prettier --config .config/prettierrc.yaml --ignore-path
+        .config/.prettierignore --write .
+      - pixi run -- taplo format pixi.toml .dev/pyproject.toml
 
   # ------------------------------------------------------------ generator tasks
   validate:
@@ -60,8 +61,8 @@ tasks:
   lint:python:
     desc: Lint and format-check Python sources with ruff.
     cmds:
-      - pixi run -- ruff check .
-      - pixi run -- ruff format --check .
+      - pixi run -- ruff check --config .config/ruff.toml .
+      - pixi run -- ruff format --config .config/ruff.toml --check .
 
   lint:workflows:
     desc: Lint GitHub Actions workflows with actionlint and zizmor.
@@ -74,34 +75,35 @@ tasks:
       # zizmor's security audits do not depend on injected steps, so it scans
       # BOTH the generated workflows and the source workflows, catching template
       # injection or unpinned-uses in sources before they are ever generated.
-      - pixi run -- zizmor . workflows/*/workflow.yaml
+      - pixi run -- zizmor -c .config/zizmor.yml . workflows/*/workflow.yaml
 
   lint:yaml:
     desc: Lint YAML files with yamllint.
     cmds:
-      - pixi run -- yamllint .
+      - pixi run -- yamllint -c .config/yamllint.yaml .
 
   lint:toml:
     desc: Check TOML formatting with taplo.
     cmds:
-      - pixi run -- taplo format --check pixi.toml pyproject.toml
+      - pixi run -- taplo format --check pixi.toml .dev/pyproject.toml
 
   lint:shell:
     desc: Lint and format-check shell scripts (shellcheck + shfmt).
     cmds:
-      - bash scripts/lint-shell.sh
+      - bash .dev/scripts/lint-shell.sh
 
   lint:format:
     desc: Check Prettier formatting of docs and config files.
     cmds:
-      - pixi run -- prettier --check .
+      - pixi run -- prettier --config .config/prettierrc.yaml --ignore-path
+        .config/.prettierignore --check .
 
   lint:secrets:
     desc: Scan the repository for committed secrets with gitleaks.
     cmds:
       - |
         if command -v gitleaks >/dev/null 2>&1; then
-          gitleaks detect --no-banner --redact
+          gitleaks detect --config .config/gitleaks.toml --no-banner --redact
         else
           echo "warning: gitleaks not found on PATH; skipping secret scan."
           echo "         Provided by the devcontainer, or 'brew install gitleaks' locally."
@@ -111,7 +113,11 @@ tasks:
   test:
     desc: Run the Python unit test suite.
     cmds:
-      - pixi run -- pytest
+      # The pytest config lives in .config/ (passed with -c); --rootdir pins the
+      # repo root so testpaths, nodeids, and the 'network' marker resolve there
+      # rather than under .config/ (pytest would otherwise treat the config dir as
+      # rootdir and lose testpaths).
+      - pixi run -- pytest -c .config/pytest.ini --rootdir .
 
   test-contract:
     desc: >-
@@ -119,7 +125,8 @@ tasks:
       action.yml and assert the generator's emitted inputs still exist. CI runs
       this on pull requests that change an action pin or a consuming workflow.
     cmds:
-      - pixi run -- pytest -m network tests/test_contract.py
+      - pixi run -- pytest -c .config/pytest.ini --rootdir . -m network
+        tests/package/test_contract.py
 
   scenarios-local:
     desc: Run local GitHub Actions scenarios with act (requires docker + act).

@@ -4,7 +4,7 @@ The `devflows` command is the generator and validator behind the catalog. It is
 provided by the Pixi environment, so every invocation is
 `pixi run -- devflows <subcommand>`; most subcommands also have a one-line
 `task` wrapper. This page documents each subcommand and its flags as implemented
-in `src/devflows/cli.py`.
+in `.dev/src/devflows/cli.py`.
 
 ## Invocation
 

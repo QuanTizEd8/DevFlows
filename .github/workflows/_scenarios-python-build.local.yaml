@@ -39,7 +39,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to build
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   python_build_cibw_empty_matrix_validate:
     name: 'Python Build: cibw enabled with an empty matrix fails validation'
@@ -61,7 +61,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cibw-enabled is true but cibw-matrix is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   python_build_conda_missing_recipe_validate:
     name: 'Python Build: conda enabled without a recipe path fails validation'
@@ -83,7 +83,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: conda-recipe-path is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   python_build_unknown_build_tool_validate:
     name: 'Python Build: Unknown build tool fails validation'
@@ -105,7 +105,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: build-tool must be 'uv' or 'python-build'
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   python_build_malformed_matrix_json_validate:
     name: 'Python Build: Malformed cibw-matrix JSON fails validation'
@@ -127,7 +127,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cibw-matrix is not valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   python_build_unsafe_artifact_prefix_validate:
     name: 'Python Build: Unsafe dist-artifact-prefix fails validation'
@@ -150,5 +150,5 @@ jobs:
           DIST_ARTIFACT_PREFIX: has space
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: dist-artifact-prefix must be a non-empty artifact-name-safe
             string
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

@@ -47,7 +47,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_test_reports_merge_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -57,19 +57,19 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-test/reports/python-test-scn-reports--leg-leg-a/report.xml
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file exists: python-test-scn-reports--leg-leg-b/report.xml'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-test/reports/python-test-scn-reports--leg-leg-b/report.xml
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: Assert output report-artifact-name
         shell: bash
         env:
           ASSERT_NAME: report-artifact-name
           EXPECTED: python-test-scn-reports
           ACTUAL: ${{ needs.python_test_reports_merge_hosted_call.outputs.report-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_test_artifact_install_hosted_setup:
     name: 'Python Test: Install a staged wheel and run pytest setup'
     runs-on: ubuntu-latest
@@ -88,7 +88,7 @@ jobs:
                 "source-path": "tests/scenarios/python-test/dist/devflows_test_fixture-0.1.0-py3-none-any.whl"
               }
             ]
-        run: python harness/scenarios/create-setup-files.py
+        run: python .dev/harness/scenarios/create-setup-files.py
       - name: Upload setup artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -132,7 +132,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_test_artifact_install_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -142,13 +142,13 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-test/artifact/report.xml
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: report.xml'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-test/artifact/report.xml
           ASSERT_TEXT: <testsuite
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   python_test_micromamba_source_hosted_call:
     name: 'Python Test: Install from source in a micromamba environment'
     uses: ./.github/workflows/python-test.yaml
@@ -181,7 +181,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_test_micromamba_source_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -191,13 +191,13 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-test/micromamba/report.xml
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: report.xml'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-test/micromamba/report.xml
           ASSERT_TEXT: <testsuite
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   python_test_invalid_matrix_json_validate:
     name: 'Python Test: Non-JSON test-matrix fails validation'
     runs-on: ubuntu-latest
@@ -220,7 +220,7 @@ jobs:
           REPORT_ARTIFACT_ENABLED: 'false'
           REPORT_PATH: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: test-matrix must be valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_test_invalid_uv_cache_mode_validate:
     name: 'Python Test: Invalid uv-cache-mode fails validation'
     runs-on: ubuntu-latest
@@ -243,4 +243,4 @@ jobs:
           REPORT_ARTIFACT_ENABLED: 'false'
           REPORT_PATH: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: uv-cache-mode must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

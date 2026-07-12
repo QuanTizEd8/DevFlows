@@ -42,7 +42,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_lint_clean_report_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -54,39 +54,39 @@ jobs:
           ASSERT_NAME: lint-outcome
           EXPECTED: success
           ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.lint-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output ruff-check-outcome
         shell: bash
         env:
           ASSERT_NAME: ruff-check-outcome
           EXPECTED: success
           ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.ruff-check-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output ruff-format-outcome
         shell: bash
         env:
           ASSERT_NAME: ruff-format-outcome
           EXPECTED: success
           ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.ruff-format-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output typecheck-outcome
         shell: bash
         env:
           ASSERT_NAME: typecheck-outcome
           EXPECTED: success
           ACTUAL: ${{ needs.python_lint_clean_report_hosted_call.outputs.typecheck-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: 'Assert file exists: results.json'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-lint/clean-report/results.json
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: results.json'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-lint/clean-report/results.json
           ASSERT_TEXT: '"version": 1'
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   python_lint_violations_advisory_hosted_call:
     name: 'Python Lint: Advisory mode reports failure but keeps the run green'
     uses: ./.github/workflows/python-lint.yaml
@@ -111,35 +111,35 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_lint_violations_advisory_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output lint-outcome
         shell: bash
         env:
           ASSERT_NAME: lint-outcome
           EXPECTED: failure
           ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.lint-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output ruff-check-outcome
         shell: bash
         env:
           ASSERT_NAME: ruff-check-outcome
           EXPECTED: failure
           ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.ruff-check-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output ruff-format-outcome
         shell: bash
         env:
           ASSERT_NAME: ruff-format-outcome
           EXPECTED: failure
           ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.ruff-format-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output typecheck-outcome
         shell: bash
         env:
           ASSERT_NAME: typecheck-outcome
           EXPECTED: skipped
           ACTUAL: ${{ needs.python_lint_violations_advisory_hosted_call.outputs.typecheck-outcome }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_lint_invalid_typecheck_tool_validate:
     name: 'Python Lint: Unknown typecheck tool fails validation'
     runs-on: ubuntu-latest
@@ -171,7 +171,7 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ''
           LINT_TYPECHECK_WITH: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: typecheck-tool must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_lint_no_lint_tools_validate:
     name: 'Python Lint: All lint tools disabled fails validation'
     runs-on: ubuntu-latest
@@ -203,7 +203,7 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ''
           LINT_TYPECHECK_WITH: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: At least one of ruff-check-enabled
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_lint_invalid_uv_cache_mode_validate:
     name: 'Python Lint: Invalid uv-cache-mode fails validation'
     runs-on: ubuntu-latest
@@ -235,4 +235,4 @@ jobs:
           LINT_TYPECHECK_PYTHON_VERSIONS: ''
           LINT_TYPECHECK_WITH: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: uv-cache-mode must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

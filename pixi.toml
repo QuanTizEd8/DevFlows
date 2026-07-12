@@ -44,5 +44,5 @@ zstandard = ">=0.22"
 # The lint:secrets task and the pre-commit hook find it on PATH and skip with a
 # warning when it is absent, so the pixi-only lint path still succeeds.
 [pypi-dependencies]
-devflows = { path = ".", editable = true }
+devflows = { path = ".dev", editable = true }
 sphinx-autobuild = ">=2024.10"

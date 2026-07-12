@@ -135,7 +135,7 @@ tests:
   scenarios:
     # The success scenario is hosted-only and always dry-run: a registry push cannot
     # run from PR CI, so it proves the credential-free build surface and asserts the
-    # push job stays skipped. Push/attest/digest behavior lives in tests/test_binder_build.py.
+    # push job stays skipped. Push/attest/digest behavior lives in tests/workflows/test_binder_build.py.
     - id: dry-run-build-hosted
       name: Dry-run builds a Binder image and skips the push job
       runs:

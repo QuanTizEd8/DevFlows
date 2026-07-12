@@ -29,7 +29,7 @@ from devflows.publish import (
     render_published_workflow,
 )
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO / "workflows" / "devcontainer-run" / "scripts"
 
 # The workflow scripts import their sibling dcrun / dcrun_run modules
@@ -1347,7 +1347,7 @@ def test_cli_version_pin_matches_renovate_manager() -> None:
     default = workflow.workflow_call["inputs"]["devcontainer-cli-version"]["default"]
     assert default == "0.87.0"
 
-    renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
+    renovate = (REPO / ".config" / "renovate.json5").read_text(encoding="utf-8")
     assert "workflows/devcontainer-run/workflow" in renovate
     # Pull the devcontainer-run manager's ACTUAL configured matchString out of
     # renovate.json5 (the first `# renovate:` matchString after this manager's

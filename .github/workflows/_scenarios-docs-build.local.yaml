@@ -55,18 +55,18 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.docs_build_sphinx_container_local_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: 'Assert file exists: .devflows-test/docs-build/sphinx-container-local/site/index.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test/docs-build/sphinx-container-local/site/index.html
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: .devflows-test/docs-build/sphinx-container-local/site/index.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test/docs-build/sphinx-container-local/site/index.html
           ASSERT_TEXT: DevFlows Docs Build Fixture
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   docs_build_linkcheck_mkdocs_invalid_validate:
     name: 'Build Documentation: Link check requested with MkDocs fails validation'
     runs-on: ubuntu-latest
@@ -95,7 +95,7 @@ jobs:
           PAGES_ARTIFACT_ENABLED: 'false'
           PAGES_ARTIFACT_NAME: github-pages
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: docs-linkcheck-enabled requires docs-tool sphinx
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   docs_build_container_missing_image_validate:
     name: 'Build Documentation: Container mode without an image fails validation'
@@ -125,5 +125,5 @@ jobs:
           PAGES_ARTIFACT_ENABLED: 'false'
           PAGES_ARTIFACT_NAME: github-pages
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: container mode requires container-image
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

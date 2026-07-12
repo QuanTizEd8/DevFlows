@@ -18,7 +18,7 @@ from devflows.publish import (
     render_published_workflow,
 )
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO / "workflows" / "anaconda-publish" / "scripts"
 
 # The workflow scripts import their sibling helper modules (materialized next to
@@ -1000,7 +1000,7 @@ def test_preflight_requires_token_when_not_dry_run(monkeypatch) -> None:
 def test_anaconda_client_pin_matches_renovate_manager() -> None:
     # The pinned version must be a plausible PEP440 release.
     assert re.fullmatch(r"[0-9]+(\.[0-9]+)*", commands.ANACONDA_CLIENT_VERSION)
-    renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
+    renovate = (REPO / ".config" / "renovate.json5").read_text(encoding="utf-8")
     assert "workflows/anaconda-publish/scripts/commands" in renovate
     # Pull Renovate's ACTUAL configured matchString (the one keyed on the constant)
     # out of renovate.json5 rather than hand-mirroring it: decode the JSON5

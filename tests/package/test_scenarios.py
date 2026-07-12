@@ -262,7 +262,7 @@ def test_hosted_assert_job_checks_out_before_scripts() -> None:
     assert steps[0]["uses"].startswith("actions/checkout@")
     assert steps[0]["with"]["persist-credentials"] is False
     first_script = next(
-        index for index, step in enumerate(steps) if "harness/scenarios" in step.get("run", "")
+        index for index, step in enumerate(steps) if ".dev/harness/scenarios" in step.get("run", "")
     )
     assert first_script > 0
 
@@ -287,7 +287,7 @@ def test_mutation_assert_job_checks_out_before_assert_result() -> None:
 
     assert steps[0]["name"] == "Checkout ephemeral branch"
     assert steps[1]["name"] == "Assert scenario succeeded"
-    assert "harness/scenarios" not in steps[0].get("run", "")
+    assert ".dev/harness/scenarios" not in steps[0].get("run", "")
 
 
 def test_writeback_patch_upload_uploads_changes_patch() -> None:
@@ -307,7 +307,7 @@ def test_writeback_patch_upload_uploads_changes_patch() -> None:
 def test_scenarios_reference_harness_scripts_only() -> None:
     rendered = render_test_workflow(load_scenarios(load_catalog()), runner="hosted", name="H")
 
-    assert "python harness/scenarios/assert-result.py" in rendered
+    assert "python .dev/harness/scenarios/assert-result.py" in rendered
     assert ".github/workflows/_scenarios/" not in rendered
     assert ".github/workflows/writeback/create-payload.py" not in rendered
 

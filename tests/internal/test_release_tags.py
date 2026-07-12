@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "move_major_tags.py"
+_SCRIPT = Path(__file__).resolve().parents[2] / ".dev" / "scripts" / "move_major_tags.py"
 _spec = importlib.util.spec_from_file_location("move_major_tags", _SCRIPT)
 assert _spec and _spec.loader
 move_major_tags = importlib.util.module_from_spec(_spec)

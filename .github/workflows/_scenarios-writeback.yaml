@@ -63,7 +63,7 @@ jobs:
             [
               "generated"
             ]
-        run: python harness/scenarios/setup-ephemeral-writeback.py
+        run: python .dev/harness/scenarios/setup-ephemeral-writeback.py
       - name: Upload workspace patch
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -110,7 +110,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.writeback_ephemeral_branch_writeback_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert ephemeral branch
         shell: bash
         env:
@@ -139,7 +139,7 @@ jobs:
               }
             ]
           DEVFLOWS_FIXTURE_PATH: .devflows-e2e/writeback
-        run: python harness/scenarios/assert-ephemeral-writeback.py
+        run: python .dev/harness/scenarios/assert-ephemeral-writeback.py
   writeback_ephemeral_branch_writeback_cleanup:
     name: 'Writeback: Writeback to ephemeral branch cleanup'
     runs-on: ubuntu-latest
@@ -160,4 +160,4 @@ jobs:
         shell: bash
         env:
           DEVFLOWS_BRANCH_PREFIX: devflows/e2e/writeback
-        run: python harness/scenarios/cleanup-ephemeral-branch.py
+        run: python .dev/harness/scenarios/cleanup-ephemeral-branch.py

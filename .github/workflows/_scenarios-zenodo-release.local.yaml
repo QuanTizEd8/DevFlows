@@ -58,7 +58,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_bad_tag_validate:
     name: 'Zenodo Release: A non-ref-safe release-tag fails validation'
@@ -99,7 +99,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: valid git ref
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_notes_mutually_exclusive_validate:
     name: 'Zenodo Release: release-notes and release-notes-file together fail validation'
@@ -140,7 +140,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: mutually exclusive
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_discussion_on_draft_validate:
     name: 'Zenodo Release: A discussion category on a draft release fails validation'
@@ -181,7 +181,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: release-draft-enabled
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_bad_existing_mode_validate:
     name: 'Zenodo Release: An invalid release-existing-mode fails validation'
@@ -222,7 +222,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_zenodo_missing_environment_validate:
     name: 'Zenodo Release: zenodo-enabled with an empty environment name fails validation'
@@ -263,7 +263,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-environment-name is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_zenodo_missing_metadata_validate:
     name: 'Zenodo Release: zenodo-enabled without a CFF path and metadata fails validation'
@@ -304,7 +304,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: deposition metadata
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_zenodo_no_assets_validate:
     name: 'Zenodo Release: zenodo-enabled with empty zenodo-asset-globs fails validation'
@@ -345,7 +345,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-asset-globs is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_publish_confirm_mismatch_validate:
     name: 'Zenodo Release: A real publish without a matching confirm fails validation'
@@ -386,7 +386,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-publish-confirm must equal release-tag
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_globs_without_download_validate:
     name: 'Zenodo Release: Asset globs with artifact-download disabled fails validation'
@@ -427,7 +427,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'false'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: artifact-download channel
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_unsafe_notes_path_validate:
     name: 'Zenodo Release: A release-notes-file escaping the workspace fails validation'
@@ -468,7 +468,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: workspace-relative
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_malformed_manifest_validate:
     name: 'Zenodo Release: An unparseable publish-dist-manifest fails validation'
@@ -509,7 +509,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: '{not json'
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: not valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_metadata_extra_owned_key_validate:
     name: 'Zenodo Release: An owned key in zenodo-metadata-extra fails validation'
@@ -550,7 +550,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   zenodo_release_metadata_extra_not_object_validate:
     name: 'Zenodo Release: A non-object zenodo-metadata-extra fails validation'
@@ -591,5 +591,5 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be a JSON object
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

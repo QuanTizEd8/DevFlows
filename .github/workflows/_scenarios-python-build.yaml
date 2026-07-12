@@ -38,7 +38,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_build_pure_wheelhouse_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -48,28 +48,28 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-build/pure/python_build_fixture-0.1.0-py3-none-any.whl
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: Assert output package-version
         shell: bash
         env:
           ASSERT_NAME: package-version
           EXPECTED: 0.1.0
           ACTUAL: ${{ needs.python_build_pure_wheelhouse_call.outputs.package-version }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output wheels-artifact-name
         shell: bash
         env:
           ASSERT_NAME: wheels-artifact-name
           EXPECTED: python-build-pure-wheels
           ACTUAL: ${{ needs.python_build_pure_wheelhouse_call.outputs.wheels-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output conda-artifact-name
         shell: bash
         env:
           ASSERT_NAME: conda-artifact-name
           EXPECTED: ''
           ACTUAL: ${{ needs.python_build_pure_wheelhouse_call.outputs.conda-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_build_python_build_tool_call:
     name: 'Python Build: python -m build tool parity'
     uses: ./.github/workflows/python-build.yaml
@@ -95,7 +95,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_build_python_build_tool_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -105,14 +105,14 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-build/pybuild/python_build_fixture-0.1.0.tar.gz
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: Assert output sdist-artifact-name
         shell: bash
         env:
           ASSERT_NAME: sdist-artifact-name
           EXPECTED: python-build-pybuild-sdist
           ACTUAL: ${{ needs.python_build_python_build_tool_call.outputs.sdist-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_build_sdist_only_call:
     name: 'Python Build: sdist-only build leaves the wheelhouse empty'
     uses: ./.github/workflows/python-build.yaml
@@ -137,7 +137,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_build_sdist_only_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -147,14 +147,14 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-build/sdist/python_build_fixture-0.1.0.tar.gz
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: Assert output wheels-artifact-name
         shell: bash
         env:
           ASSERT_NAME: wheels-artifact-name
           EXPECTED: ''
           ACTUAL: ${{ needs.python_build_sdist_only_call.outputs.wheels-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_build_cibw_manylinux_call:
     name: 'Python Build: cibuildwheel builds a manylinux wheel into the wheelhouse'
     uses: ./.github/workflows/python-build.yaml
@@ -182,7 +182,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_build_cibw_manylinux_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -193,21 +193,21 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-build/cibw/devflows_cext_fixture-0.1.0-cp313-cp313-*manylinux*.whl
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: Assert output wheels-artifact-name
         shell: bash
         env:
           ASSERT_NAME: wheels-artifact-name
           EXPECTED: python-build-cibw-wheels
           ACTUAL: ${{ needs.python_build_cibw_manylinux_call.outputs.wheels-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output package-version
         shell: bash
         env:
           ASSERT_NAME: package-version
           EXPECTED: 0.1.0
           ACTUAL: ${{ needs.python_build_cibw_manylinux_call.outputs.package-version }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_build_conda_noarch_call:
     name: 'Python Build: rattler-build noarch package with a re-indexed channel'
     uses: ./.github/workflows/python-build.yaml
@@ -234,7 +234,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.python_build_conda_noarch_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -245,14 +245,14 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/python-build/conda/noarch/repodata.json
           ASSERT_TEXT: python-build-conda-fixture
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
       - name: Assert output conda-artifact-name
         shell: bash
         env:
           ASSERT_NAME: conda-artifact-name
           EXPECTED: python-build-conda-conda-channel
           ACTUAL: ${{ needs.python_build_conda_noarch_call.outputs.conda-artifact-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   python_build_nothing_to_build_validate:
     name: 'Python Build: All build flavors disabled fails validation'
     runs-on: ubuntu-latest
@@ -277,7 +277,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to build
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_build_cibw_empty_matrix_validate:
     name: 'Python Build: cibw enabled with an empty matrix fails validation'
     runs-on: ubuntu-latest
@@ -302,7 +302,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cibw-enabled is true but cibw-matrix is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_build_conda_missing_recipe_validate:
     name: 'Python Build: conda enabled without a recipe path fails validation'
     runs-on: ubuntu-latest
@@ -327,7 +327,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: conda-recipe-path is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_build_unknown_build_tool_validate:
     name: 'Python Build: Unknown build tool fails validation'
     runs-on: ubuntu-latest
@@ -352,7 +352,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: build-tool must be 'uv' or 'python-build'
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_build_malformed_matrix_json_validate:
     name: 'Python Build: Malformed cibw-matrix JSON fails validation'
     runs-on: ubuntu-latest
@@ -377,7 +377,7 @@ jobs:
           CONDA_MATRIX: '[{"runner": "ubuntu-latest"}]'
           DIST_ARTIFACT_PREFIX: python-build
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cibw-matrix is not valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   python_build_unsafe_artifact_prefix_validate:
     name: 'Python Build: Unsafe dist-artifact-prefix fails validation'
     runs-on: ubuntu-latest
@@ -403,4 +403,4 @@ jobs:
           DIST_ARTIFACT_PREFIX: has space
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: dist-artifact-prefix must be a non-empty artifact-name-safe
             string
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

@@ -26,11 +26,11 @@ io:
   runtime-jobs: [validate, cibw, conda, collect]
 ```
 
-At `devflows sync`, the generator (`src/devflows/publish.py`) expands the public
-`.github/workflows/<id>.yaml`: it adds each enabled channel's public inputs,
-secrets, and steps, injects them into `io.job` (and any extra `*-jobs`), inlines
-the referenced runtime scripts, and appends the nested `writeback` job when
-`writeback` is enabled. The channel step for each concern is built from the
+At `devflows sync`, the generator (`.dev/src/devflows/publish.py`) expands the
+public `.github/workflows/<id>.yaml`: it adds each enabled channel's public
+inputs, secrets, and steps, injects them into `io.job` (and any extra `*-jobs`),
+inlines the referenced runtime scripts, and appends the nested `writeback` job
+when `writeback` is enabled. The channel step for each concern is built from the
 **same pinned action** for every workflow (`actions/checkout`,
 `actions/download-artifact`, `actions/upload-artifact`), which is what makes the
 channels uniform and independently auditable.
@@ -59,9 +59,9 @@ keeping the generated file under the size cap.
 
 ## The Pin Registry (`ACTION_PINS`)
 
-`src/devflows/actions.py` holds `ACTION_PINS`, the **single source of truth**
-for every third-party action SHA the generator emits or that appears in the
-source workflows. Each entry is an `ActionPin(action, sha, version)`:
+`.dev/src/devflows/actions.py` holds `ACTION_PINS`, the **single source of
+truth** for every third-party action SHA the generator emits or that appears in
+the source workflows. Each entry is an `ActionPin(action, sha, version)`:
 
 ```python
 "checkout": ActionPin(
@@ -87,27 +87,27 @@ their version comments are annotated and the contract test covers them.
 
 ## The Adapter Contract Test
 
-`tests/test_contract.py` is the guard that the generator's assumptions about
-each pinned action still hold. For every pinned action the generator emits a
-`with:` block for, it fetches that action's `action.yml` at the pinned SHA and
+`tests/package/test_contract.py` is the guard that the generator's assumptions
+about each pinned action still hold. For every pinned action the generator emits
+a `with:` block for, it fetches that action's `action.yml` at the pinned SHA and
 asserts every emitted input key really exists in the action's declared inputs.
 It is a network test (marked `network`), excluded from `task test`, and run via:
 
 ```bash
-task test-contract   # pixi run -- pytest -m network tests/test_contract.py
+task test-contract   # pixi run -- pytest -c .config/pytest.ini -m network tests/package/test_contract.py
 ```
 
 CI's **Adapter contract** job runs it automatically on any pull request that
-touches `src/devflows/actions.py`, a `workflows/*/workflow.yaml`, or a
+touches `.dev/src/devflows/actions.py`, a `workflows/*/workflow.yaml`, or a
 `.github/workflows/*.yaml` — so a pin bump that renames or drops an input the
 generator relies on fails before it ships. See {doc}`ci`.
 
 ## Adding Or Bumping A Pinned Action
 
-1. Add or edit the `ActionPin` entry in `src/devflows/actions.py` (repository,
-   the full 40-character commit SHA, and the human-readable `v<version>`). Keep
-   the SHA and version in lockstep — the version is only a readable comment for
-   consumers auditing the bare SHA.
+1. Add or edit the `ActionPin` entry in `.dev/src/devflows/actions.py`
+   (repository, the full 40-character commit SHA, and the human-readable
+   `v<version>`). Keep the SHA and version in lockstep — the version is only a
+   readable comment for consumers auditing the bare SHA.
 2. If a channel step needs a new or changed `with:` key, update the step builder
    in `publish.py` (for example `_checkout_step`, `_download_artifact_step`).
 3. Regenerate: `task sync` (and `task test-generate` if scenarios use the pin).
@@ -120,7 +120,8 @@ generator relies on fails before it ships. See {doc}`ci`.
 
 ## Renovate Managers
 
-`renovate.json5` keeps every pin current. Two kinds of managers matter here:
+`.config/renovate.json5` keeps every pin current. Two kinds of managers matter
+here:
 
 - **`ACTION_PINS` registry** — a custom regex manager matches each
   `ActionPin("<repo>", "<sha>", "v<version>")` and bumps the digest and version
