@@ -37,7 +37,7 @@ jobs:
                 "content": "zenodo-release paper fixture\n"
               }
             ]
-        run: python harness/scenarios/create-setup-files.py
+        run: python .dev/harness/scenarios/create-setup-files.py
       - name: Upload setup artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -89,42 +89,42 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.zenodo_release_dry_run_explicit_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output package-version
         shell: bash
         env:
           ASSERT_NAME: package-version
           EXPECTED: 0.1.0
           ACTUAL: ${{ needs.zenodo_release_dry_run_explicit_call.outputs.package-version }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output release-tag
         shell: bash
         env:
           ASSERT_NAME: release-tag
           EXPECTED: v0.1.0
           ACTUAL: ${{ needs.zenodo_release_dry_run_explicit_call.outputs.release-tag }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output release-url
         shell: bash
         env:
           ASSERT_NAME: release-url
           EXPECTED: ''
           ACTUAL: ${{ needs.zenodo_release_dry_run_explicit_call.outputs.release-url }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output zenodo-doi
         shell: bash
         env:
           ASSERT_NAME: zenodo-doi
           EXPECTED: ''
           ACTUAL: ${{ needs.zenodo_release_dry_run_explicit_call.outputs.zenodo-doi }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output zenodo-state
         shell: bash
         env:
           ASSERT_NAME: zenodo-state
           EXPECTED: ''
           ACTUAL: ${{ needs.zenodo_release_dry_run_explicit_call.outputs.zenodo-state }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   zenodo_release_dry_run_cff_setup:
     name: 'Zenodo Release: Dry-run derives Zenodo metadata from CITATION.cff without a token setup'
     runs-on: ubuntu-latest
@@ -143,7 +143,7 @@ jobs:
                 "content": "zenodo-release sdist fixture\n"
               }
             ]
-        run: python harness/scenarios/create-setup-files.py
+        run: python .dev/harness/scenarios/create-setup-files.py
       - name: Upload setup artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -189,21 +189,21 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.zenodo_release_dry_run_cff_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output package-version
         shell: bash
         env:
           ASSERT_NAME: package-version
           EXPECTED: 0.1.0
           ACTUAL: ${{ needs.zenodo_release_dry_run_cff_call.outputs.package-version }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output zenodo-doi
         shell: bash
         env:
           ASSERT_NAME: zenodo-doi
           EXPECTED: ''
           ACTUAL: ${{ needs.zenodo_release_dry_run_cff_call.outputs.zenodo-doi }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   zenodo_release_nothing_to_do_validate:
     name: 'Zenodo Release: Neither target enabled fails validation'
     runs-on: ubuntu-latest
@@ -247,7 +247,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   zenodo_release_publish_confirm_mismatch_validate:
     name: 'Zenodo Release: A real publish without a matching confirm fails validation'
     runs-on: ubuntu-latest
@@ -291,7 +291,7 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: zenodo-publish-confirm must equal release-tag
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   zenodo_release_metadata_extra_owned_key_validate:
     name: 'Zenodo Release: An owned key in zenodo-metadata-extra fails validation'
     runs-on: ubuntu-latest
@@ -335,4 +335,4 @@ jobs:
           PUBLISH_DIST_MANIFEST: ''
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

@@ -211,7 +211,7 @@ tests:
     # CI. The other intended negative path -- artifact install mode with no dists
     # -- is NOT expressible here: it fails in the install-package step, not the
     # validate job, so validate-inputs.py legitimately accepts those inputs. It
-    # stays covered by unit tests of install-package.py in tests/test_python_test.py.
+    # stays covered by unit tests of install-package.py in tests/workflows/test_python_test.py.
     - id: invalid-matrix-json
       name: Non-JSON test-matrix fails validation
       runs:

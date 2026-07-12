@@ -50,4 +50,4 @@ jobs:
         shell: bash
         env:
           RELEASE_PLEASE_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
-        run: python3 scripts/move_major_tags.py
+        run: python3 .dev/scripts/move_major_tags.py

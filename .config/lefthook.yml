@@ -1,0 +1,43 @@
+# Pre-commit hooks reuse the Taskfile lint targets (CI parity) so each tool
+# invocation AND its config path live in exactly ONE place — the Taskfile — instead
+# of being duplicated here. Every hook runs `pixi run -- task <name>`: `pixi run --`
+# provides the pinned toolchain and the `task` binary (found on PATH); the task body
+# itself re-enters pixi for each tool. The glob only GATES when a hook fires (on the
+# relevant staged files); the task then runs the check across the repo, and the
+# config path it needs lives once, in the Taskfile — NOT here. Install the hooks with
+# `pixi run -- lefthook install` (the devcontainer does this via postCreateCommand).
+# lefthook auto-discovers this file at .config/lefthook.yml.
+#
+# Glob note: lefthook globs are separator-aware, so `*` does NOT cross `/` and a
+# plain `*.py` matches only repo-root files. `{workflows,.dev/src}/**` matches
+# everything under those trees, and the `{,**/}*.ext` idiom matches a type at the
+# root AND at any depth. Verified empirically against staged .dev/src/tests/workflows
+# files.
+pre-commit:
+  parallel: true
+  commands:
+    # -- Catalog metadata + generated-file drift (validate + sync/docs/test-generate
+    #    drift checks), gated to run only when catalog sources or generator code
+    #    change. `task lint:generator` bundles all four checks. --
+    generator:
+      glob: "{workflows,.dev/src}/**"
+      run: pixi run -- task lint:generator
+
+    # -- Format / lint checks, gated to the changed file type. The task lints the
+    #    whole repo (with its configured excludes); the config path lives in the
+    #    Taskfile, never here. --
+    python:
+      glob: "{,**/}*.py"
+      run: pixi run -- task lint:python
+    prettier:
+      glob: "{,**/}*.{md,json,yaml,yml}"
+      run: pixi run -- task lint:format
+    shell:
+      glob: "{,**/}*.sh"
+      run: pixi run -- task lint:shell
+
+    # -- Secret scan (gitleaks is infra, not a pixi tool; `task lint:secrets` skips
+    #    it with a warning when it is absent from PATH, so the pixi-only path still
+    #    succeeds). --
+    secrets:
+      run: pixi run -- task lint:secrets

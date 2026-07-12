@@ -37,7 +37,7 @@ jobs:
                 "source-path": "tests/scenarios/pypi-publish/dist/devflows_pypi_fixture-0.1.0-py3-none-any.whl"
               }
             ]
-        run: python harness/scenarios/create-setup-files.py
+        run: python .dev/harness/scenarios/create-setup-files.py
       - name: Upload setup artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -81,28 +81,28 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.pypi_publish_dry_run_verify_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Assert output package-version
         shell: bash
         env:
           ASSERT_NAME: package-version
           EXPECTED: 0.1.0
           ACTUAL: ${{ needs.pypi_publish_dry_run_verify_hosted_call.outputs.package-version }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output package-name
         shell: bash
         env:
           ASSERT_NAME: package-name
           EXPECTED: devflows-pypi-fixture
           ACTUAL: ${{ needs.pypi_publish_dry_run_verify_hosted_call.outputs.package-name }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: Assert output published-url
         shell: bash
         env:
           ASSERT_NAME: published-url
           EXPECTED: ''
           ACTUAL: ${{ needs.pypi_publish_dry_run_verify_hosted_call.outputs.published-url }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   pypi_publish_invalid_index_validate:
     name: 'PyPI Publish: A non-pypi index value is rejected'
     runs-on: ubuntu-latest
@@ -125,7 +125,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-index must be 'pypi' or 'testpypi'
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_missing_manifest_validate:
     name: 'PyPI Publish: An empty dist-manifest is rejected'
     runs-on: ubuntu-latest
@@ -148,7 +148,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_malformed_manifest_json_validate:
     name: 'PyPI Publish: A non-JSON dist-manifest is rejected'
     runs-on: ubuntu-latest
@@ -171,7 +171,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is not valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_unsupported_manifest_schema_validate:
     name: 'PyPI Publish: A dist-manifest with an unknown schema is rejected'
     runs-on: ubuntu-latest
@@ -194,7 +194,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: unsupported dist-manifest schema
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_nothing_to_publish_validate:
     name: 'PyPI Publish: A dist-manifest with only conda files is rejected'
     runs-on: ubuntu-latest
@@ -217,7 +217,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: contains no sdist or wheel distributions
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_channel_disabled_validate:
     name: 'PyPI Publish: A call with the ingestion channel disabled is rejected'
     runs-on: ubuntu-latest
@@ -241,7 +241,7 @@ jobs:
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: distributions can only arrive through the artifact-download
             channel
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_unsafe_dist_path_validate:
     name: 'PyPI Publish: A dist-path that escapes the workspace is rejected'
     runs-on: ubuntu-latest
@@ -264,7 +264,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-path must be a workspace-relative path
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_install_check_in_dry_run_validate:
     name: 'PyPI Publish: install-check combined with dry-run is rejected'
     runs-on: ubuntu-latest
@@ -287,7 +287,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: install-check-enabled requires a real publish
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_install_check_index_flag_validate:
     name: 'PyPI Publish: An index-selection flag smuggled into install-check-arguments is rejected'
     runs-on: ubuntu-latest
@@ -310,7 +310,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: install-check-arguments only accepts build-mode flags
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   pypi_publish_manifest_artifact_mismatch_validate:
     name: 'PyPI Publish: An artifact-download-name not listed in the manifest artifacts is rejected'
     runs-on: ubuntu-latest
@@ -333,4 +333,4 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: some-other-artifact
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: are from different builds
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

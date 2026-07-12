@@ -51,18 +51,18 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.pandoc_markdown_html_local_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: 'Assert file exists: .devflows-test/pandoc/markdown-html-local/example.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test/pandoc/markdown-html-local/example.html
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: .devflows-test/pandoc/markdown-html-local/example.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test/pandoc/markdown-html-local/example.html
           ASSERT_TEXT: <h1
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   pandoc_working_directory_local_clean:
     name: 'Pandoc: Working directory conversion without artifact upload cleanup'
     runs-on: ubuntu-latest
@@ -96,15 +96,15 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.pandoc_working_directory_local_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: 'Assert file exists: tests/scenarios/pandoc/working-directory/output.html'
         shell: bash
         env:
           ASSERT_PATH: tests/scenarios/pandoc/working-directory/output.html
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: tests/scenarios/pandoc/working-directory/output.html'
         shell: bash
         env:
           ASSERT_PATH: tests/scenarios/pandoc/working-directory/output.html
           ASSERT_TEXT: Pandoc Working Directory
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py

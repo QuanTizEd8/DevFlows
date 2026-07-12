@@ -138,7 +138,7 @@ notes:
     semantics, or that a mid-run digest MISMATCH is rejected (a `uses:` job cannot be
     kept green while failing). Those paths -- deposit.py against a mocked requests
     session, release.py against a fake gh, and the verify/reverify/parse matrices --
-    are covered exhaustively by tests/test_zenodo_release.py. Credential-real
+    are covered exhaustively by tests/workflows/test_zenodo_release.py. Credential-real
     rehearsal paths: (a) zenodo-sandbox-enabled against sandbox.zenodo.org with a
     sandbox token (discardable 10.5072 DOIs -- the reason the selector exists); (b)
     draft-only mode leaves a discardable draft even on real Zenodo; (c) a documented
@@ -155,7 +155,7 @@ tests:
     # Success scenarios are hosted-only and always dry-run: a release/deposition
     # cannot reach GitHub or Zenodo from PR CI, so they prove the credential-free
     # prepare chain and assert every credentialed job is skipped. Digest-mismatch
-    # rejection and the deposit/release matrices live in tests/test_zenodo_release.py.
+    # rejection and the deposit/release matrices live in tests/workflows/test_zenodo_release.py.
     - id: dry-run-explicit
       name: Dry-run with explicit metadata verifies globs and digests without a token
       runs:

@@ -23,7 +23,7 @@
   // pixi:             pixi.toml dependencies + pixi.lock refresh (experimental;
   //                   a manual `task pixi-lock` fallback is documented in
   //                   docs/dev-guide/environment.md).
-  // custom (regex):   the ActionPin registry in src/devflows/actions.py.
+  // custom (regex):   the ActionPin registry in .dev/src/devflows/actions.py.
   //
   // IMPORTANT: after any github-actions bump merges, `devflows sync` must run so
   // the generated .github/workflows/<id>.yaml copies match the bumped source and
@@ -54,7 +54,7 @@
       // Each entry is ActionPin("<repo>", "<40-char sha>", "v<version>"); Renovate
       // bumps the digest and the version string together from github-tags.
       customType: "regex",
-      managerFilePatterns: ["/^src/devflows/actions\\.py$/"],
+      managerFilePatterns: ["/^\\.dev/src/devflows/actions\\.py$/"],
       matchStrings: [
         'ActionPin\\(\\s*"(?<depName>[^"]+?)",\\s*"(?<currentDigest>[a-f0-9]{40})",\\s*"(?<currentValue>v[0-9][^"]*)"'
       ],
@@ -66,7 +66,7 @@
       // installs (ephemerally, via `uvx --from anaconda-client==<version>`)
       // current. The inline `# renovate:` comment supplies datasource/depName;
       // Renovate bumps the pep440 version string in place. A unit test
-      // (tests/test_anaconda_publish.py) asserts this regex still matches the
+      // (tests/workflows/test_anaconda_publish.py) asserts this regex still matches the
       // constant so the pin never silently stops updating.
       customType: "regex",
       managerFilePatterns: [
@@ -81,7 +81,7 @@
       // Keep the pinned openjournals/inara container tag the paper-openjournals
       // workflow runs (the paper-image input default) current. The inline
       // `# renovate:` comment supplies datasource/depName; Renovate bumps the tag
-      // in place. A unit test (tests/test_paper_openjournals.py) asserts this
+      // in place. A unit test (tests/workflows/test_paper_openjournals.py) asserts this
       // regex still matches the workflow default so the pin never silently stops
       // updating.
       customType: "regex",
@@ -96,7 +96,7 @@
       // installs (ephemerally, via `uvx --from jupyter-repo2docker==<version>`)
       // current. The inline `# renovate:` comment above the repo2docker-version
       // input default supplies datasource/depName; Renovate bumps the pep440
-      // version string in place. A unit test (tests/test_binder_build.py) asserts
+      // version string in place. A unit test (tests/workflows/test_binder_build.py) asserts
       // this regex still matches the default so the pin never silently stops
       // updating. Run `devflows sync` after a bump so the generated copy tracks it.
       customType: "regex",
@@ -111,7 +111,7 @@
       // workflow runs ephemerally (via `npx --yes @devcontainers/cli@<version>`)
       // current. The inline `# renovate:` comment above the devcontainer-cli-version
       // input default supplies datasource/depName; Renovate bumps the npm version
-      // string in place. A unit test (tests/test_devcontainer_run.py) asserts this
+      // string in place. A unit test (tests/workflows/test_devcontainer_run.py) asserts this
       // regex still matches the default so the pin never silently stops updating.
       // Run `devflows sync` after a bump so the generated copy tracks it.
       customType: "regex",
@@ -124,7 +124,7 @@
     {
       // Keep the PyYAML version zenodo-release installs ephemerally (uv run --with
       // "pyyaml==<version>") in the prepare job current. A unit test
-      // (tests/test_zenodo_release.py) asserts this regex still matches the pin.
+      // (tests/workflows/test_zenodo_release.py) asserts this regex still matches the pin.
       customType: "regex",
       managerFilePatterns: ["/^workflows/zenodo-release/workflow\\.yaml$/"],
       matchStrings: ['--with "pyyaml==(?<currentValue>[^"]+)"'],
@@ -135,7 +135,7 @@
     {
       // Keep the requests version zenodo-release installs ephemerally (uv run
       // --with "requests==<version>") in the zenodo-deposit job current. A unit test
-      // (tests/test_zenodo_release.py) asserts this regex still matches the pin.
+      // (tests/workflows/test_zenodo_release.py) asserts this regex still matches the pin.
       customType: "regex",
       managerFilePatterns: ["/^workflows/zenodo-release/workflow\\.yaml$/"],
       matchStrings: ['--with "requests==(?<currentValue>[^"]+)"'],

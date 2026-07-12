@@ -130,7 +130,7 @@ notes:
     failures (digest mismatch, size mismatch, unlisted or missing file, wrong kind,
     version skew) cannot be asserted green in CI - a uses: job cannot set
     continue-on-error - so verify-dist.py's failure matrix is covered exhaustively
-    by the unit tests in tests/test_pypi_publish.py, stated here alongside the
+    by the unit tests in tests/workflows/test_pypi_publish.py, stated here alongside the
     scenarios.
 examples:
   - name: Build then stage to TestPyPI and promote to PyPI

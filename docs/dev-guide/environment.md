@@ -55,8 +55,8 @@ already present in the Pixi environment.
 ## Supply-Chain Lock Refresh
 
 The environment has three independently pinned inputs. Renovate
-(`renovate.json5`) proposes updates for most of them; the commands below are the
-authoritative, offline refresh path and the review guidance.
+(`.config/renovate.json5`) proposes updates for most of them; the commands below
+are the authoritative, offline refresh path and the review guidance.
 
 ### Pixi lockfile (`pixi.lock`)
 

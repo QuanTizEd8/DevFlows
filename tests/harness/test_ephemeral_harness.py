@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-HARNESS = Path("harness/scenarios").resolve()
+HARNESS = Path(".dev/harness/scenarios").resolve()
 
 
 def _load_ephemeral():

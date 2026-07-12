@@ -161,7 +161,7 @@ notes:
     size, unlisted, missing, wrong-kind, version-skew, spec-parsing, and
     argv-construction behavior are covered exhaustively by unit tests of the shared
     parsing/arguments/manifest/digest/commands modules and verify-dist.py in
-    tests/test_anaconda_publish.py; (b) that the token is accepted
+    tests/workflows/test_anaconda_publish.py; (b) that the token is accepted
     and that server-side label semantics, skip/overwrite behavior, and move/remove
     effects are correct - only a real-credential run proves those. The rehearsal path
     is publish-dry-run-enabled for every consumer, and a post-merge weekly sentinel
@@ -179,7 +179,7 @@ tests:
     # The success scenarios are hosted-only and always dry-run: publishing cannot
     # reach anaconda.org from PR CI, so they prove the credential-free verify chain
     # and assert every environment-bound job is skipped. Digest-mismatch rejection
-    # and exhaustive spec/plan behavior live in tests/test_anaconda_publish.py.
+    # and exhaustive spec/plan behavior live in tests/workflows/test_anaconda_publish.py.
     - id: upload-dry-run
       name: Dry-run stage-and-promote verifies digests and plans without a token
       runs:

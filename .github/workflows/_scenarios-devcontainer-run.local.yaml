@@ -43,7 +43,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: valid image reference
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_neither_image_nor_config_validate:
     name: 'Devcontainer Run: Neither devcontainer-image nor devcontainer-config-file fails validation'
@@ -69,7 +69,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: at least one of devcontainer-image or devcontainer-config-file
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_invalid_run_shell_validate:
     name: 'Devcontainer Run: An unsupported run-shell fails validation'
@@ -95,7 +95,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: run-shell must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_unsafe_config_file_validate:
     name: 'Devcontainer Run: A devcontainer-config-file that escapes the workspace fails validation'
@@ -121,7 +121,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must stay inside
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_invalid_features_json_validate:
     name: 'Devcontainer Run: Non-JSON devcontainer-features fails validation'
@@ -147,7 +147,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: devcontainer-features must be valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_empty_run_command_validate:
     name: 'Devcontainer Run: An empty run-command fails validation'
@@ -173,7 +173,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: run-command is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_cache_enabled_without_paths_validate:
     name: 'Devcontainer Run: cache-enabled with no cache-paths fails validation'
@@ -199,7 +199,7 @@ jobs:
           CACHE_KEY: some-key
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cache-paths is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   devcontainer_run_cache_enabled_without_key_validate:
     name: 'Devcontainer Run: cache-enabled with no cache-key fails validation'
@@ -225,5 +225,5 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cache-key is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

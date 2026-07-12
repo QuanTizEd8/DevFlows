@@ -25,7 +25,7 @@ from devflows.publish import (
     render_published_workflow,
 )
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO / "workflows" / "paper-openjournals" / "scripts"
 
 # The workflow scripts import their sibling common module (materialized next to
@@ -596,7 +596,7 @@ def test_image_pin_matches_renovate_manager() -> None:
     default = workflow.workflow_call["inputs"]["paper-image"]["default"]
     assert default == "ghcr.io/openjournals/inara:1.3.1"
 
-    renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
+    renovate = (REPO / ".config" / "renovate.json5").read_text(encoding="utf-8")
     assert "workflows/paper-openjournals/workflow" in renovate
     # Pull Renovate's ACTUAL configured matchString for the inara image out of
     # renovate.json5 and apply it to the source workflow.yaml, proving the manager

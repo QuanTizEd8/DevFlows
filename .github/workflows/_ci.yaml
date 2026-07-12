@@ -79,7 +79,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          pattern='^(src/devflows/actions\.py|workflows/[^/]+/workflow\.yaml|\.github/workflows/[^/]+\.ya?ml)$'
+          pattern='^(\.dev/src/devflows/actions\.py|workflows/[^/]+/workflow\.yaml|\.github/workflows/[^/]+\.ya?ml)$'
           count=$(git diff --name-only "$BASE_SHA...HEAD" | grep -Ec "$pattern" || true)
           if [ "$count" -gt 0 ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"

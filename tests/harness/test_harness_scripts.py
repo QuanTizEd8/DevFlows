@@ -1,6 +1,6 @@
 """Exercise the extracted scenario-harness scripts as real, testable code.
 
-The scripts under ``harness/scenarios`` are the source of truth invoked by the
+The scripts under ``.dev/harness/scenarios`` are the source of truth invoked by the
 generated scenario workflows. Extracting them from string constants means ruff
 lints them and these tests can run their logic directly.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 # Resolve now so tests that chdir into a tmp dir still find the scripts.
-HARNESS = Path("harness/scenarios").resolve()
+HARNESS = Path(".dev/harness/scenarios").resolve()
 
 
 def _run(script: str, env: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> None:

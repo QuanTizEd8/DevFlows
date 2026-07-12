@@ -17,7 +17,7 @@ from devflows.publish import (
     render_published_workflow,
 )
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO / "workflows" / "binder-build"
 SCRIPT_DIR = WORKFLOW_DIR / "scripts"
 
@@ -542,7 +542,7 @@ def _workflow_default(name: str) -> str:
 def test_repo2docker_version_pin_matches_renovate_manager() -> None:
     default = _workflow_default("repo2docker-version")
     assert re.fullmatch(r"[0-9]{4}\.[0-9]{1,2}\.[0-9]+", default)
-    renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
+    renovate = (REPO / ".config" / "renovate.json5").read_text(encoding="utf-8")
     # Scope extraction to the binder-build manager block so a sibling workflow's
     # `default:` matchString (paper-openjournals is double-quoted, next to binder in
     # the file) can't be swept into a cross-manager span.

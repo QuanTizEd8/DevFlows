@@ -46,7 +46,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: Nothing to do
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_maintain_not_exclusive_validate:
     name: 'Anaconda Publish: maintain combined with upload fails validation'
@@ -75,7 +75,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: mutually exclusive
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_upload_without_manifest_validate:
     name: 'Anaconda Publish: upload without a manifest fails validation'
@@ -104,7 +104,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: publish-dist-manifest is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_malformed_manifest_validate:
     name: 'Anaconda Publish: unparseable manifest JSON fails validation'
@@ -133,7 +133,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: not valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_manifest_artifact_mismatch_validate:
     name: 'Anaconda Publish: manifest conda-channel not matching artifact-download-name fails validation'
@@ -162,7 +162,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: some-other-artifact
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: does not match artifact-download-name
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_manifest_no_conda_files_validate:
     name: 'Anaconda Publish: manifest with zero conda entries fails validation'
@@ -191,7 +191,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: contains no conda packages
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_promote_only_without_specs_validate:
     name: 'Anaconda Publish: promote-only without promote-specs fails validation'
@@ -220,7 +220,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: promote-specs is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_spec_with_owner_validate:
     name: 'Anaconda Publish: an owner-qualified spec fails validation'
@@ -249,7 +249,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: without an owner segment
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_label_collision_validate:
     name: 'Anaconda Publish: equal upload-label and promote-label fails validation'
@@ -278,7 +278,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must differ
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_maintain_unconfirmed_validate:
     name: 'Anaconda Publish: maintain without a matching confirm fails validation'
@@ -307,7 +307,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: ''
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: maintain-confirm must equal publish-owner
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_forbidden_upload_argument_validate:
     name: 'Anaconda Publish: a safety flag smuggled through upload-arguments fails validation'
@@ -336,7 +336,7 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   anaconda_publish_bad_existing_mode_validate:
     name: 'Anaconda Publish: an invalid upload-existing-mode fails validation'
@@ -365,5 +365,5 @@ jobs:
           ARTIFACT_DOWNLOAD_ENABLED: 'true'
           ARTIFACT_DOWNLOAD_NAME: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of fail, skip, overwrite
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

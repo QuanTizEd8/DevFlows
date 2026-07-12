@@ -43,7 +43,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.pandoc_markdown_html_artifact_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -53,13 +53,13 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/markdown-html-artifact/example.html
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: example.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/markdown-html-artifact/example.html
           ASSERT_TEXT: <h1
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   pandoc_working_directory_artifact_call:
     name: 'Pandoc: Working directory conversion with artifact upload'
     uses: ./.github/workflows/pandoc.yaml
@@ -88,7 +88,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.pandoc_working_directory_artifact_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -98,13 +98,13 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/working-directory-artifact/output.html
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: output.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/working-directory-artifact/output.html
           ASSERT_TEXT: Pandoc Working Directory
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   pandoc_artifact_download_html_setup:
     name: 'Pandoc: Markdown to HTML from downloaded artifact setup'
     runs-on: ubuntu-latest
@@ -123,7 +123,7 @@ jobs:
                 "content": "# Pandoc Artifact Input\n\nThis file was provided through an artifact download.\n"
               }
             ]
-        run: python harness/scenarios/create-setup-files.py
+        run: python .dev/harness/scenarios/create-setup-files.py
       - name: Upload setup artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -164,7 +164,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.pandoc_artifact_download_html_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -174,10 +174,10 @@ jobs:
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/artifact-download-html/example.html
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: example.html'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/pandoc/artifact-download-html/example.html
           ASSERT_TEXT: Pandoc Artifact Input
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py

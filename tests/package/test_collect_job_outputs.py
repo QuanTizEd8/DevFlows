@@ -7,7 +7,7 @@ from types import ModuleType
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "workflows" / "_channels" / "scripts" / "collect-job-outputs.py"
 
 

@@ -26,7 +26,7 @@ def test_source_and_published_change_is_clean() -> None:
 def test_shared_change_without_package_touch_is_flagged() -> None:
     # A pure generator change regenerates published outputs but touches no package.
     changed = [
-        "src/devflows/publish.py",
+        ".dev/src/devflows/publish.py",
         published_workflow_path("pandoc"),
         published_workflow_path("writeback"),
     ]
@@ -40,7 +40,7 @@ def test_shared_change_without_package_touch_is_flagged() -> None:
 def test_partial_propagation_flags_only_unpropagated() -> None:
     # pandoc got its scoped source change; writeback did not.
     changed = [
-        "src/devflows/actions.py",
+        ".dev/src/devflows/actions.py",
         "workflows/pandoc/devflow.yaml",
         published_workflow_path("pandoc"),
         published_workflow_path("writeback"),
@@ -64,7 +64,7 @@ def test_formatting_only_change_is_not_a_violation() -> None:
     # bytes for a workflow with no source change, but the predicate reports it as
     # semantically unchanged, so it must NOT be flagged.
     changed = [
-        "src/devflows/yaml.py",
+        ".dev/src/devflows/yaml.py",
         published_workflow_path("pandoc"),
     ]
     violations = propagation_violations(
@@ -79,7 +79,7 @@ def test_semantic_change_is_still_flagged() -> None:
     # A shared change that DOES alter parsed meaning (predicate True) with no
     # source touch is still a genuine propagation violation.
     changed = [
-        "src/devflows/publish.py",
+        ".dev/src/devflows/publish.py",
         published_workflow_path("pandoc"),
     ]
     violations = propagation_violations(

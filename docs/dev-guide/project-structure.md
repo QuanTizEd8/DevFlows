@@ -3,6 +3,16 @@
 DevFlows separates source files, generated files, fixtures, and tests so that
 workflow promotion stays reviewable.
 
+To keep the repository root focused on the published catalog, the development
+tooling lives in two hidden directories: `.dev/` holds the generator source
+(`.dev/src/devflows/`), maintainer scripts (`.dev/scripts/`), the scenario
+harness (`.dev/harness/`), and the package's `pyproject.toml`; `.config/` holds
+every tool's configuration file. Tool configs are passed to their tools
+explicitly from `Taskfile.yml` (the single registry of config paths) — except
+`renovate.json5` and `lefthook.yml`, which the tools auto-discover under
+`.config/`. `.editorconfig`, `pixi.toml`, and `pixi.lock` stay at the root
+because they are discovered by walking up from the working directory.
+
 The catalog currently holds 13 active workflows — `anaconda-publish`,
 `binder-build`, `deploy-pages`, `devcontainer-build`, `docs-build`, `pandoc`,
 `paper-openjournals`, `pypi-publish`, `python-build`, `python-lint`,
@@ -11,23 +21,31 @@ The catalog currently holds 13 active workflows — `anaconda-publish`,
 
 ## Important Directories
 
-| path                                           | purpose                                                                            |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `workflows/<workflow-id>/workflow.yaml`        | Source reusable workflow for a promoted workflow.                                  |
-| `workflows/<workflow-id>/devflow.yaml`         | Metadata, release config, docs fields, examples, and tests.                        |
-| `workflows/<workflow-id>/scripts/`             | Source support scripts inlined into the published workflow at sync time.           |
-| `.github/workflows/<workflow-id>.yaml`         | Generated publish location required by GitHub.                                     |
-| `.github/workflows/_scenarios-<id>.yaml`       | Generated hosted scenario test workflow (one per catalog workflow).                |
-| `.github/workflows/_scenarios-<id>.local.yaml` | Generated local scenario test workflow (one per workflow with local scenarios).    |
-| `.github/workflows/_*.yaml`                    | The repository's own internal workflows (CI, docs, release, CodeQL, devcontainer). |
-| `harness/scenarios/`                           | Scenario harness scripts run by the generated scenario workflows.                  |
-| `src/devflows/`                                | Python CLI and generation logic.                                                   |
-| `tests/`                                       | Python unit tests for DevFlows tooling.                                            |
-| `tests/fixtures/`                              | Example caller workflows rendered into docs.                                       |
-| `tests/scenarios/`                             | Checked-in test inputs used by workflow scenarios.                                 |
-| `docs/user-guide/`                             | Hand-written consumer documentation.                                               |
-| `docs/dev-guide/`                              | Hand-written maintainer documentation (this tree).                                 |
-| `docs/reference/`                              | Ignored generated workflow catalog and reference pages created during docs builds. |
+| path                                           | purpose                                                                                                                                                                   |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflows/<workflow-id>/workflow.yaml`        | Source reusable workflow for a promoted workflow.                                                                                                                         |
+| `workflows/<workflow-id>/devflow.yaml`         | Metadata, release config, docs fields, examples, and tests.                                                                                                               |
+| `workflows/<workflow-id>/scripts/`             | Source support scripts inlined into the published workflow at sync time.                                                                                                  |
+| `.github/workflows/<workflow-id>.yaml`         | Generated publish location required by GitHub.                                                                                                                            |
+| `.github/workflows/_scenarios-<id>.yaml`       | Generated hosted scenario test workflow (one per catalog workflow).                                                                                                       |
+| `.github/workflows/_scenarios-<id>.local.yaml` | Generated local scenario test workflow (one per workflow with local scenarios).                                                                                           |
+| `.github/workflows/_*.yaml`                    | The repository's own internal workflows (CI, docs, release, CodeQL, devcontainer).                                                                                        |
+| `.dev/src/devflows/`                           | Python CLI and generation logic.                                                                                                                                          |
+| `.dev/scripts/`                                | Maintainer helper scripts (shell-lint helpers, `move_major_tags.py`).                                                                                                     |
+| `.dev/harness/scenarios/`                      | Scenario harness scripts run by the generated scenario workflows.                                                                                                         |
+| `.dev/pyproject.toml`                          | Packaging + editable-install metadata for the `devflows` dev package.                                                                                                     |
+| `.config/`                                     | Tool configs passed explicitly by the Taskfile (ruff, pytest, yamllint, prettier, gitleaks, zizmor) plus auto-discovered configs (renovate, lefthook) and `project.yaml`. |
+| `tests/`                                       | Python unit tests, split by purpose into the subfolders below.                                                                                                            |
+| `tests/package/`                               | Tests for the `devflows` generator/package internals.                                                                                                                     |
+| `tests/workflows/`                             | Tests for individual catalog workflows.                                                                                                                                   |
+| `tests/internal/`                              | Tests for the repo's own internal workflows and release tooling.                                                                                                          |
+| `tests/harness/`                               | Tests for the scenario harness scripts.                                                                                                                                   |
+| `tests/conftest.py`                            | Shared pytest fixtures (applies to every subfolder).                                                                                                                      |
+| `tests/fixtures/`                              | Example caller workflows rendered into docs.                                                                                                                              |
+| `tests/scenarios/`                             | Checked-in test inputs used by workflow scenarios.                                                                                                                        |
+| `docs/user-guide/`                             | Hand-written consumer documentation.                                                                                                                                      |
+| `docs/dev-guide/`                              | Hand-written maintainer documentation (this tree).                                                                                                                        |
+| `docs/reference/`                              | Ignored generated workflow catalog and reference pages created during docs builds.                                                                                        |
 
 There is **no** `workflows/_drafts/` directory in the tree. `_drafts` is an
 optional, currently-empty mechanism:
@@ -65,7 +83,7 @@ Edit source files first:
 - workflow support scripts: `workflows/<workflow-id>/scripts/...`
 - metadata/docs/tests: `workflows/<workflow-id>/devflow.yaml`
 - docs guide pages: `docs/user-guide/...` and `docs/dev-guide/...`
-- generator behavior: `src/devflows/...`
+- generator behavior: `.dev/src/devflows/...`
 
 Then regenerate committed generated files:
 

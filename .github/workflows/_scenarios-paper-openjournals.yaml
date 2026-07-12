@@ -46,7 +46,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.paper_openjournals_cff_jats_build_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -57,16 +57,16 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/paper-openjournals/build/cff/CITATION.cff
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: cff/CITATION.cff'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/paper-openjournals/build/cff/CITATION.cff
           ASSERT_TEXT: DevFlows fixture paper
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
       - name: 'Assert file matches glob: jats/jats/paper.jats'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/paper-openjournals/build/jats/jats/paper.jats
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py

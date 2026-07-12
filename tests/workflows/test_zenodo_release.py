@@ -29,7 +29,7 @@ from devflows.publish import (
     render_published_workflow,
 )
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO / "workflows" / "zenodo-release" / "scripts"
 
 # Helper modules are imported by bare name (they are materialized next to the entry
@@ -1011,7 +1011,7 @@ def test_prepare_cff_metadata(env, tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("dep", ["pyyaml", "requests"])
 def test_ephemeral_pin_matches_renovate_manager(dep: str) -> None:
-    renovate = (REPO / "renovate.json5").read_text(encoding="utf-8")
+    renovate = (REPO / ".config" / "renovate.json5").read_text(encoding="utf-8")
     workflow = (REPO / "workflows" / "zenodo-release" / "workflow.yaml").read_text(encoding="utf-8")
     match_strings = re.findall(rf"'(--with \"{dep}==[^']*)'", renovate)
     assert len(match_strings) == 1, f"expected one {dep} matchString"

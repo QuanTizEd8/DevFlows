@@ -44,9 +44,9 @@ promise and activates its moving `<id>/vMAJOR` tag.
 `1.0.0`.** In manifest mode the manifest records the **last released** version,
 so writing `1.0.0` there tells release-please that `1.0.0` is _already out_. It
 then computes the _next_ version from `1.0.0`, cuts **no** `<id>/v1.0.0` tag,
-and — because no release is produced — `scripts/move_major_tags.py` never runs,
-so `<id>/v1` is never created. That is the trap the previous procedure fell
-into.
+and — because no release is produced — `.dev/scripts/move_major_tags.py` never
+runs, so `<id>/v1` is never created. That is the trap the previous procedure
+fell into.
 
 Instead, force the version with release-please's documented one-time
 `Release-As` commit footer (see the
@@ -94,7 +94,7 @@ To promote one workflow `<id>`:
    `main` is never committed in an inconsistent state. release-please creates
    the `<id>/v1.0.0` tag and GitHub release; because the released major is now
    `>= 1`, the `Force-move moving major tags` step runs
-   `scripts/move_major_tags.py` and creates/moves `<id>/v1`.
+   `.dev/scripts/move_major_tags.py` and creates/moves `<id>/v1`.
 
 **Why there is no deadlock.** `task release-check` only ever compares the
 **committed** state of `main`, where `release.major` must equal the manifest
@@ -157,8 +157,8 @@ the default branch.
 ## Shared-Generator Propagation
 
 The published reusable workflows in `.github/workflows/<id>.yaml` are generated
-from `workflows/<id>/` **plus** the shared generator in `src/devflows/` (notably
-the IO-channel templates in `publish.py` and the SHA-pin registry in
+from `workflows/<id>/` **plus** the shared generator in `.dev/src/devflows/`
+(notably the IO-channel templates in `publish.py` and the SHA-pin registry in
 `actions.py`). release-please attributes a release to a workflow only from
 commits that touch that workflow's package path (`workflows/<id>/`); the commit
 _scope_ is cosmetic. So a change to the shared generator can alter a workflow's
@@ -190,8 +190,9 @@ Release automation publishes immutable exact tags (`<id>/vX.Y.Z`) for every
 release. Once a workflow is released at major `>= 1`, the
 `Force-move moving major tags` step in `_release.yaml` additionally
 force-updates `<id>/v<major>` onto that release's commit. The logic lives in
-`scripts/move_major_tags.py` (`compute_major_tag_moves`, unit-tested in
-`tests/test_release_tags.py`) and reads the release-please-action outputs.
+`.dev/scripts/move_major_tags.py` (`compute_major_tag_moves`, unit-tested in
+`tests/internal/test_release_tags.py`) and reads the release-please-action
+outputs.
 
 The automation is **dormant during `0.x`** by construction: every released major
 is `0`, so `compute_major_tag_moves` returns nothing and no tag is moved. It is
@@ -238,10 +239,10 @@ Protect the workflow-scoped release tags so a release is immutable once cut:
   release tags immutable and blocks accidental tag deletion.
 - **Bypass:** the release identity **must** be on the bypass list. The
   `Force-move moving major tags` step force-pushes `<id>/v<major>` via
-  `scripts/move_major_tags.py`, which is an update to a protected tag; without a
-  bypass for the `RELEASE_PLEASE_TOKEN` identity that push is rejected. (During
-  `0.x` the automation is dormant, but configure the bypass before the first
-  `1.0.0` so the promotion does not fail.)
+  `.dev/scripts/move_major_tags.py`, which is an update to a protected tag;
+  without a bypass for the `RELEASE_PLEASE_TOKEN` identity that push is
+  rejected. (During `0.x` the automation is dormant, but configure the bypass
+  before the first `1.0.0` so the promotion does not fail.)
 
 ### Branch protection for `main`
 

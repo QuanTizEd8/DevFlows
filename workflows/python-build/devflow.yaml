@@ -109,7 +109,7 @@ tests:
     # outputs between jobs as run-internal artifacts, a GitHub service `act` cannot
     # emulate without an artifact server the local harness does not configure; the
     # scripts' behavior (validate, build, aggregate, digest, version-consistency)
-    # is covered exhaustively by tests/test_python_build.py instead.
+    # is covered exhaustively by tests/workflows/test_python_build.py instead.
     - id: pure-wheelhouse
       name: Pure uv build produces a wheelhouse and sdist
       runs:
@@ -221,7 +221,7 @@ tests:
     # Failure-path scenarios exercise validate-inputs.py directly (no reusable
     # call) through the expect: validation-failure harness, so they run under both
     # act and hosted CI. Each pins a stable substring of the rejection it targets;
-    # the exhaustive script coverage still lives in tests/test_python_build.py.
+    # the exhaustive script coverage still lives in tests/workflows/test_python_build.py.
     - id: nothing-to-build
       name: All build flavors disabled fails validation
       runs:

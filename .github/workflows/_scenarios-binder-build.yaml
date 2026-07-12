@@ -45,7 +45,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.binder_build_dry_run_build_hosted_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -56,14 +56,14 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/binder-build/dry-run/image-id
           ASSERT_TEXT: 'sha256:'
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
       - name: Assert output image-ref
         shell: bash
         env:
           ASSERT_NAME: image-ref
           EXPECTED: ''
           ACTUAL: ${{ needs.binder_build_dry_run_build_hosted_call.outputs.image-ref }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
   binder_build_missing_image_name_validate:
     name: 'Binder Build: Empty image-name fails validation'
     runs-on: ubuntu-latest
@@ -95,7 +95,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: image-name is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_invalid_image_name_validate:
     name: 'Binder Build: image-name carrying a tag fails validation'
     runs-on: ubuntu-latest
@@ -127,7 +127,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: WITHOUT a tag
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_empty_image_tags_validate:
     name: 'Binder Build: image-tags resolving to an empty list fails validation'
     runs-on: ubuntu-latest
@@ -159,7 +159,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: non-empty newline-separated list
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_push_without_environment_validate:
     name: 'Binder Build: A real push with no push-environment-name fails validation'
     runs-on: ubuntu-latest
@@ -191,7 +191,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: push-environment-name is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_arguments_owned_push_flag_validate:
     name: 'Binder Build: A --push smuggled through repo2docker-arguments fails validation'
     runs-on: ubuntu-latest
@@ -223,7 +223,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_arguments_owned_image_name_validate:
     name: 'Binder Build: An attached --image-name=value fails validation'
     runs-on: ubuntu-latest
@@ -255,7 +255,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: owned by typed inputs
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_arguments_attached_short_option_validate:
     name: 'Binder Build: An attached short option fails validation'
     runs-on: ubuntu-latest
@@ -287,7 +287,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: only the allowlisted passthrough flags
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_arguments_bare_positional_validate:
     name: 'Binder Build: A bare positional source fails validation'
     runs-on: ubuntu-latest
@@ -319,7 +319,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: only the allowlisted passthrough flags
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_arguments_invalid_shlex_validate:
     name: 'Binder Build: An unbalanced quote in repo2docker-arguments fails validation'
     runs-on: ubuntu-latest
@@ -351,7 +351,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: could not be parsed as shell arguments
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_unsafe_source_path_validate:
     name: 'Binder Build: A repo2docker-source-path escaping the workspace fails validation'
     runs-on: ubuntu-latest
@@ -383,7 +383,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: workspace-relative path
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_invalid_repo2docker_version_validate:
     name: 'Binder Build: A repo2docker-version with a smuggled specifier fails validation'
     runs-on: ubuntu-latest
@@ -415,7 +415,7 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: date-based jupyter-repo2docker version
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   binder_build_unsafe_dockerfile_artifact_name_validate:
     name: 'Binder Build: An artifact-unsafe dockerfile-artifact-name fails validation'
     runs-on: ubuntu-latest
@@ -447,4 +447,4 @@ jobs:
           BINDER_CACHE_REF: ${{ github.sha }}
           BINDER_CACHE_ENDPOINT: https://mybinder.org
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: artifact-safe token
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

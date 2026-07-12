@@ -36,7 +36,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_missing_source_validate:
     name: 'Open Journals Paper Build: Empty paper-source-path fails validation'
@@ -55,7 +55,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: paper-source-path is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_unsafe_source_validate:
     name: 'Open Journals Paper Build: A paper-source-path that escapes the workspace fails validation'
@@ -74,7 +74,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must stay inside
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_empty_flavors_validate:
     name: 'Open Journals Paper Build: Empty paper-flavors fails validation'
@@ -91,7 +91,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: at least one paper flavor
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_unknown_flavor_validate:
     name: 'Open Journals Paper Build: An unknown flavor name fails validation'
@@ -110,7 +110,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: 'unknown paper flavor: gif'
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_invalid_image_validate:
     name: 'Open Journals Paper Build: A malformed paper-image reference fails validation'
@@ -129,7 +129,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: valid image reference
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_owned_flag_argument_validate:
     name: 'Open Journals Paper Build: An output-selection flag in paper-arguments fails validation'
@@ -148,7 +148,7 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: -o pdf
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: controlled by paper-flavors
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act
   paper_openjournals_positional_argument_validate:
     name: 'Open Journals Paper Build: A bare positional in paper-arguments fails validation'
@@ -167,5 +167,5 @@ jobs:
           PAPER_OUTPUT_DIRECTORY: paper-build
           PAPER_ARGUMENTS: paper2.md
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: positional
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
     needs: require_act

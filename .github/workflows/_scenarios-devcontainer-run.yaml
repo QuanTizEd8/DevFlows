@@ -45,7 +45,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.devcontainer_run_hooks_and_exec_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -56,13 +56,13 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/hooks/result.txt
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: result.txt'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/hooks/result.txt
           ASSERT_TEXT: hook-ran-and-command-ran
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   devcontainer_run_cache_restore_before_hooks_call:
     name: 'Devcontainer Run: Restore a workspace cache before the creation hooks populate it'
     uses: ./.github/workflows/devcontainer-run.yaml
@@ -96,7 +96,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.devcontainer_run_cache_restore_before_hooks_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -107,13 +107,13 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/cache/result.txt
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: result.txt'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/cache/result.txt
           ASSERT_TEXT: cached-by-postcreate
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   devcontainer_run_container_env_into_hooks_and_command_call:
     name: 'Devcontainer Run: A container-env value reaches both the creation hook and the command'
     uses: ./.github/workflows/devcontainer-run.yaml
@@ -147,7 +147,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.devcontainer_run_container_env_into_hooks_and_command_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -158,13 +158,13 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/env/result.txt
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: result.txt'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/env/result.txt
           ASSERT_TEXT: env-visible-in-command-and-hook
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   devcontainer_run_run_secrets_into_hooks_and_command_call:
     name: 'Devcontainer Run: A run-secrets value reaches both the creation hook and the command'
     uses: ./.github/workflows/devcontainer-run.yaml
@@ -198,7 +198,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.devcontainer_run_run_secrets_into_hooks_and_command_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -209,13 +209,13 @@ jobs:
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/secrets/result.txt
           ASSERT_GLOB: '1'
-        run: python harness/scenarios/assert-file-exists.py
+        run: python .dev/harness/scenarios/assert-file-exists.py
       - name: 'Assert file contains: result.txt'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-run/secrets/result.txt
           ASSERT_TEXT: secret-visible-in-command-and-hook
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py
   devcontainer_run_invalid_image_validate:
     name: 'Devcontainer Run: A malformed devcontainer-image fails validation'
     runs-on: ubuntu-latest
@@ -244,7 +244,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: valid image reference
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_neither_image_nor_config_validate:
     name: 'Devcontainer Run: Neither devcontainer-image nor devcontainer-config-file fails validation'
     runs-on: ubuntu-latest
@@ -273,7 +273,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: at least one of devcontainer-image or devcontainer-config-file
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_invalid_run_shell_validate:
     name: 'Devcontainer Run: An unsupported run-shell fails validation'
     runs-on: ubuntu-latest
@@ -302,7 +302,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: run-shell must be one of
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_unsafe_config_file_validate:
     name: 'Devcontainer Run: A devcontainer-config-file that escapes the workspace fails validation'
     runs-on: ubuntu-latest
@@ -331,7 +331,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: must stay inside
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_invalid_features_json_validate:
     name: 'Devcontainer Run: Non-JSON devcontainer-features fails validation'
     runs-on: ubuntu-latest
@@ -360,7 +360,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: devcontainer-features must be valid JSON
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_empty_run_command_validate:
     name: 'Devcontainer Run: An empty run-command fails validation'
     runs-on: ubuntu-latest
@@ -389,7 +389,7 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: run-command is required
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_cache_enabled_without_paths_validate:
     name: 'Devcontainer Run: cache-enabled with no cache-paths fails validation'
     runs-on: ubuntu-latest
@@ -418,7 +418,7 @@ jobs:
           CACHE_KEY: some-key
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cache-paths is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py
   devcontainer_run_cache_enabled_without_key_validate:
     name: 'Devcontainer Run: cache-enabled with no cache-key fails validation'
     runs-on: ubuntu-latest
@@ -447,4 +447,4 @@ jobs:
           CACHE_KEY: ''
           CACHE_RESTORE_KEYS: ''
           DEVFLOWS_FAILURE_MESSAGE_CONTAINS: cache-key is empty
-        run: python harness/scenarios/assert-validation-failure.py
+        run: python .dev/harness/scenarios/assert-validation-failure.py

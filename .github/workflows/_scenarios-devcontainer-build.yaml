@@ -48,7 +48,7 @@ jobs:
         shell: bash
         env:
           ACTUAL_RESULT: ${{ needs.devcontainer_build_build_only_minimal_call.result }}
-        run: python harness/scenarios/assert-result.py
+        run: python .dev/harness/scenarios/assert-result.py
       - name: Download scenario artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -60,10 +60,10 @@ jobs:
           ASSERT_NAME: image-ref
           EXPECTED: ''
           ACTUAL: ${{ needs.devcontainer_build_build_only_minimal_call.outputs.image-ref }}
-        run: python harness/scenarios/assert-equals.py
+        run: python .dev/harness/scenarios/assert-equals.py
       - name: 'Assert file contains: linux-amd64'
         shell: bash
         env:
           ASSERT_PATH: .devflows-test-artifacts/devcontainer-build/build-only/linux-amd64
           ASSERT_TEXT: 'sha256:'
-        run: python harness/scenarios/assert-file-contains.py
+        run: python .dev/harness/scenarios/assert-file-contains.py

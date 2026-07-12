@@ -24,12 +24,12 @@ and a per-ref concurrency group cancels superseded runs.
 **`Adapter contract`** runs the network-backed adapter contract test, but only
 when a pull request actually touches an action pin or a workflow that consumes
 one. A guard step diffs the PR against its base for changes to
-`src/devflows/actions.py`, any `workflows/*/workflow.yaml`, or any
+`.dev/src/devflows/actions.py`, any `workflows/*/workflow.yaml`, or any
 `.github/workflows/*.yaml`; when none matched, the job completes without running
 the test. When they did, it runs:
 
 ```bash
-task test-contract   # pixi run -- pytest -m network tests/test_contract.py
+task test-contract   # pixi run -- pytest -c .config/pytest.ini -m network tests/package/test_contract.py
 ```
 
 which fetches each pinned action's `action.yml` at its pinned SHA and asserts
