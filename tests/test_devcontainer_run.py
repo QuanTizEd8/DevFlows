@@ -1190,11 +1190,18 @@ def test_domain_inputs_match_the_design() -> None:
     assert inputs["docker-login-enabled"]["default"] is False
     assert inputs["devcontainer-cli-version"]["default"] == "0.87.0"
     assert inputs["run-timeout-minutes"]["default"] == 30
-    # Channel inputs are generator-injected (checkout + both artifact channels);
-    # writeback is NOT (io.writeback is false).
-    channels = {"checkout-enabled", "artifact-download-enabled", "artifact-upload-enabled"}
+    # Channel inputs are generator-injected: checkout + both artifact channels +
+    # writeback (io.writeback is true, giving callers an opt-in commit/push).
+    channels = {
+        "checkout-enabled",
+        "artifact-download-enabled",
+        "artifact-upload-enabled",
+        "commit-enabled",
+    }
     assert channels <= set(inputs)
-    assert "commit-enabled" not in inputs
+    # Writeback commit is opt-in (default false) and needs explicit commit-paths.
+    assert inputs["commit-enabled"]["default"] is False
+    assert "commit-paths" in inputs
 
 
 def test_cache_inputs_are_declared_with_defaults() -> None:
@@ -1251,15 +1258,23 @@ def test_permissions_are_least_privilege() -> None:
     assert published["permissions"] == {}
     assert published["jobs"]["validate"]["permissions"] == {}
     # Run needs contents: read (checkout), packages: read (private ghcr pull),
-    # and actions: read (artifact channels, generator-injected).
+    # and actions: read (artifact channels, generator-injected). It stays
+    # read-only; only the isolated writeback commit job holds a write scope.
     assert published["jobs"]["run"]["permissions"] == {
         "contents": "read",
         "packages": "read",
         "actions": "read",
     }
-    for job in published["jobs"].values():
+    # The writeback commit job is the sole holder of contents: write.
+    assert published["jobs"]["commit"]["permissions"] == {
+        "actions": "read",
+        "contents": "write",
+    }
+    # No job other than commit requests a write scope, and nothing requests id-token.
+    for job_id, job in published["jobs"].items():
         perms = job.get("permissions", {})
-        assert "write" not in " ".join(f"{k}:{v}" for k, v in perms.items())
+        if job_id != "commit":
+            assert "write" not in " ".join(f"{k}:{v}" for k, v in perms.items())
         assert "id-token" not in perms
 
 
@@ -1278,6 +1293,7 @@ def test_run_needs_validate_and_declared_secrets() -> None:
         "checkout-token",
         "checkout-ssh-key",
         "artifact-download-token",
+        "commit-token",
     }
 
 

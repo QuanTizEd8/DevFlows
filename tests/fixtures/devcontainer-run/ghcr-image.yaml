@@ -3,11 +3,13 @@ name: Devcontainer Run
 on:
   workflow_dispatch:
 
-# devcontainer-run's run job declares contents: read, actions: read, and
-# packages: read; GitHub validates the nested permissions before the run starts.
+# devcontainer-run's run job is read-only, but its optional writeback commit job
+# statically requires contents: write; GitHub validates every nested job's
+# permissions before the run starts, so a caller must grant contents: write even
+# when commit-enabled is false (this example does not commit).
 permissions:
   actions: read
-  contents: read
+  contents: write
   packages: read
 
 jobs:

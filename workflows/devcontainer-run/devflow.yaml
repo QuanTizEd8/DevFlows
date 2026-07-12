@@ -30,17 +30,35 @@ io:
   checkout: true
   artifact-download: true
   artifact-upload: true
+  writeback: true
 notes:
   - >-
     Caller permissions: the run job needs contents: read (to check out the
     workspace the command sees as its bind mount), actions: read (added by the
-    artifact-download and artifact-upload channels), and packages: read (to pull
-    a private ghcr.io image through the github.token docker-login fallback). A
-    calling job must grant at least permissions: contents: read, actions: read,
-    packages: read - GitHub validates a nested workflow's permissions before the
-    run starts, so the grant is required even for a public image (packages: read
-    is then simply unused). The validate job needs no permissions. There are no
-    write scopes and no id-token.
+    artifact-download, artifact-upload, and writeback channels), and packages:
+    read (to pull a private ghcr.io image through the github.token docker-login
+    fallback). The optional writeback commit runs in a separate nested job that
+    statically requires contents: write (and actions: read), so a calling job
+    must grant at least permissions: contents: write, actions: read, packages:
+    read - GitHub validates a nested workflow's permissions before the run
+    starts, so contents: write is required even when commit-enabled is false (and
+    packages: read is simply unused for a public image). The validate job and the
+    run job themselves stay read-only (contents: read); only the isolated commit
+    job holds contents: write. There is no id-token anywhere.
+  - >-
+    Commit writeback is opt-in (commit-enabled, default false) and requires
+    explicit commit-paths. It commits files the container command wrote into the
+    workspace bind mount (for example a formatter's or code-generator's edits)
+    back to a branch, running in a separate contents: write job so the command
+    itself stays read-only. Pair it with remove-container to keep or drop the
+    container after the files are captured.
+  - >-
+    The internal writeback payload artifact name defaults to a run-scoped value
+    (devflows-devcontainer-run-writeback-<run_id>-<run_attempt>), so
+    commit-enabled invocations in different runs never collide. Invoking this
+    workflow more than once with commit-enabled in the SAME run still needs a
+    distinct commit-internal-artifact-name per invocation, because the run-scoped
+    default is identical within one run.
   - >-
     Runs a prebuilt image, never a build: `devcontainer up` against an
     image-based config pulls the OCI reference (no docker build) and applies the
