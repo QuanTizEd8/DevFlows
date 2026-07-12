@@ -930,6 +930,7 @@ def test_interface_outputs_match_design() -> None:
         "dist-sha256sums",
         "dist-manifest",
         "package-version",
+        "job-outputs",
     }
 
 

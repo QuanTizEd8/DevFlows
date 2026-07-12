@@ -20,6 +20,7 @@ docs:
 io:
   job: package
   runtime: true
+  job-output: true
   checkout: true
   artifact-download: true
 notes:

@@ -21,6 +21,7 @@ docs:
 io:
   job: python-lint
   runtime: true
+  job-output: true
   checkout: true
   artifact-download: true
   artifact-upload: true

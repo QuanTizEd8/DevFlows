@@ -586,6 +586,7 @@ def test_interface_secret_and_outputs() -> None:
         "pages-artifact-id",
         "docs-output-directory",
         "docs-linkcheck-report-directory",
+        "job-outputs",
     }
 
 

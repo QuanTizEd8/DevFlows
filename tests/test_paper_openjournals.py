@@ -522,11 +522,12 @@ def test_domain_inputs_match_the_design() -> None:
 
 def test_outputs_echo_the_build_job() -> None:
     outputs = _workflow_call(_published())["outputs"]
-    assert set(outputs) == {"paper-output-directory", "flavors-built"}
+    assert set(outputs) == {"paper-output-directory", "flavors-built", "job-outputs"}
     assert outputs["paper-output-directory"]["value"] == (
         "${{ jobs.build.outputs.paper-output-directory }}"
     )
     assert outputs["flavors-built"]["value"] == "${{ jobs.build.outputs.flavors-built }}"
+    assert outputs["job-outputs"]["value"] == "${{ jobs.build.outputs.job-outputs }}"
 
 
 def test_permissions_are_least_privilege() -> None:

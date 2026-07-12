@@ -24,6 +24,7 @@ docs:
 io:
   job: build
   runtime: true
+  job-output: true
   runtime-jobs:
     - validate
   checkout: true

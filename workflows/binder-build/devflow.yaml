@@ -27,6 +27,7 @@ docs:
 io:
   job: build-binder
   runtime: true
+  job-output: true
   checkout: true
   artifact-download: true
   runtime-jobs:
