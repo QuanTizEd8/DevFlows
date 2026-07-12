@@ -21,6 +21,7 @@ docs:
 io:
   job: docs-build
   runtime: true
+  job-output: true
   checkout: true
   artifact-download: true
   artifact-upload: true

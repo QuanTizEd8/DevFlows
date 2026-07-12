@@ -25,6 +25,7 @@ docs:
 io:
   job: verify
   runtime: true
+  job-output: true
   artifact-download: true
   artifact-download-jobs:
     - publish

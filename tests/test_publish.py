@@ -5,6 +5,7 @@ from devflows.catalog import Workflow, load_catalog
 from devflows.publish import (
     _ensure_job_permissions,
     build_published_workflow,
+    caller_required_permissions,
     render_published_workflow,
     validate_publish_config,
 )
@@ -72,6 +73,7 @@ def test_pandoc_published_workflow_injects_shared_io_steps_and_commit_job() -> N
         "Upload artifact",
         "Create writeback payload",
         "Upload writeback payload",
+        "Collect job outputs",
     ]
     assert workflow["jobs"]["commit"]["uses"] == "./.github/workflows/writeback.yaml"
     assert workflow["jobs"]["commit"]["needs"] == "pandoc"
@@ -479,3 +481,109 @@ def test_render_leaves_uses_line_inside_inlined_script_untouched(make_catalog) -
 
     assert pin_line.rstrip() in rendered
     assert "# v7.0.0" not in rendered
+
+
+# ------------------------------------------------- job-output channel
+
+
+def _job_output_item(io_overrides: dict | None = None, *, jobs: dict | None = None) -> Workflow:
+    io = {"job": "demo", "runtime": True, "job-output": True}
+    if io_overrides:
+        io.update(io_overrides)
+    workflow = {
+        "on": {"workflow_call": {}},
+        "permissions": {"contents": "read"},
+        "jobs": jobs
+        or {"demo": {"runs-on": "ubuntu-latest", "steps": [{"name": "Do", "run": "true"}]}},
+    }
+    return _make_workflow({"id": "demo", "io": io}, workflow)
+
+
+def test_job_output_injects_step_input_and_merged_outputs() -> None:
+    pandoc = _workflow("pandoc")
+    workflow = build_published_workflow(pandoc)
+    call = workflow["on"]["workflow_call"]
+
+    # A single statically-declared string input feeds the channel.
+    assert call["inputs"]["job-output-map"]["default"] == ""
+    assert call["inputs"]["job-output-map"]["type"] == "string"
+
+    step = next(
+        s for s in workflow["jobs"]["pandoc"]["steps"] if s.get("id") == "devflows-job-output"
+    )
+    assert step["name"] == "Collect job outputs"
+    assert step["if"] == "inputs.job-output-map != ''"
+    # Inputs reach the collector only via env, never interpolated into the run body.
+    assert step["env"]["DEVFLOWS_JOB_OUTPUT_MAP"] == "${{ inputs.job-output-map }}"
+    assert step["run"] == 'python "${DEVFLOWS_SCRIPT_ROOT}/_channels/collect-job-outputs.py"'
+    assert "${{ inputs.job-output-map }}" not in step["run"]
+
+    # The io.job exposes the merged output; workflow_call re-exports it.
+    assert (
+        workflow["jobs"]["pandoc"]["outputs"]["job-outputs"]
+        == "${{ steps.devflows-job-output.outputs.job-outputs }}"
+    )
+    assert call["outputs"]["job-outputs"]["value"] == "${{ jobs.pandoc.outputs.job-outputs }}"
+
+    # The compact collector is inlined into the io.job's materialize step.
+    materialize = next(
+        s for s in workflow["jobs"]["pandoc"]["steps"] if s.get("id") == "devflows-runtime"
+    )
+    assert 'cat > "$RUNNER_TEMP/devflows/_channels/collect-job-outputs.py"' in materialize["run"]
+
+
+def test_job_output_preserves_author_domain_outputs() -> None:
+    # devcontainer-run declares container-id/remote-user on its io.job; the channel
+    # must merge job-outputs beside them, never overwrite the author's outputs.
+    workflow = build_published_workflow(_workflow("devcontainer-run"))
+    run_job = workflow["jobs"]["run"]
+
+    assert run_job["outputs"]["container-id"] == "${{ steps.run.outputs.container-id }}"
+    assert run_job["outputs"]["remote-user"] == "${{ steps.run.outputs.remote-user }}"
+    assert (
+        run_job["outputs"]["job-outputs"] == "${{ steps.devflows-job-output.outputs.job-outputs }}"
+    )
+    call_outputs = workflow["on"]["workflow_call"]["outputs"]
+    assert {"container-id", "remote-user", "job-outputs"} <= set(call_outputs)
+
+
+def test_job_output_adds_no_caller_permission() -> None:
+    base = caller_required_permissions(
+        build_published_workflow(_job_output_item({"job-output": False}))
+    )
+    with_channel = caller_required_permissions(build_published_workflow(_job_output_item()))
+
+    assert with_channel == base  # the channel forces no extra caller permission
+
+
+def test_validate_rejects_job_output_without_runtime() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "demo", "job-output": True}},
+        {"jobs": {"demo": {"steps": []}}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("io.job-output requires io.runtime" in error for error in errors)
+
+
+def test_validate_rejects_job_output_on_matrix_io_job() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "demo", "runtime": True, "job-output": True}},
+        {"jobs": {"demo": {"strategy": {"matrix": {"os": ["a", "b"]}}, "steps": []}}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("io.job-output cannot target the matrix job 'demo'" in error for error in errors)
+
+
+def test_validate_rejects_job_output_domain_key_collision() -> None:
+    item = _make_workflow(
+        {"id": "demo", "io": {"job": "demo", "runtime": True, "job-output": True}},
+        {"jobs": {"demo": {"steps": [], "outputs": {"job-outputs": "${{ steps.x.outputs.y }}"}}}},
+    )
+
+    errors = validate_publish_config(item)
+
+    assert any("already declares an output named 'job-outputs'" in error for error in errors)

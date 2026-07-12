@@ -68,6 +68,10 @@
             "artifact-download": { "type": "boolean" },
             "artifact-upload": { "type": "boolean" },
             "writeback": { "type": "boolean" },
+            "job-output": {
+              "type": "boolean",
+              "description": "Expose a single universal job-outputs workflow output (a JSON object) assembled from the caller's job-output-map. Requires runtime: true and a non-matrix io.job. Adds no caller permissions and no nested job; consumers read fromJSON(needs.<call>.outputs.job-outputs).<key>."
+            },
             "runtime-jobs": {
               "type": "array",
               "items": { "type": "string" },

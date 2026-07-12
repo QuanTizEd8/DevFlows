@@ -564,6 +564,7 @@ def test_published_outputs_are_renamed_per_conventions() -> None:
         "ruff-format-outcome",
         "typecheck-outcome",
         "lint-results",
+        "job-outputs",
     }
 
 
