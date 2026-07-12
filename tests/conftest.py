@@ -6,6 +6,31 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _isolate_github_step_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the Actions runner's per-step env files for every unit test.
+
+    In CI the test job runs inside a devcontainer where GITHUB_OUTPUT / GITHUB_ENV
+    / GITHUB_STATE / GITHUB_STEP_SUMMARY / GITHUB_PATH are set. A validate-inputs
+    script keyed on ``if GITHUB_OUTPUT`` (e.g. deploy-pages emitting a computed
+    pages-timeout) then takes its output-emitting branch against per-test env that
+    omits the emitted inputs, so tests that pass locally (these vars unset) fail
+    only in CI. Clearing them makes every test deterministic; the few tests that
+    exercise the emission path set the variable explicitly in their own body,
+    which overrides this fixture.
+    """
+    step_env_files = (
+        "GITHUB_OUTPUT",
+        "GITHUB_ENV",
+        "GITHUB_STATE",
+        "GITHUB_STEP_SUMMARY",
+        "GITHUB_PATH",
+    )
+    for var in step_env_files:
+        monkeypatch.delenv(var, raising=False)
+
+
 PROJECT_YAML = textwrap.dedent(
     """\
     owner: Example
