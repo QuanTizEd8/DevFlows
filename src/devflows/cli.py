@@ -11,7 +11,6 @@ from pathlib import Path
 from devflows.catalog import (
     CATALOG_DIR,
     PUBLISHED_DIR,
-    RESERVED_ID_PREFIX,
     load_catalog,
     validate_workflow,
 )
@@ -27,7 +26,11 @@ from devflows.scenarios import (
 )
 from devflows.schema import schema_errors
 
-INTERNAL_PREFIX = RESERVED_ID_PREFIX
+# The orphan sweep must skip BOTH the current internal namespace ("_", which owns
+# every renamed internal workflow file) and the legacy "devflows-" prefix (kept for
+# back-compat during the rename). Without "_" here, `devflows sync` would delete
+# every generated `_scenarios-*.yaml`. Passed straight to str.startswith(tuple).
+INTERNAL_PREFIX = ("_", "devflows-")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -190,7 +193,10 @@ def _orphans(workflows: list) -> list[Path]:
 
     Published workflows no longer carry a `.github/workflows/<id>/` script tree, so
     any non-internal directory there is orphaned, as is any `<name>.yaml`/`<name>.yml`
-    that no active workflow produces. Internal `devflows-*` files/dirs are left alone.
+    that no active workflow produces. Internal files/dirs whose name starts with any
+    INTERNAL_PREFIX entry (``_`` for the current internal namespace, ``devflows-`` for
+    legacy back-compat) are left alone -- this is what keeps the generated
+    ``_scenarios-*.yaml`` files from being swept.
     """
     expected = {item.published_path for item in workflows}
     orphans: list[Path] = []

@@ -56,7 +56,7 @@ jobs:
           retention-days: 1
 
   # Dogfood the catalog: deploy to GitHub Pages by CALLING the repository's own
-  # reusable deploy-pages workflow (same pattern as devflows-devcontainer.yaml
+  # reusable deploy-pages workflow (same pattern as _devcontainer.yaml
   # calling devcontainer-build), instead of hand-rolling configure/upload/deploy.
   deploy:
     name: Deploy

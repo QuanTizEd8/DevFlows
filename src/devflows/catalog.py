@@ -8,11 +8,13 @@ from devflows.yaml import load_yaml
 
 CATALOG_DIR = Path("workflows")
 PUBLISHED_DIR = Path(".github/workflows")
-# Reserved namespace for the repository's own internal workflows
-# (devflows-ci.yaml, devflows-scenarios-<id>.yaml, ...). A catalog id in this
-# namespace would publish a `<id>.yaml` that shadows an internal file and that
-# the orphan sweep deliberately skips, so it is rejected at validation time.
-RESERVED_ID_PREFIX = "devflows-"
+# Reserved namespaces for the repository's own internal workflows
+# (_ci.yaml, _scenarios-<id>.yaml, ...). Internal files are now `_`-prefixed, so a
+# catalog id starting with "_" would publish a `<id>.yaml` that shadows an internal
+# file and that the orphan sweep deliberately skips. The legacy "devflows-" prefix
+# is retained for back-compat. A catalog id in either namespace is rejected at
+# validation time. Passed straight to str.startswith(tuple).
+RESERVED_ID_PREFIXES = ("_", "devflows-")
 
 
 @dataclass(frozen=True)
@@ -117,10 +119,11 @@ def validate_workflow(item: Workflow) -> list[str]:
     errors: list[str] = []
     if item.id != item.path.name:
         errors.append(f"{item.path}: metadata id {item.id!r} must match directory name.")
-    if item.id.startswith(RESERVED_ID_PREFIX):
+    reserved = next((prefix for prefix in RESERVED_ID_PREFIXES if item.id.startswith(prefix)), None)
+    if reserved is not None:
         errors.append(
             f"{item.metadata_path}: id {item.id!r} must not start with "
-            f"{RESERVED_ID_PREFIX!r}; that namespace is reserved for internal "
+            f"{reserved!r}; that namespace is reserved for internal "
             "workflows and its published file would be shadowed and never cleaned."
         )
     if item.metadata.get("status") not in {"active", "deprecated", "experimental"}:

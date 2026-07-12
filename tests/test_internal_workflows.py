@@ -1,6 +1,6 @@
 """Consistency checks on the repository's own internal workflows.
 
-These scan the committed ``.github/workflows/devflows-*.yaml`` files (hand-written
+These scan the committed ``.github/workflows/_*.yaml`` files (hand-written
 and generated) rather than the catalog, guarding two startup-failure classes:
 
 * item 1/2: an internal job that calls a catalog reusable workflow must grant at
@@ -27,7 +27,7 @@ _USES_PIN = re.compile(r"^(?P<ref>[^@\s]+@[0-9a-f]{40})")
 
 
 def _internal_workflows() -> list[Path]:
-    return sorted(PUBLISHED_DIR.glob("devflows-*.yaml"))
+    return sorted(PUBLISHED_DIR.glob("_*.yaml"))
 
 
 def test_internal_callers_grant_required_permissions() -> None:
@@ -59,12 +59,12 @@ def test_internal_callers_grant_required_permissions() -> None:
 
 
 def test_devflows_docs_deploys_via_deploy_pages_call() -> None:
-    """devflows-docs dogfoods the catalog: its deploy job calls deploy-pages and
+    """_docs dogfoods the catalog: its deploy job calls deploy-pages and
     grants the full permission union that reusable workflow's job tree declares."""
     catalog = {item.id: item for item in load_catalog()}
-    workflow = load_yaml(PUBLISHED_DIR / "devflows-docs.yaml")
+    workflow = load_yaml(PUBLISHED_DIR / "_docs.yaml")
     deploy = (workflow.get("jobs") or {}).get("deploy")
-    assert isinstance(deploy, dict), "devflows-docs.yaml must have a deploy job"
+    assert isinstance(deploy, dict), "_docs.yaml must have a deploy job"
     assert deploy.get("uses") == "./.github/workflows/deploy-pages.yaml"
     required = _required_call_permissions(catalog["deploy-pages"])
     # The union deploy-pages declares (actions: read, contents: read,

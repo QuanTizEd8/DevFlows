@@ -299,7 +299,7 @@ def test_scenarios_reference_harness_scripts_only() -> None:
     rendered = render_test_workflow(load_scenarios(load_catalog()), runner="hosted", name="H")
 
     assert "python harness/scenarios/assert-result.py" in rendered
-    assert ".github/workflows/devflows-scenarios/" not in rendered
+    assert ".github/workflows/_scenarios/" not in rendered
     assert ".github/workflows/writeback/create-payload.py" not in rendered
 
 
@@ -913,12 +913,8 @@ def test_every_local_job_depends_on_require_act() -> None:
 
 
 def test_scenario_path_helpers_name_per_workflow_files() -> None:
-    assert hosted_scenario_path("pandoc") == Path(
-        ".github/workflows/devflows-scenarios-pandoc.yaml"
-    )
-    assert local_scenario_path("pandoc") == Path(
-        ".github/workflows/devflows-scenarios-pandoc.local.yaml"
-    )
+    assert hosted_scenario_path("pandoc") == Path(".github/workflows/_scenarios-pandoc.yaml")
+    assert local_scenario_path("pandoc") == Path(".github/workflows/_scenarios-pandoc.local.yaml")
 
 
 def test_write_splits_into_per_workflow_files_and_drops_monolith(tmp_path, monkeypatch) -> None:
@@ -928,19 +924,19 @@ def test_write_splits_into_per_workflow_files_and_drops_monolith(tmp_path, monke
 
     # One hosted file per workflow with hosted scenarios; a local file only when the
     # workflow also owns local scenarios (devcontainer-build/writeback have none).
-    assert (tmp_path / "devflows-scenarios-pandoc.yaml").exists()
-    assert (tmp_path / "devflows-scenarios-pandoc.local.yaml").exists()
-    assert (tmp_path / "devflows-scenarios-devcontainer-build.yaml").exists()
-    assert not (tmp_path / "devflows-scenarios-devcontainer-build.local.yaml").exists()
-    assert not (tmp_path / "devflows-scenarios-writeback.local.yaml").exists()
+    assert (tmp_path / "_scenarios-pandoc.yaml").exists()
+    assert (tmp_path / "_scenarios-pandoc.local.yaml").exists()
+    assert (tmp_path / "_scenarios-devcontainer-build.yaml").exists()
+    assert not (tmp_path / "_scenarios-devcontainer-build.local.yaml").exists()
+    assert not (tmp_path / "_scenarios-writeback.local.yaml").exists()
     # The retired monolithic files are never (re)produced.
     assert not (tmp_path / "devflows-scenarios.yaml").exists()
     assert not (tmp_path / "devflows-local-scenarios.yaml").exists()
     # Every emitted file names exactly its owning workflow's scenarios.
-    pandoc = (tmp_path / "devflows-scenarios-pandoc.yaml").read_text(encoding="utf-8")
+    pandoc = (tmp_path / "_scenarios-pandoc.yaml").read_text(encoding="utf-8")
     assert "pandoc_markdown_html_artifact_call" in pandoc
     assert "zenodo" not in pandoc
-    assert set(changed) == set(tmp_path.glob("devflows-scenarios-*.yaml"))
+    assert set(changed) == set(tmp_path.glob("_scenarios-*.yaml"))
 
 
 def test_write_prunes_retired_monolithic_and_stale_files(tmp_path, monkeypatch) -> None:
@@ -973,7 +969,7 @@ def test_write_check_mode_flags_stale_without_touching_disk(tmp_path, monkeypatc
     # and deletes nothing.
     assert orphan in changed
     assert orphan.exists()
-    assert not (tmp_path / "devflows-scenarios-pandoc.yaml").exists()
+    assert not (tmp_path / "_scenarios-pandoc.yaml").exists()
 
 
 def test_scenario_files_are_size_guarded(tmp_path, monkeypatch) -> None:
@@ -988,7 +984,7 @@ def test_scenario_files_are_size_guarded(tmp_path, monkeypatch) -> None:
     message = str(excinfo.value)
     assert "over the 500-byte cap" in message
     # The guard labels the offending file, not a catalog workflow id.
-    assert "devflows-scenarios-" in message
+    assert "_scenarios-" in message
 
 
 def test_scenario_files_are_size_guarded_in_write_mode(tmp_path, monkeypatch) -> None:
@@ -1003,4 +999,4 @@ def test_scenario_files_are_size_guarded_in_write_mode(tmp_path, monkeypatch) ->
 
     assert "over the 500-byte cap" in str(excinfo.value)
     # Fail-closed: nothing was written to disk before the guard raised.
-    assert list(tmp_path.glob("devflows-scenarios-*.yaml")) == []
+    assert list(tmp_path.glob("_scenarios-*.yaml")) == []

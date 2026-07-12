@@ -2,7 +2,7 @@ name: DevFlows Devcontainer
 
 # Dogfood the catalog: prebuild and publish the CI/development devcontainer image
 # and its build cache to GHCR by CALLING the repository's own reusable
-# devcontainer-build workflow. devflows-ci.yaml and devflows-docs.yaml then reuse
+# devcontainer-build workflow. _ci.yaml and _docs.yaml then reuse
 # the cache instead of rebuilding the container from scratch every run.
 
 on:
@@ -11,7 +11,7 @@ on:
       - main
     paths:
       - ".devcontainer/**"
-      - ".github/workflows/devflows-devcontainer.yaml"
+      - ".github/workflows/_devcontainer.yaml"
   schedule:
     # Weekly rebuild so the image tracks upstream base-image and feature updates.
     - cron: "23 5 * * 1"

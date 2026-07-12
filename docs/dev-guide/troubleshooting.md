@@ -73,8 +73,8 @@ If the scenario should work locally:
 - confirm the scenario uses `checkout-enabled: false` when it relies on the
   bind-mounted local workspace
 - confirm `cleanup` removes outputs from previous runs
-- inspect the generated `.github/workflows/devflows-scenarios-<id>.local.yaml`
-  for the workflow under test
+- inspect the generated `.github/workflows/_scenarios-<id>.local.yaml` for the
+  workflow under test
 
 ## Hosted Scenario Assertions Cannot Find Files
 

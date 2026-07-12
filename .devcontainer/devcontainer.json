@@ -5,11 +5,11 @@
     // Currently, there is no way to define cache sources when using "image",
     // so we have to use "dockerfile" even though we don't need a custom one.
     "dockerfile": "Dockerfile",
-    // These cache tags are produced by .github/workflows/devflows-devcontainer.yaml,
+    // These cache tags are produced by .github/workflows/_devcontainer.yaml,
     // which dogfoods the catalog's own devcontainer-build reusable workflow to
     // prebuild and publish this image plus a registry build cache to GHCR
     // (cache-key-prefix "cache" yields exactly image-name:cache-<platform_tag>).
-    // devflows-ci.yaml and devflows-docs.yaml reuse the same cache. Before the
+    // _ci.yaml and _docs.yaml reuse the same cache. Before the
     // first devcontainer build runs, the cache simply misses and the build falls
     // back to the pinned base image.
     "cacheFrom": [

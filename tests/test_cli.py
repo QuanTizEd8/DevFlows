@@ -110,10 +110,10 @@ def test_sync_check_detects_yml_orphans(make_catalog, capsys) -> None:
     assert "legacy.yml" in capsys.readouterr().err
 
 
-def test_sync_leaves_internal_devflows_files_alone(make_catalog) -> None:
+def test_sync_leaves_internal_underscore_files_alone(make_catalog) -> None:
     root = make_catalog()
     assert main(["sync", "--root", str(root)]) == 0
-    internal = root / ".github/workflows/devflows-ci.yml"
+    internal = root / ".github/workflows/_ci.yml"
     internal.write_text("name: internal\n", encoding="utf-8")
 
     assert main(["sync", "--root", str(root)]) == 0
@@ -133,6 +133,21 @@ def test_validate_workflow_rejects_reserved_id_prefix() -> None:
     errors = validate_workflow(item)
 
     assert any("must not start with 'devflows-'" in error for error in errors)
+
+
+def test_validate_workflow_rejects_reserved_underscore_id_prefix() -> None:
+    item = Workflow(
+        id="_thing",
+        path=Path("workflows/_thing"),
+        workflow_path=Path("workflows/_thing/workflow.yaml"),
+        metadata_path=Path("workflows/_thing/devflow.yaml"),
+        metadata={"id": "_thing", "status": "active", "release": {}},
+        workflow={"name": "Thing", "on": {"workflow_call": {}}},
+    )
+
+    errors = validate_workflow(item)
+
+    assert any("must not start with '_'" in error for error in errors)
 
 
 def test_release_check_flags_manifest_major_mismatch(make_catalog, capsys) -> None:

@@ -49,7 +49,7 @@ def _identity_files() -> list[Path]:
             rel in named
             or (rel.startswith("docs/") and rel.endswith(".md"))
             or rel.startswith("tests/fixtures/")
-            or re.match(r"\.github/workflows/devflows-[^/]*\.ya?ml$", rel)
+            or re.match(r"\.github/workflows/_[^/]*\.ya?ml$", rel)
         ):
             keep.append(Path(rel))
     return keep

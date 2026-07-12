@@ -26,22 +26,30 @@ from devflows.yaml import dump_yaml
 # Partitioning by owning workflow keeps each file small; GitHub runs the separate
 # files in parallel on the same event, so total scenario coverage is unchanged.
 SCENARIOS_DIR = PUBLISHED_DIR
-# Filename globs the scenario generator owns under .github/workflows/. Any file
-# matching these but absent from a fresh generation -- the retired monolithic
-# devflows-scenarios.yaml / devflows-local-scenarios.yaml, or a per-workflow file
-# whose owning workflow no longer has scenarios for that runner -- is pruned so
-# `devflows sync` / `devflows test-generate` leave a clean tree.
-_SCENARIO_FILE_GLOBS = ("devflows-scenarios*.yaml", "devflows-local-scenarios*.yaml")
+# Filename globs the scenario generator owns under .github/workflows/. The first
+# glob owns the current `_scenarios-<id>.yaml` / `_scenarios-<id>.local.yaml`
+# files; the two legacy `devflows-scenarios*` globs are retained so a fresh
+# generation PRUNES the pre-rename `devflows-scenarios-<id>.yaml` files (and the
+# retired monolithic devflows-scenarios.yaml / devflows-local-scenarios.yaml).
+# Any file matching these but absent from a fresh generation -- a per-workflow
+# file whose owning workflow no longer has scenarios for that runner, or a
+# legacy `devflows-`-prefixed file -- is pruned so `devflows sync` /
+# `devflows test-generate` leave a clean tree.
+_SCENARIO_FILE_GLOBS = (
+    "_scenarios*.yaml",
+    "devflows-scenarios*.yaml",
+    "devflows-local-scenarios*.yaml",
+)
 
 
 def hosted_scenario_path(workflow_id: str) -> Path:
     """Generated hosted scenario workflow for one catalog workflow."""
-    return SCENARIOS_DIR / f"devflows-scenarios-{workflow_id}.yaml"
+    return SCENARIOS_DIR / f"_scenarios-{workflow_id}.yaml"
 
 
 def local_scenario_path(workflow_id: str) -> Path:
     """Generated local (act) scenario workflow for one catalog workflow."""
-    return SCENARIOS_DIR / f"devflows-scenarios-{workflow_id}.local.yaml"
+    return SCENARIOS_DIR / f"_scenarios-{workflow_id}.local.yaml"
 
 
 # Harness scripts are real, lint-and-test-covered .py files. The generated
@@ -519,13 +527,14 @@ def write_generated_test_workflows(workflows: list[Workflow], *, check: bool = F
     """Generate one hosted and one local scenario workflow per catalog workflow.
 
     Each owning workflow's scenarios are emitted into their own small files
-    (``devflows-scenarios-<id>.yaml`` for hosted, ``devflows-scenarios-<id>.local.yaml``
+    (``_scenarios-<id>.yaml`` for hosted, ``_scenarios-<id>.local.yaml``
     for local/act) so no single generated file approaches the size GitHub
     startup-rejects. A runner-specific file is written only when the workflow has at
     least one scenario for that runner, and every generated file is checked against
     the same byte cap the published workflows use. Stale scenario files -- including
-    the retired monolithic ``devflows-scenarios.yaml`` / ``devflows-local-scenarios.yaml``
-    -- are pruned so the tree holds only the current per-workflow set.
+    the pre-rename ``devflows-scenarios-<id>.yaml`` files and the retired monolithic
+    ``devflows-scenarios.yaml`` / ``devflows-local-scenarios.yaml`` -- are pruned so
+    the tree holds only the current per-workflow set.
     """
     scenarios = load_scenarios(workflows)
     outputs: dict[Path, str] = {}

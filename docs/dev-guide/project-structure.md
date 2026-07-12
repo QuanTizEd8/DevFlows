@@ -11,23 +11,23 @@ The catalog currently holds 13 active workflows — `anaconda-publish`,
 
 ## Important Directories
 
-| path                                                   | purpose                                                                            |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `workflows/<workflow-id>/workflow.yaml`                | Source reusable workflow for a promoted workflow.                                  |
-| `workflows/<workflow-id>/devflow.yaml`                 | Metadata, release config, docs fields, examples, and tests.                        |
-| `workflows/<workflow-id>/scripts/`                     | Source support scripts inlined into the published workflow at sync time.           |
-| `.github/workflows/<workflow-id>.yaml`                 | Generated publish location required by GitHub.                                     |
-| `.github/workflows/devflows-scenarios-<id>.yaml`       | Generated hosted scenario test workflow (one per catalog workflow).                |
-| `.github/workflows/devflows-scenarios-<id>.local.yaml` | Generated local scenario test workflow (one per workflow with local scenarios).    |
-| `.github/workflows/devflows-*.yaml`                    | The repository's own internal workflows (CI, docs, release, CodeQL, devcontainer). |
-| `harness/scenarios/`                                   | Scenario harness scripts run by the generated scenario workflows.                  |
-| `src/devflows/`                                        | Python CLI and generation logic.                                                   |
-| `tests/`                                               | Python unit tests for DevFlows tooling.                                            |
-| `tests/fixtures/`                                      | Example caller workflows rendered into docs.                                       |
-| `tests/scenarios/`                                     | Checked-in test inputs used by workflow scenarios.                                 |
-| `docs/user-guide/`                                     | Hand-written consumer documentation.                                               |
-| `docs/dev-guide/`                                      | Hand-written maintainer documentation (this tree).                                 |
-| `docs/reference/`                                      | Ignored generated workflow catalog and reference pages created during docs builds. |
+| path                                           | purpose                                                                            |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `workflows/<workflow-id>/workflow.yaml`        | Source reusable workflow for a promoted workflow.                                  |
+| `workflows/<workflow-id>/devflow.yaml`         | Metadata, release config, docs fields, examples, and tests.                        |
+| `workflows/<workflow-id>/scripts/`             | Source support scripts inlined into the published workflow at sync time.           |
+| `.github/workflows/<workflow-id>.yaml`         | Generated publish location required by GitHub.                                     |
+| `.github/workflows/_scenarios-<id>.yaml`       | Generated hosted scenario test workflow (one per catalog workflow).                |
+| `.github/workflows/_scenarios-<id>.local.yaml` | Generated local scenario test workflow (one per workflow with local scenarios).    |
+| `.github/workflows/_*.yaml`                    | The repository's own internal workflows (CI, docs, release, CodeQL, devcontainer). |
+| `harness/scenarios/`                           | Scenario harness scripts run by the generated scenario workflows.                  |
+| `src/devflows/`                                | Python CLI and generation logic.                                                   |
+| `tests/`                                       | Python unit tests for DevFlows tooling.                                            |
+| `tests/fixtures/`                              | Example caller workflows rendered into docs.                                       |
+| `tests/scenarios/`                             | Checked-in test inputs used by workflow scenarios.                                 |
+| `docs/user-guide/`                             | Hand-written consumer documentation.                                               |
+| `docs/dev-guide/`                              | Hand-written maintainer documentation (this tree).                                 |
+| `docs/reference/`                              | Ignored generated workflow catalog and reference pages created during docs builds. |
 
 There is **no** `workflows/_drafts/` directory in the tree. `_drafts` is an
 optional, currently-empty mechanism:

@@ -188,7 +188,7 @@ against a base ref via `DEVFLOWS_BASE_SHA`) fails when a workflow's
 
 Release automation publishes immutable exact tags (`<id>/vX.Y.Z`) for every
 release. Once a workflow is released at major `>= 1`, the
-`Force-move moving major tags` step in `devflows-release.yaml` additionally
+`Force-move moving major tags` step in `_release.yaml` additionally
 force-updates `<id>/v<major>` onto that release's commit. The logic lives in
 `scripts/move_major_tags.py` (`compute_major_tag_moves`, unit-tested in
 `tests/test_release_tags.py`) and reads the release-please-action outputs.
@@ -200,12 +200,12 @@ minor tags are never published.
 
 ## Release Token (PAT) Setup
 
-`devflows-release.yaml` uses `secrets.RELEASE_PLEASE_TOKEN` for both the
-release-please step and the moving-major-tag push, falling back to
-`github.token` so the workflow runs before the secret exists. A fine-grained PAT
-is required so that release pull requests trigger CI (pull requests opened with
-the default `GITHUB_TOKEN` do not start workflow runs) and so tag pushes are
-attributed to a real identity.
+`_release.yaml` uses `secrets.RELEASE_PLEASE_TOKEN` for both the release-please
+step and the moving-major-tag push, falling back to `github.token` so the
+workflow runs before the secret exists. A fine-grained PAT is required so that
+release pull requests trigger CI (pull requests opened with the default
+`GITHUB_TOKEN` do not start workflow runs) and so tag pushes are attributed to a
+real identity.
 
 Owner setup:
 
@@ -249,21 +249,20 @@ Protect `main` with a branch ruleset that requires pull requests and the CI
 status checks below to pass before merge. Name each required check exactly as
 the job reports it:
 
-- **`Validate`** — the lint/test/propagation job in `devflows-ci.yaml`.
-- **`Adapter contract`** — the pin/contract job in `devflows-ci.yaml` (it runs
-  only when an action pin or a consuming workflow changes; on other PRs it
-  completes without running the network test, so it stays a safe required
-  check).
-- **`Analyze Python`** — the CodeQL job in `devflows-codeql.yaml`.
-- **`Build`** — the docs build job in `devflows-docs.yaml` (it builds on PRs and
-  only deploys Pages on `main`).
+- **`Validate`** — the lint/test/propagation job in `_ci.yaml`.
+- **`Adapter contract`** — the pin/contract job in `_ci.yaml` (it runs only when
+  an action pin or a consuming workflow changes; on other PRs it completes
+  without running the network test, so it stays a safe required check).
+- **`Analyze Python`** — the CodeQL job in `_codeql.yaml`.
+- **`Build`** — the docs build job in `_docs.yaml` (it builds on PRs and only
+  deploys Pages on `main`).
 - Scenario assertion jobs (the `*_assert` jobs) can be added as required checks
   **once they are stable**; until then keep them informational so a
   hosted-runner flake does not block unrelated merges. These jobs now live
-  across the per-workflow `devflows-scenarios-<id>.yaml` files rather than a
-  single `devflows-scenarios.yaml`, but a required status check is keyed on the
-  job's reported **name** (its check context), not the file it lives in, and
-  those names are unchanged by the split — each still reads as
+  across the per-workflow `_scenarios-<id>.yaml` files rather than a single
+  `devflows-scenarios.yaml`, but a required status check is keyed on the job's
+  reported **name** (its check context), not the file it lives in, and those
+  names are unchanged by the split — each still reads as
   `<Workflow name>: <scenario> assertions` (e.g. `Pandoc: … assertions`) and
   stays unique because it embeds the workflow name. So add the specific
   assertion jobs you want to gate on by name, exactly as before. GitHub cannot
