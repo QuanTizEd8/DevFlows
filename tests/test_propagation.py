@@ -57,3 +57,35 @@ def test_nested_script_change_counts_as_package_touch() -> None:
         published_workflow_path("devcontainer-build"),
     ]
     assert propagation_violations(changed, WORKFLOWS) == []
+
+
+def test_formatting_only_change_is_not_a_violation() -> None:
+    # A shared re-render (e.g. a YAML dumper width change) alters the published
+    # bytes for a workflow with no source change, but the predicate reports it as
+    # semantically unchanged, so it must NOT be flagged.
+    changed = [
+        "src/devflows/yaml.py",
+        published_workflow_path("pandoc"),
+    ]
+    violations = propagation_violations(
+        changed,
+        WORKFLOWS,
+        published_semantically_changed=lambda wid: False,
+    )
+    assert violations == []
+
+
+def test_semantic_change_is_still_flagged() -> None:
+    # A shared change that DOES alter parsed meaning (predicate True) with no
+    # source touch is still a genuine propagation violation.
+    changed = [
+        "src/devflows/publish.py",
+        published_workflow_path("pandoc"),
+    ]
+    violations = propagation_violations(
+        changed,
+        WORKFLOWS,
+        published_semantically_changed=lambda wid: True,
+    )
+    assert len(violations) == 1
+    assert "pandoc" in violations[0]
