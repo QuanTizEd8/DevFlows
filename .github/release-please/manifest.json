@@ -5,7 +5,7 @@
   "workflows/devcontainer-build": "0.0.0",
   "workflows/devcontainer-run": "0.0.0",
   "workflows/docs-build": "0.0.0",
-  "workflows/pandoc": "0.0.0",
+  "workflows/pandoc": "0.1.0",
   "workflows/paper-openjournals": "0.0.0",
   "workflows/pypi-publish": "0.0.0",
   "workflows/python-build": "0.0.0",
